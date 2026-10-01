@@ -36,15 +36,19 @@ export class BadRequestError extends AppError {
   }
 }
 
+/**
+ * Codes: unauthenticated | token_expired | token_invalid | session_invalid |
+ * invalid_credentials | refresh_conflict.
+ */
 export class UnauthorizedError extends AppError {
-  constructor(detail = 'Authentication is required.') {
-    super({ status: 401, code: 'unauthenticated', title: 'Unauthenticated', detail });
+  constructor(detail = 'Authentication is required.', code = 'unauthenticated') {
+    super({ status: 401, code, title: 'Unauthenticated', detail });
   }
 }
 
 export class ForbiddenError extends AppError {
-  constructor(detail = 'You do not have permission to perform this action.') {
-    super({ status: 403, code: 'forbidden', title: 'Forbidden', detail });
+  constructor(detail = 'You do not have permission to perform this action.', code = 'forbidden') {
+    super({ status: 403, code, title: 'Forbidden', detail });
   }
 }
 

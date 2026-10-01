@@ -8,6 +8,9 @@ import { createAiClient } from './core/ai/client.js';
 import { buildDependencyChecks } from './core/health/checks.js';
 import { createMetrics, createMetricsApp } from './core/metrics/index.js';
 import { createApp } from './app.js';
+import { createContainer } from './container.js';
+import { createNoopMailer, createSmtpMailer } from './core/mail/mailer.js';
+import { assertPermissionCatalog } from './core/authz/catalogCheck.js';
 
 const { version } = createRequire(import.meta.url)('../package.json');
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -38,7 +41,15 @@ async function main() {
     aiClient,
   });
 
-  const app = createApp({ config, logger, healthChecks, redis, metrics, version });
+  const mailer = config.mail.smtpHost
+    ? createSmtpMailer({ ...config.mail, logger })
+    : createNoopMailer({ logger });
+  const container = createContainer({ config, logger, knex, redis, mailer });
+
+  // Fail fast if the database RBAC catalog drifted from the code contract.
+  await assertPermissionCatalog(container.repositories.roles);
+
+  const app = createApp({ config, logger, healthChecks, redis, metrics, container, version });
   const server = app.listen(config.http.port, () => {
     logger.info(
       { port: config.http.port, appEnv: config.appEnv, demoMode: config.demoMode },

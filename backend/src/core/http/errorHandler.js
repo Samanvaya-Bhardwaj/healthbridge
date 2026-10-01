@@ -42,6 +42,9 @@ export function errorHandler() {
       req.log?.info({ code: known.code, status }, 'request rejected');
     }
 
+    if (status === 401) {
+      res.setHeader('WWW-Authenticate', `Bearer error="${known.code}"`);
+    }
     if (known instanceof RateLimitedError) {
       res.setHeader('Retry-After', String(known.retryAfterSeconds));
     }

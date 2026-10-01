@@ -17,7 +17,12 @@ FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
     NODE_OPTIONS=--enable-source-maps
 WORKDIR /app
-RUN apk add --no-cache tini
+# The runtime never needs package managers: removing the base image's bundled npm/npx/
+# corepack/yarn removes their (frequently vulnerable) dependency trees from the image.
+RUN apk add --no-cache tini \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-* \
+     /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./
 COPY --chown=node:node shared ./shared

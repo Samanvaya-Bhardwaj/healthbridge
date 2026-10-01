@@ -18,17 +18,22 @@
     "storage:bootstrap": "node --env-file-if-exists=../.env scripts/bootstrap-storage.js",
     "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:watch": "vitest tests/unit"
+    "test:watch": "vitest tests/unit",
+    "seed:demo": "node --env-file-if-exists=../.env scripts/seed-demo.js",
+    "user:create": "node --env-file-if-exists=../.env scripts/create-user.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",
     "@healthbridge/shared": "0.1.0",
+    "@node-rs/argon2": "^2.2.1",
+    "cookie": "^0.7.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "ioredis": "^6.0.0",
     "jose": "^6.2.12",
     "knex": "^3.3.0",
+    "nodemailer": "^10.0.13",
     "pg": "^8.23.1",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",

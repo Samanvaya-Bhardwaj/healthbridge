@@ -151,4 +151,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 6. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M0 complete; awaiting approval for M1 (identity and RBAC).**
+Current status: **M1 complete (identity, sessions, RBAC, audit); awaiting approval for M2.**
+See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

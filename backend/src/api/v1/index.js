@@ -1,13 +1,17 @@
 import { Router } from 'express';
 import { API_VERSION } from '@healthbridge/shared';
+import { identityRoutes } from '../../modules/identity/routes.js';
+import { adminRoutes } from '../../modules/admin/routes.js';
 
 /**
- * Versioned public API. Feature modules (identity, patients, scheduling, …) mount
- * their routers here as they are implemented.
+ * Versioned public API. Feature modules mount their routers here.
+ * Authentication and permissions are declared per route; nothing is public by accident:
+ * only /meta, /auth/register, /auth/login, /auth/refresh and /auth/logout skip
+ * Bearer authentication (refresh/logout are protected by cookie + CSRF instead).
  *
- * @param {{ config: ReturnType<typeof import('../../config/index.js').loadConfig>, version: string }} deps
+ * @param {{ config: ReturnType<typeof import('../../config/index.js').loadConfig>, version: string, container: ReturnType<typeof import('../../container.js').createContainer> }} deps
  */
-export function apiV1Router({ config, version }) {
+export function apiV1Router({ config, version, container }) {
   const router = Router();
 
   router.get('/meta', (_req, res) => {
@@ -20,6 +24,9 @@ export function apiV1Router({ config, version }) {
       },
     });
   });
+
+  router.use(identityRoutes(container));
+  router.use(adminRoutes(container));
 
   return router;
 }

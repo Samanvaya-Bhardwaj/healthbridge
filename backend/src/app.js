@@ -21,10 +21,19 @@ const JSON_BODY_LIMIT = '100kb';
  *   healthChecks: import('./core/health/checks.js').HealthCheck[],
  *   redis?: import('ioredis').Redis,
  *   metrics?: { httpMiddleware: () => import('express').RequestHandler },
+ *   container: ReturnType<typeof import('./container.js').createContainer>,
  *   version?: string,
  * }} deps
  */
-export function createApp({ config, logger, healthChecks, redis, metrics, version = '0.0.0' }) {
+export function createApp({
+  config,
+  logger,
+  healthChecks,
+  redis,
+  metrics,
+  container,
+  version = '0.0.0',
+}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.http.trustProxy);
@@ -67,11 +76,12 @@ export function createApp({ config, logger, healthChecks, redis, metrics, versio
       origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
       credentials: true,
       exposedHeaders: ['X-Request-Id', 'Retry-After', 'RateLimit-Limit', 'RateLimit-Remaining'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'X-CSRF-Token', 'X-Request-Id'],
       maxAge: 600,
     }),
-    rateLimit({ redis, keyPrefix: 'api-global', points: 300, durationSeconds: 60 }),
+    rateLimit({ redis, keyPrefix: 'api-global', ...container.rateLimits.global }),
     express.json({ limit: JSON_BODY_LIMIT, strict: true }),
-    apiV1Router({ config, version }),
+    apiV1Router({ config, version, container }),
   );
 
   app.use(notFoundHandler());

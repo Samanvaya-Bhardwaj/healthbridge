@@ -37,6 +37,24 @@ To use Claude instead of the offline fake LLM, set `LLM_PROVIDER=claude` and
 
 All published ports bind to `127.0.0.1`.
 
+## Accounts (synthetic only)
+
+```bash
+npm run seed:demo -w backend    # one synthetic account per role (@demo.healthbridge.local)
+```
+
+All demo accounts use `DEMO_USER_PASSWORD` from `.env`. Public registration creates
+PATIENT accounts only. Staff accounts are provisioned by a platform admin, or with:
+
+```bash
+BOOTSTRAP_PASSWORD='…' npm run user:create -w backend -- \
+  --email admin@example.org --name "Platform Admin" --role PLATFORM_ADMIN
+```
+
+After pulling changes that add environment variables, run
+`node scripts/generate-env.mjs --update`. It appends only the missing variables and
+never rotates existing secrets.
+
 ## Day-to-day
 
 ```bash
@@ -44,6 +62,7 @@ All published ports bind to `127.0.0.1`.
 docker compose up -d --wait postgres redis minio mailpit
 npm run migrate:latest -w backend
 npm run storage:bootstrap -w backend
+npm run seed:demo -w backend      # optional
 npm run dev -w backend               # http://localhost:4000
 npm run dev -w frontend              # http://localhost:5173 (proxies /api → :4000)
 

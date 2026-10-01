@@ -17,8 +17,9 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | Milestone | Scope | Status |
 |---|---|---|
 | **M0** | Foundations: monorepo, Docker stack, DB roles and migrations, health checks, CI, ADRs | ✅ Complete |
-| M1 | Identity, sessions, RBAC, audit logging | Next |
-| M2–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
+| **M1** | Identity, sessions, RBAC, audit logging, auth UI | ✅ Complete |
+| M2 | Patients, doctors, clinics, relationships, AccessPolicy v2 | Next |
+| M3–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
 
 ## Architecture at a glance
 
@@ -33,7 +34,8 @@ Core invariants: **AI proposes → backend validates → backend commits** · th
 control (role, relationship, consent) with RLS as defence in depth · transactional
 outbox · immutable signed clinical records · source-grounded AI with citations.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md).
+See [ARCHITECTURE](docs/ARCHITECTURE.md), [SECURITY](docs/SECURITY.md), [API](docs/API.md),
+[DATABASE](docs/DATABASE.md) and [DECISIONS](docs/DECISIONS.md).
 
 ## Quick start
 

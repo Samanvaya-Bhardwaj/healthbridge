@@ -141,6 +141,18 @@ jobs:
           # Unauthenticated internal calls are rejected.
           status=$(docker compose exec -T api node -e "fetch('http://ai-service:8000/v1/meta').then(r=>console.log(r.status))")
           test "$status" = "401"
+
+          # Protected API endpoints reject anonymous callers.
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$web/api/v1/auth/me")" = "401"
+      - name: Auth smoke test (synthetic demo accounts)
+        run: |
+          set -euo pipefail
+          set -a; . ./.env; set +a
+          web="http://127.0.0.1:${HOST_PORT_WEB}"
+          docker compose run --rm -T migrate node scripts/seed-demo.js
+          token=$(curl -fsS -X POST "$web/api/v1/auth/login" -H 'content-type: application/json'             -d "{\"email\":\"platform.admin@demo.healthbridge.local\",\"password\":\"${DEMO_USER_PASSWORD}\"}"             | jq -r '.data.accessToken')
+          curl -fsS "$web/api/v1/auth/me" -H "Authorization: Bearer $token" | jq -e '.data.roles == ["PLATFORM_ADMIN"]'
+          curl -fsS "$web/api/v1/admin/audit-logs?limit=1" -H "Authorization: Bearer $token" | jq -e '.data | length == 1'
       - name: Scan images (high+critical, fixable)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

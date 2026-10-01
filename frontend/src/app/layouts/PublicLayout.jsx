@@ -1,6 +1,38 @@
 import { Link, Outlet } from 'react-router';
 import { SystemStatus } from '../../features/system/SystemStatus.jsx';
 import { DemoBanner } from '../../features/system/DemoBanner.jsx';
+import { useAuth } from '../../features/auth/authContext.js';
+
+function HeaderActions() {
+  const { status } = useAuth();
+  if (status === 'loading') return null;
+  if (status === 'authenticated') {
+    return (
+      <Link
+        to="/app"
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
+      >
+        Open HealthBridge
+      </Link>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Link
+        to="/login"
+        className="rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:text-text"
+      >
+        Sign in
+      </Link>
+      <Link
+        to="/register"
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
+      >
+        Create account
+      </Link>
+    </div>
+  );
+}
 
 export function PublicLayout() {
   return (
@@ -18,6 +50,7 @@ export function PublicLayout() {
             <img src="/favicon.svg" alt="" width="28" height="28" />
             HealthBridge
           </Link>
+          <HeaderActions />
         </div>
       </header>
       <main id="main" className="flex-1">

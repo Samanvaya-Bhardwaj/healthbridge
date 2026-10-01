@@ -20,5 +20,7 @@ old one.
 | [0012](adr/0012-ai-execution-records.md) | AI execution records (`ai_runs`) without raw sensitive prompts | Accepted |
 | [0013](adr/0013-object-storage-s3-minio.md) | S3-compatible object storage; MinIO (Chainguard image) locally | Accepted |
 | [0014](adr/0014-monorepo-workspaces-and-dev-environment.md) | Monorepo with npm workspaces; repository outside cloud-sync folders | Accepted |
+| [0015](adr/0015-authentication-tokens-and-sessions.md) | Ed25519 access tokens, per-request session validation, rotating refresh sessions with reuse detection, CSRF | Accepted |
+| [0016](adr/0016-audit-log-model.md) | Single append-only `audit.audit_logs` table (refines proposal's two-table sketch) | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).
