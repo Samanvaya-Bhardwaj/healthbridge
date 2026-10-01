@@ -1,27 +1,30 @@
 #!/usr/bin/env node
-// Seeds SYNTHETIC demo accounts, one per role. Never real people or real health data.
+// Seeds SYNTHETIC demo data through the real application services (same validation,
+// authorisation, RLS and auditing as the API). Never real people or real health data.
 // Runs only with DEMO_MODE=true outside production. Idempotent.
 //
 //   npm run seed:demo -w backend
 //
-// All accounts use DEMO_USER_PASSWORD from .env and the reserved, non-routable
-// demo.healthbridge.local domain. They are flagged is_demo=true.
+// Accounts use DEMO_USER_PASSWORD from .env and the non-routable demo.healthbridge.local
+// domain; all rows are flagged is_demo where the schema supports it.
 
 import { ROLES } from '@healthbridge/shared';
+import { buildPrincipal } from '../src/core/authz/principal.js';
+import { AppError } from '../src/core/http/errors.js';
 import { createScriptRuntime } from './lib/runtime.js';
 
 const DEMO_DOMAIN = 'demo.healthbridge.local';
+const email = (local) => `${local}@${DEMO_DOMAIN}`;
 
-/** Clearly fictional people; names are labelled as demo accounts. */
 const DEMO_USERS = [
   { local: 'patient.asha', fullName: 'Asha Rao (Demo Patient)', roles: [ROLES.PATIENT] },
   { local: 'patient.vikram', fullName: 'Vikram Singh (Demo Patient)', roles: [ROLES.PATIENT] },
-  { local: 'dr.meera', fullName: 'Dr. Meera Iyer (Demo Doctor)', roles: [ROLES.DOCTOR] },
-  {
-    local: 'clinic.admin',
-    fullName: 'Kiran Patel (Demo Clinic Admin)',
-    roles: [ROLES.CLINIC_ADMIN],
-  },
+  // Doctors register like anyone else; the DOCTOR role comes only from verification.
+  { local: 'dr.meera', fullName: 'Meera Iyer (Demo Doctor)', roles: [ROLES.PATIENT] },
+  { local: 'dr.rahul', fullName: 'Rahul Menon (Demo Doctor)', roles: [ROLES.PATIENT] },
+  { local: 'dr.applicant', fullName: 'Farah Khan (Demo Applicant)', roles: [ROLES.PATIENT] },
+  // Clinic administrators hold only their clinic-scoped role.
+  { local: 'clinic.admin', fullName: 'Kiran Patel (Demo Clinic Admin)', roles: [] },
   {
     local: 'platform.admin',
     fullName: 'Neha Joshi (Demo Platform Admin)',
@@ -30,8 +33,75 @@ const DEMO_USERS = [
   { local: 'support', fullName: 'Arjun Das (Demo Support)', roles: [ROLES.SUPPORT] },
 ];
 
+const DOCTOR_PROFILES = {
+  'dr.meera': {
+    professionalName: 'Dr. Meera Iyer',
+    registrationNumber: 'DEMO-MH-10421',
+    registrationCouncil: 'Demo Medical Council (synthetic)',
+    registrationYear: 2011,
+    primarySpecialization: 'General Medicine',
+    additionalSpecializations: ['Diabetology'],
+    qualifications: [{ degree: 'MBBS', institution: 'Demo Medical College', year: 2010 }],
+    yearsOfExperience: 14,
+    languages: ['English', 'Hindi', 'Marathi'],
+    bio: 'Synthetic demo profile. Family physician focused on long-term care.',
+  },
+  'dr.rahul': {
+    professionalName: 'Dr. Rahul Menon',
+    registrationNumber: 'DEMO-KL-20877',
+    registrationCouncil: 'Demo Medical Council (synthetic)',
+    registrationYear: 2015,
+    primarySpecialization: 'Paediatrics',
+    qualifications: [
+      { degree: 'MBBS', institution: 'Demo Medical College', year: 2013 },
+      { degree: 'MD Paediatrics', institution: 'Demo Institute', year: 2016 },
+    ],
+    yearsOfExperience: 9,
+    languages: ['English', 'Malayalam'],
+    bio: 'Synthetic demo profile.',
+  },
+  'dr.applicant': {
+    professionalName: 'Dr. Farah Khan',
+    registrationNumber: 'DEMO-DL-30555',
+    registrationCouncil: 'Demo Medical Council (synthetic)',
+    registrationYear: 2020,
+    primarySpecialization: 'Dermatology',
+    qualifications: [{ degree: 'MBBS', institution: 'Demo Medical College', year: 2019 }],
+    yearsOfExperience: 4,
+    languages: ['English', 'Urdu'],
+  },
+};
+
 const runtime = createScriptRuntime('seed-demo');
-const { config } = runtime;
+const { config, container, knex } = runtime;
+const log = (msg, extra = {}) => console.log(JSON.stringify({ msg, ...extra }));
+
+/** Runs a step; "already done" conflicts make the seed idempotent. */
+async function step(name, fn) {
+  try {
+    const result = await fn();
+    log(`${name}: done`);
+    return result;
+  } catch (err) {
+    if (err instanceof AppError && err.status === 409) {
+      log(`${name}: already present`);
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function principalFor(userId) {
+  const user = await container.repositories.users.findById(userId);
+  const grants = await container.repositories.roles.grantsFor(userId);
+  return buildPrincipal({
+    userId,
+    sessionId: null,
+    email: user.email,
+    fullName: user.full_name,
+    ...grants,
+  });
+}
 
 try {
   if (!config.demoMode || config.isProduction) {
@@ -41,28 +111,145 @@ try {
   if (!password)
     throw new Error('DEMO_USER_PASSWORD is not set (run node scripts/generate-env.mjs --update).');
 
+  const ids = {};
   for (const user of DEMO_USERS) {
-    const email = `${user.local}@${DEMO_DOMAIN}`;
-    const result = await runtime.container.adminUserService.provisionUser({
-      email,
+    const result = await container.adminUserService.provisionUser({
+      email: email(user.local),
       fullName: user.fullName,
       password,
       roles: user.roles,
       isDemo: true,
     });
-    console.log(
-      JSON.stringify({
-        msg: result.created ? 'demo user created' : 'demo user exists',
-        email,
-        roles: result.roles,
+    ids[user.local] = result.id;
+  }
+  log('demo accounts ready', { count: DEMO_USERS.length });
+  const admin = await principalFor(ids['platform.admin']);
+
+  // ── Clinic + clinic administrator ─────────────────────────────
+  let clinic = await knex('clinics')
+    .where({ name: 'Sunrise Family Clinic (Demo)' })
+    .whereNull('deleted_at')
+    .first();
+  if (!clinic) {
+    clinic = await container.clinicService.createClinic(admin, {
+      name: 'Sunrise Family Clinic (Demo)',
+      city: 'Pune',
+      state: 'Maharashtra',
+      postalCode: '411001',
+      phone: '+912000000000',
+    });
+    await knex('clinics').where({ id: clinic.id }).update({ is_demo: true });
+  }
+  await container.clinicService.appointAdmin(admin, clinic.id, ids['clinic.admin']);
+  log('clinic ready', { clinic: 'Sunrise Family Clinic (Demo)' });
+
+  // ── Doctors: apply → submit → review → verify ─────────────────
+  for (const local of ['dr.meera', 'dr.rahul', 'dr.applicant']) {
+    let doctorPrincipal = await principalFor(ids[local]);
+    await step(`${local} profile`, () =>
+      container.doctorService.createOwnProfile(doctorPrincipal, DOCTOR_PROFILES[local], undefined, {
+        isDemo: true,
       }),
     );
+    const doctor = await container.repositories.doctors.findByUserId(ids[local]);
+    if (doctor.verification_status === 'unverified') {
+      const kase = await container.doctorService.submitForVerification(doctorPrincipal);
+      if (local !== 'dr.applicant') {
+        await container.doctorService.startReview(admin, kase.id);
+        await container.doctorService.decide(admin, kase.id, {
+          decision: 'verified',
+          reasonCode: 'credentials_confirmed',
+          notes: 'Synthetic demo account.',
+        });
+      }
+    }
+    if (local !== 'dr.applicant') {
+      doctorPrincipal = await principalFor(ids[local]);
+      const membership = await step(`${local} clinic invitation`, () =>
+        container.clinicService.inviteDoctor(admin, clinic.id, doctor.id),
+      );
+      if (membership)
+        await container.clinicService.respondToInvitation(doctorPrincipal, membership.id, true);
+    }
   }
-  console.log(
-    JSON.stringify({ msg: 'demo seed complete', password: 'DEMO_USER_PASSWORD from .env' }),
+
+  // ── Patients, a dependent, and care relationships ─────────────
+  const asha = await principalFor(ids['patient.asha']);
+  const vikram = await principalFor(ids['patient.vikram']);
+  const ashaProfile =
+    (await step('asha profile', () =>
+      container.patientService.createOwnProfile(
+        asha,
+        {
+          fullName: 'Asha Rao',
+          dateOfBirth: '1990-05-14',
+          sex: 'female',
+          phone: '+919800000001',
+          city: 'Pune',
+          state: 'Maharashtra',
+          preferredLanguage: 'en-IN',
+          emergencyContactName: 'Rohan Rao (Demo)',
+          emergencyContactPhone: '+919800000002',
+          emergencyContactRelationship: 'spouse',
+        },
+        undefined,
+        { isDemo: true },
+      ),
+    )) ?? (await container.patientService.getOwnProfile(asha));
+  const vikramProfile =
+    (await step('vikram profile', () =>
+      container.patientService.createOwnProfile(
+        vikram,
+        { fullName: 'Vikram Singh', dateOfBirth: '1985-11-02', sex: 'male', city: 'Pune' },
+        undefined,
+        { isDemo: true },
+      ),
+    )) ?? (await container.patientService.getOwnProfile(vikram));
+
+  const dependents = await container.patientService.listDependents(asha);
+  if (!dependents.some((d) => d.fullName === 'Kamala Rao')) {
+    await container.patientService.createDependent(
+      asha,
+      {
+        fullName: 'Kamala Rao',
+        dateOfBirth: '1958-03-21',
+        sex: 'female',
+        relationshipType: 'child',
+      },
+      undefined,
+      { isDemo: true },
+    );
+  }
+  log('patients ready');
+
+  const meera = await container.repositories.doctors.findByUserId(ids['dr.meera']);
+  const meeraPrincipal = await principalFor(ids['dr.meera']);
+  const request = await step('asha → dr.meera care request', () =>
+    container.careService.request(asha, {
+      patientId: ashaProfile.id,
+      doctorId: meera.id,
+      clinicId: clinic.id,
+    }),
   );
+  if (request) await container.careService.act(meeraPrincipal, request.id, 'accept');
+  await step('vikram → dr.meera care request (left pending)', () =>
+    container.careService.request(vikram, {
+      patientId: vikramProfile.id,
+      doctorId: meera.id,
+      clinicId: clinic.id,
+    }),
+  );
+
+  log('demo seed complete', { password: 'DEMO_USER_PASSWORD from .env' });
 } catch (err) {
-  console.error(JSON.stringify({ level: 'fatal', msg: 'demo seed failed', error: err.message }));
+  console.error(
+    JSON.stringify({
+      level: 'fatal',
+      msg: 'demo seed failed',
+      error: err.message,
+      details: err.extensions,
+    }),
+  );
   process.exitCode = 1;
 } finally {
   await runtime.close();

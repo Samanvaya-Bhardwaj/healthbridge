@@ -1,10 +1,10 @@
-import { ALL_PERMISSIONS, ROLE_PERMISSIONS } from '@healthbridge/shared';
+import { ALL_PERMISSIONS, ROLE_PERMISSIONS, ROLE_SCOPES } from '@healthbridge/shared';
 
 /**
  * Compares the database RBAC catalog with the code contract in @healthbridge/shared.
- * @returns {{ missingPermissions: string[], unexpectedPermissions: string[], mappingDiff: string[] }}
+ * @returns {{ missingPermissions: string[], unexpectedPermissions: string[], mappingDiff: string[], scopeDiff: string[] }}
  */
-export function diffPermissionCatalog({ permissions, mapping }) {
+export function diffPermissionCatalog({ permissions, mapping, scopes = [] }) {
   const dbPermissions = new Set(permissions);
   const missingPermissions = ALL_PERMISSIONS.filter((p) => !dbPermissions.has(p));
   const unexpectedPermissions = permissions.filter((p) => !ALL_PERMISSIONS.includes(p));
@@ -17,7 +17,10 @@ export function diffPermissionCatalog({ permissions, mapping }) {
     ...[...codePairs].filter((pair) => !dbPairs.has(pair)).map((pair) => `missing ${pair}`),
     ...[...dbPairs].filter((pair) => !codePairs.has(pair)).map((pair) => `unexpected ${pair}`),
   ];
-  return { missingPermissions, unexpectedPermissions, mappingDiff };
+  const scopeDiff = scopes
+    .filter(({ role, scope }) => ROLE_SCOPES[role] !== scope)
+    .map(({ role, scope }) => `role ${role} has scope ${scope}, expected ${ROLE_SCOPES[role]}`);
+  return { missingPermissions, unexpectedPermissions, mappingDiff, scopeDiff };
 }
 
 /** Throws at startup when the catalog drifted (e.g. a migration was not applied). */
@@ -27,6 +30,7 @@ export async function assertPermissionCatalog(roleRepository) {
     ...diff.missingPermissions.map((p) => `missing permission ${p}`),
     ...diff.unexpectedPermissions.map((p) => `unexpected permission ${p}`),
     ...diff.mappingDiff,
+    ...diff.scopeDiff,
   ];
   if (problems.length) {
     throw new Error(`RBAC catalog mismatch between database and code: ${problems.join('; ')}`);

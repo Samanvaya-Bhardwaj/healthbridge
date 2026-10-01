@@ -2,6 +2,7 @@ import { CURRENT_TERMS_VERSION, ROLES } from '@healthbridge/shared';
 import { newId } from '../../core/db/ids.js';
 import { generateSecret, safeEqualHex, sha256Hex } from '../../core/auth/secrets.js';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../../core/http/errors.js';
+import { buildPrincipal } from '../../core/authz/principal.js';
 import { checkPasswordPolicy } from './domain/passwordPolicy.js';
 import { composeRefreshToken, parseRefreshToken } from './domain/refreshToken.js';
 import {
@@ -428,14 +429,14 @@ export function createAuthService({
       );
       return null;
     }
-    return {
+    return buildPrincipal({
       userId: row.user_id,
       sessionId: row.session_id,
       email: row.email,
       fullName: row.full_name,
-      roles: row.roles,
-      permissions: new Set(row.permissions),
-    };
+      roleGrants: row.role_grants,
+      permissionGrants: row.permission_grants,
+    });
   }
 
   return { register, login, refresh, logout, resolvePrincipal, createSession };

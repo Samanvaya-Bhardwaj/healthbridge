@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { API_VERSION } from '@healthbridge/shared';
 import { identityRoutes } from '../../modules/identity/routes.js';
 import { adminRoutes } from '../../modules/admin/routes.js';
+import { patientRoutes } from '../../modules/patients/routes.js';
+import { careRoutes } from '../../modules/care/routes.js';
+import { doctorRoutes } from '../../modules/doctors/routes.js';
+import { clinicRoutes } from '../../modules/clinics/routes.js';
 
 /**
  * Versioned public API. Feature modules mount their routers here.
@@ -27,6 +31,10 @@ export function apiV1Router({ config, version, container }) {
 
   router.use(identityRoutes(container));
   router.use(adminRoutes(container));
+  router.use(patientRoutes(container));
+  router.use(careRoutes(container));
+  router.use(doctorRoutes(container));
+  router.use(clinicRoutes(container));
 
   return router;
 }

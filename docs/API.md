@@ -119,3 +119,63 @@ Authorization: Bearer <patient token>
 403 Forbidden
 { "status": 403, "code": "forbidden", "detail": "You do not have permission to perform this action.", … }
 ```
+
+## Endpoints (M2)
+
+All patient-data endpoints go through AccessPolicy:
+- **404** means not related, including guessed IDs;
+- **403 `forbidden`** means the permission is missing;
+- **403 `consent_required`** means there is no consent basis.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/patients/me` | `patients:write` | Create own health profile (once) |
+| GET / PATCH | `/patients/me` | `patients:read` / `patients:write` | Own profile; partial updates validated against the merged profile |
+| GET / POST | `/patients/me/dependents` | `dependents:manage` | List / create dependents (creates a `manage` guardianship) |
+| GET / PATCH | `/patients/:id` | `patients:read` / `patients:write` | Self, guardian or treating doctor (read). Response includes `access.relationship`. |
+| GET | `/patients/:id/guardians` | `patients:read` | Active guardianships |
+| POST | `/guardianships/:id/end` | `dependents:manage` | Guardian or patient; the last manager ending it archives a dependent without an account |
+| GET | `/care-relationships?patientId=` | `care_relationships:read` | Care team (own profile by default) |
+| POST | `/care-relationships` | `care_relationships:manage` | `{ patientId, doctorId, clinicId? }` → PENDING |
+| POST | `/care-relationships/invitations` | `care_relationships:manage` | Verified doctors; `{ email }` → always `202` (enumeration-safe); rate-limited |
+| POST | `/care-relationships/:id/{accept,decline,withdraw,pause,resume,end}` | `care_relationships:manage` | Party rules enforced (e.g. only the doctor accepts PENDING; only the patient pauses) |
+| GET | `/doctors/me/patients?status=` | `care_relationships:read` | Doctor's relationships; patient details only via AccessPolicy |
+| POST / GET / PATCH | `/doctors/me` | `doctor_profile:manage` | Own doctor profile; registration fields locked while pending, under review or verified |
+| POST / GET | `/doctors/me/verification` | `doctor_profile:manage` | Submit / history (internal notes hidden) |
+| GET | `/doctors/me/clinics` | `doctor_profile:manage` | Own clinic memberships |
+| GET | `/doctors?q=&specialization=&clinicId=` | `doctors:read` | Directory: verified and active only |
+| GET | `/doctors/:id` | `doctors:read` | Public profile (404 unless verified and active) |
+| GET | `/admin/doctor-verifications?status=` | `admin:doctors` | Queue (pending and under review by default) |
+| GET | `/admin/doctor-verifications/:id` | `admin:doctors` | Case and profile (read is audited) |
+| POST | `/admin/doctor-verifications/:id/start-review` | `admin:doctors` | pending → under_review |
+| POST | `/admin/doctor-verifications/:id/decision` | `admin:doctors` | `{ decision: verified|rejected, reasonCode, notes? }` |
+| POST | `/admin/doctors/:id/suspend` | `admin:doctors` | `{ reasonCode, notes? }`; removes DOCTOR |
+| POST / GET | `/admin/clinics` | `admin:clinics` | Create / list clinics |
+| PATCH | `/admin/clinics/:id/status` | `admin:clinics` | `active` / `inactive` (inactive suspends clinic roles) |
+| POST | `/admin/clinics/:id/admins` | `admin:clinics` | `{ userId }` → membership plus clinic-scoped CLINIC_ADMIN |
+| GET | `/clinics/:id` | `clinics:read` (global or for this clinic) | Clinic info |
+| GET | `/clinics/:id/members` | `clinic:manage` for this clinic, or `admin:clinics` | |
+| POST | `/clinics/:id/doctors` | `clinic:manage` for this clinic, or `admin:clinics` | `{ doctorId }` (verified only) → INVITED |
+| POST | `/clinics/:id/members/:membershipId/end` | Clinic manager, or the member leaving | The last clinic admin cannot leave |
+| POST | `/clinic-memberships/:id/{accept,decline}` | `doctor_profile:manage` | The invited user only |
+
+`/auth/me` now also returns `clinicRoles` and `clinicPermissions`.
+`PUT /admin/users/:id/roles/{DOCTOR|CLINIC_ADMIN}` returns `400 role_requires_workflow`.
+
+**Example: a treating doctor reads a patient**
+
+```http
+GET /api/v1/patients/0199…
+Authorization: Bearer <doctor token>
+
+200 OK
+{ "data": { "id": "0199…", "fullName": "Asha Rao", "dateOfBirth": "1990-05-14", …,
+  "access": { "relationship": "treating_doctor" } } }
+```
+
+**An unrelated doctor reads the same patient**: the response is identical for random IDs.
+
+```http
+404 Not Found
+{ "status": 404, "code": "not_found", "detail": "The requested resource was not found.", … }
+```

@@ -136,7 +136,30 @@ routes → controllers → application services → domain (pure rules) → repo
 - **Network:** all host ports bind to `127.0.0.1`. The AI service has no published port.
   The web container is not on the data network.
 
-## 5. Observability baseline
+## 5. Domain model and patient-scoped authorization (M2)
+
+- **Identity, health profile and professional profile are separate.**
+  - `users` authenticate.
+  - `patients` hold the health profile; dependents may have no login.
+  - `doctors` hold the professional profile.
+  - `doctor_verifications` hold the credential review.
+- **Continuity:** `care_relationships` ("My Doctors") follow the lifecycle
+  INVITED/PENDING → ACTIVE ⇄ PAUSED → ENDED. Only ACTIVE confers treating access.
+- **Dependents:** explicit guardianships (actor → relationship → dependent), each with an
+  access scope and a basis. Family ties alone grant nothing.
+- **Clinics:** many-to-many with doctors and administrators. Clinic roles are scoped per
+  clinic and in force only with an active membership. Membership never grants patient
+  access.
+- **Authorization:**
+  - AccessPolicy applies the three gates.
+  - Relationship resolvers live in `modules/care-access`.
+  - The interim consent basis is an active care relationship, for reading the profile only.
+  - PostgreSQL RLS on patient-scoped tables is an independent second layer
+    ([ADR-0017](adr/0017-patient-scoped-authorization-rls.md)).
+  - DOCTOR and CLINIC_ADMIN are workflow-granted
+    ([ADR-0018](adr/0018-doctor-verification-workflow-granted-roles.md)).
+
+## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
   browser → Nginx → API → AI service.
@@ -148,8 +171,8 @@ routes → controllers → application services → domain (pure rules) → repo
   - AI readiness checks the database and the LLM configuration, without making paid calls.
 - AI calls emit `llm_call` metadata events (see invariant 9).
 
-## 6. Roadmap
+## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M1 complete (identity, sessions, RBAC, audit); awaiting approval for M2.**
+Current status: **M2 complete (patients, dependents, doctors and verification, clinics, care relationships, patient-scoped authorization with RLS); awaiting approval for M3.**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

@@ -72,7 +72,10 @@ describe('role → permission enforcement', () => {
 
   it('clinic admin: clinic management, no platform administration or clinical records', async () => {
     const me = await get('/api/v1/auth/me', clinicAdmin);
-    expect(me.body.data.permissions).toContain('clinic:manage');
+    // clinic:manage is clinic-scoped (M2): held for their clinic only, never globally.
+    const [{ clinicId }] = me.body.data.clinicRoles;
+    expect(me.body.data.clinicPermissions[clinicId]).toContain('clinic:manage');
+    expect(me.body.data.permissions).not.toContain('clinic:manage');
     expect(me.body.data.permissions).not.toContain('medical_records:read');
     expect((await get('/api/v1/admin/users', clinicAdmin)).status).toBe(403);
   });

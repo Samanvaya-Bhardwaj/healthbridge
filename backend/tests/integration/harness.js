@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import request from 'supertest';
+import knexFactory from 'knex';
 import { CSRF_COOKIE } from '@healthbridge/shared';
 import { loadConfig } from '../../src/config/index.js';
 import { createLogger } from '../../src/core/logger/index.js';
@@ -69,12 +70,47 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
   });
   const app = createApp({ config, logger, container, redis, healthChecks: [], version: 'test' });
 
+  // Cleanup needs the owner role: the application role cannot delete patient-scoped
+  // rows (no RLS DELETE policy), by design. Audit rows are append-only and remain.
+  const { migrationConfig } = await import('../../knexfile.js');
+  const ownerKnex = knexFactory(migrationConfig(process.env));
+
   async function close() {
-    await knex('users').where('email', 'like', `%@${TEST_EMAIL_DOMAIN}`).del();
-    await Promise.allSettled([knex.destroy(), redis.quit()]);
+    const testUsers = ownerKnex('users')
+      .select('id')
+      .where('email', 'like', `%@${TEST_EMAIL_DOMAIN}`);
+    const testPatients = ownerKnex('patients')
+      .select('id')
+      .whereIn('created_by_user_id', testUsers.clone());
+    const testDoctors = ownerKnex('doctors').select('id').whereIn('user_id', testUsers.clone());
+    const testClinics = ownerKnex('clinics')
+      .select('id')
+      .whereIn('created_by_user_id', testUsers.clone());
+    await ownerKnex.transaction(async (trx) => {
+      await trx('care_relationships')
+        .whereIn('patient_id', testPatients.clone())
+        .orWhereIn('doctor_id', testDoctors.clone())
+        .orWhereIn('clinic_id', testClinics.clone())
+        .del();
+      await trx('patient_guardianships').whereIn('patient_id', testPatients.clone()).del();
+      await trx('patients').whereIn('id', testPatients.clone()).del();
+      await trx('doctor_verifications').whereIn('doctor_id', testDoctors.clone()).del();
+      await trx('doctors').whereIn('id', testDoctors.clone()).del();
+      await trx('clinic_memberships')
+        .whereIn('user_id', testUsers.clone())
+        .orWhereIn('clinic_id', testClinics.clone())
+        .del();
+      await trx('user_roles')
+        .whereIn('user_id', testUsers.clone())
+        .orWhereIn('clinic_id', testClinics.clone())
+        .del();
+      await trx('clinics').whereIn('id', testClinics.clone()).del();
+      await trx('users').whereIn('id', testUsers.clone()).del();
+    });
+    await Promise.allSettled([knex.destroy(), ownerKnex.destroy(), redis.quit()]);
   }
 
-  return { app, config, container, knex, redis, mailer, logs, close };
+  return { app, config, container, knex, ownerKnex, redis, mailer, logs, close };
 }
 
 /** Parses Set-Cookie headers into { name: { value, attributes } }. */
@@ -122,12 +158,28 @@ export async function login(app, { email, password = PASSWORD }) {
 }
 
 /** Registers a user (PATIENT by default, or exactly the given staff roles) and logs in. */
-export async function createUser(harness, { label = 'user', roles = [] } = {}) {
+export async function createUser(harness, { label = 'user', roles = [], clinic } = {}) {
   const email = uniqueEmail(label);
   await register(harness.app, { email });
   const row = await harness.knex('users').where({ email }).first('id');
-  // Staff accounts are provisioned with their staff roles only (not the self-registration PATIENT role).
-  for (const role of roles) await harness.container.repositories.roles.grant(row.id, role, null);
+  // Staff accounts are provisioned with their staff roles only (not the self-registration
+  // PATIENT role). Clinic-scoped roles are granted for a clinic with an active membership.
+  for (const role of roles) {
+    if (role === 'CLINIC_ADMIN') {
+      const clinicId = clinic ?? (await createTestClinic(harness));
+      await harness.knex('clinic_memberships').insert({
+        id: randomUUID(),
+        clinic_id: clinicId,
+        user_id: row.id,
+        member_role: 'CLINIC_ADMIN',
+        status: 'active',
+        joined_at: new Date(),
+      });
+      await harness.container.repositories.roles.grant(row.id, role, null, undefined, { clinicId });
+    } else {
+      await harness.container.repositories.roles.grant(row.id, role, null);
+    }
+  }
   if (roles.length && !roles.includes('PATIENT')) {
     await harness.container.repositories.roles.revoke(row.id, 'PATIENT');
   }
@@ -138,4 +190,19 @@ export async function createUser(harness, { label = 'user', roles = [] } = {}) {
 
 export async function auditFor(knex, filter) {
   return knex('audit.audit_logs').where(filter).orderBy('occurred_at', 'desc');
+}
+
+/** Creates an active test clinic (owned by a throwaway creator account) and returns its id. */
+export async function createTestClinic(
+  harness,
+  { name = `Test Clinic ${randomUUID().slice(0, 6)}` } = {},
+) {
+  const creatorEmail = uniqueEmail('clinic-creator');
+  await register(harness.app, { email: creatorEmail });
+  const creator = await harness.knex('users').where({ email: creatorEmail }).first('id');
+  const id = randomUUID();
+  await harness
+    .knex('clinics')
+    .insert({ id, name, city: 'Test City', created_by_user_id: creator.id });
+  return id;
 }

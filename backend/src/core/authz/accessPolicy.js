@@ -1,35 +1,39 @@
 import { ForbiddenError, NotFoundError, UnauthorizedError } from '../http/errors.js';
+import { hasPermission } from './principal.js';
 
 /**
- * Central authorisation service: the three-gate model (ADR-0006).
+ * Central authorisation service: the three-gate model (ADR-0006, ADR-0017).
  *
- *   Gate 1  Role permission      principal holds the permission         → else 403
- *   Gate 2  Resource relationship a registered resolver relates the
- *                                principal to this specific resource     → else 404
- *   Gate 3  Active consent       for patient data, a consent resolver
- *                                finds an active consent (unless the
- *                                relationship is the patient/guardian)   → else 403 consent_required
+ *   Gate 1  Role permission       principal holds the permission, globally or for the
+ *                                 clinic in scope (clinic-scoped roles)          → else 403
+ *   Gate 2  Resource relationship a registered resolver relates the principal to this
+ *                                 specific resource                              → else 404
+ *   Gate 3  Active consent        for patient data, the consent resolver finds a basis
+ *                                 for access unless the relationship is the patient
+ *                                 themself or an authorised guardian             → else 403
  *
- * Fail-closed: an unknown resource type, a missing resolver or a resolver error denies.
- * Every denial is audited; every decision about patient data (allow or deny) is audited.
+ * Fail-closed: an unknown resource type, a missing resolver, or a resolver/consent error
+ * denies. Every denial is audited; every decision about patient data (allow or deny) is
+ * audited with the relationship and consent basis that applied.
  *
- * M1 registers the `session` and `user_account` resolvers. Patient, guardian and
- * treating-doctor relationships (M2) and the consent resolver (M5) plug in here
- * without changing callers.
+ * Resolvers receive `{ permission, trx }`; callers already inside an actor (RLS)
+ * transaction pass `trx` so resolution sees the same snapshot and RLS context.
  */
 
 /**
- * @typedef {{ type: string, id?: string, patientId?: string, [key: string]: unknown }} Resource
- * @typedef {{ related: boolean, relationship?: string }} RelationshipResult
- * @typedef {(principal: import('./principal.js').Principal, resource: Resource) => Promise<RelationshipResult> | RelationshipResult} RelationshipResolver
- * @typedef {(args: { principal: import('./principal.js').Principal, patientId: string, permission: string, purpose?: string }) => Promise<{ consentId: string } | null>} ConsentResolver
- * @typedef {{ allowed: boolean, gate?: 'permission' | 'relationship' | 'consent', reason?: string, relationship?: string, consentId?: string }} Decision
+ * @typedef {{ type: string, id?: string, patientId?: string, clinicId?: string, [key: string]: unknown }} Resource
+ * @typedef {{ related: boolean, relationship?: string, reason?: string }} RelationshipResult
+ * @typedef {(principal: import('./principal.js').Principal, resource: Resource, ctx: { permission: string, trx?: import('knex').Knex.Transaction }) => Promise<RelationshipResult> | RelationshipResult} RelationshipResolver
+ * @typedef {{ consentId?: string | null, basis: string }} ConsentGrant
+ * @typedef {(args: { principal: import('./principal.js').Principal, patientId: string, permission: string, relationship: string, purpose?: string, trx?: import('knex').Knex.Transaction }) => Promise<ConsentGrant | null>} ConsentResolver
+ * @typedef {{ allowed: boolean, gate?: 'permission' | 'relationship' | 'consent', reason?: string, relationship?: string, consentBasis?: string, consentId?: string | null }} Decision
+ * @typedef {{ principal: import('./principal.js').Principal, permission: string, resource?: Resource, clinicId?: string, purpose?: string, req?: import('express').Request, trx?: import('knex').Knex.Transaction }} AccessRequest
  */
 
 /** Relationships that own the patient data themselves and therefore need no consent. */
-const SELF_RELATIONSHIPS = new Set(['self', 'guardian']);
+export const SELF_RELATIONSHIPS = new Set(['patient_self', 'guardian_dependent']);
 
-/** Default consent resolver until the consent module exists: no consent → deny. */
+/** Default consent resolver when none is configured: no consent → deny. */
 const denyAllConsent = async () => null;
 
 /**
@@ -49,27 +53,30 @@ export function createAccessPolicy({
   const resolvers = new Map(Object.entries(relationshipResolvers));
 
   /**
-   * @param {{ principal: import('./principal.js').Principal, permission: string, resource?: Resource, purpose?: string }} request
+   * @param {AccessRequest} request
    * @returns {Promise<Decision>}
    */
-  async function evaluate({ principal, permission, resource, purpose }) {
-    if (!principal?.permissions?.has(permission)) {
+  async function evaluate({ principal, permission, resource, clinicId, purpose, trx }) {
+    if (!hasPermission(principal, permission, resource?.clinicId ?? clinicId)) {
       return { allowed: false, gate: 'permission', reason: 'missing_permission' };
     }
     if (!resource) return { allowed: true };
 
     const resolver = resolvers.get(resource.type);
-    if (!resolver)
+    if (!resolver) {
       return { allowed: false, gate: 'relationship', reason: 'no_relationship_resolver' };
+    }
 
     let relation;
     try {
-      relation = await resolver(principal, resource);
+      relation = await resolver(principal, resource, { permission, trx });
     } catch (err) {
       logger?.error({ err, resourceType: resource.type }, 'relationship resolver failed');
       return { allowed: false, gate: 'relationship', reason: 'resolver_error' };
     }
-    if (!relation?.related) return { allowed: false, gate: 'relationship', reason: 'not_related' };
+    if (!relation?.related) {
+      return { allowed: false, gate: 'relationship', reason: relation?.reason ?? 'not_related' };
+    }
 
     if (resource.patientId && !SELF_RELATIONSHIPS.has(relation.relationship)) {
       let consent;
@@ -78,7 +85,9 @@ export function createAccessPolicy({
           principal,
           patientId: resource.patientId,
           permission,
+          relationship: relation.relationship,
           purpose,
+          trx,
         });
       } catch (err) {
         logger?.error({ err }, 'consent resolver failed');
@@ -92,13 +101,19 @@ export function createAccessPolicy({
           relationship: relation.relationship,
         };
       }
-      return { allowed: true, relationship: relation.relationship, consentId: consent.consentId };
+      return {
+        allowed: true,
+        relationship: relation.relationship,
+        consentBasis: consent.basis,
+        consentId: consent.consentId ?? null,
+      };
     }
     return { allowed: true, relationship: relation.relationship };
   }
 
-  function auditEvent(decision, { principal, permission, resource, purpose, req }) {
+  function auditEvent(decision, { principal, permission, resource, clinicId, purpose, req }) {
     const endpoint = req?.route?.path ? `${req.method} ${req.baseUrl}${req.route.path}` : undefined;
+    const scopeClinic = resource?.clinicId ?? clinicId;
     return {
       category: resource?.patientId ? 'data_access' : 'authorization',
       action: permission,
@@ -111,23 +126,29 @@ export function createAccessPolicy({
       metadata: {
         ...(endpoint ? { endpoint } : {}),
         ...(purpose ? { purpose } : {}),
+        ...(scopeClinic ? { clinicId: scopeClinic } : {}),
+        ...(!decision.allowed && decision.relationship
+          ? { relationship: decision.relationship }
+          : {}),
+        ...(decision.consentBasis ? { consentBasis: decision.consentBasis } : {}),
         ...(decision.consentId ? { consentId: decision.consentId } : {}),
       },
     };
   }
 
   /**
-   * Evaluates and throws on denial. Use from services before touching a resource.
-   * @param {{ principal: import('./principal.js').Principal, permission: string, resource?: Resource, purpose?: string, req?: import('express').Request }} request
+   * Evaluates and throws on denial. Services call this before touching a resource.
+   * @param {AccessRequest} request
    */
   async function enforce(request) {
     if (!request.principal) throw new UnauthorizedError();
     const decision = await evaluate(request);
     const shouldAudit = !decision.allowed || Boolean(request.resource?.patientId);
     if (shouldAudit) {
-      // Denials never depend on the audit write succeeding; allowed patient-data access does.
       const event = auditEvent(decision, request);
-      if (decision.allowed) await audit.record(event, { req: request.req });
+      // Allowed patient-data access is audited in the caller's transaction (fail closed);
+      // a denial is enforced even if the audit write fails.
+      if (decision.allowed) await audit.record(event, { req: request.req, trx: request.trx });
       else await audit.recordBestEffort(event, { req: request.req });
     }
     if (decision.allowed) return decision;
@@ -141,14 +162,19 @@ export function createAccessPolicy({
     throw new ForbiddenError();
   }
 
-  /** Express middleware for gate 1 on a whole route (no specific resource). */
-  function requirePermission(permission) {
+  /**
+   * Express middleware for gate 1 on a whole route. For clinic-scoped routes, pass the
+   * route parameter holding the clinic id so clinic-scoped grants are honoured.
+   * @param {string} permission
+   * @param {{ clinicParam?: string }} [options]
+   */
+  function requirePermission(permission, { clinicParam } = {}) {
     return async (req, _res, next) => {
       try {
         await enforce({
           principal: req.principal,
           permission,
-          resource: undefined,
+          clinicId: clinicParam ? req.params[clinicParam] : undefined,
           req,
         });
         next();

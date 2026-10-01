@@ -17,8 +17,12 @@ export {
   PERMISSION_DESCRIPTIONS,
   ROLE_PERMISSIONS,
   PRIVILEGED_ROLES,
+  ACCOUNT_LEVEL_PERMISSIONS,
+  ROLE_SCOPES,
+  WORKFLOW_GRANTED_ROLES,
   ALL_PERMISSIONS,
   ALL_ROLES,
   permissionsForRoles,
 } from './auth/permissions.js';
 export * from './auth/schemas.js';
+export * from './domain/schemas.js';

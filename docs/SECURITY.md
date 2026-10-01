@@ -1,6 +1,6 @@
 # Security model
 
-Status: M1 (identity, sessions, RBAC, audit). This document describes the controls that
+Status: M2 (identity, sessions, RBAC, audit, patient-scoped authorization, RLS). This document describes the controls that
 exist in the code today. Planned controls are labelled as such. It is not a compliance
 statement (see ADR-0008).
 
@@ -70,6 +70,54 @@ Public registration only ever creates PATIENT accounts.
 - Lock-event alerting.
 - Audit hash chaining and external immutable storage: Phase 2.
 - Redis cache for per-request principal loading, if load requires it.
-- Row-level security policies on patient tables arrive with those tables (M2).
 - Account lockout can be abused to block a known account temporarily (bounded at 15
   minutes).
+
+## Patient-scoped authorization (M2, ADR-0017)
+
+### Authorization matrix: who can do what to a patient profile
+
+| Actor | Read profile | Update profile | Manage care team | Notes |
+|---|---|---|---|---|
+| The patient (`patient_self`) | ✅ | ✅ | ✅ | |
+| Guardian, scope `manage` (`guardian_dependent`) | ✅ | ✅ | ✅ | Created dependents; explicit relationship type and basis |
+| Guardian, scope `view` | ✅ | ❌ (404) | ❌ (404) | Model supported; delegation UX later |
+| Doctor with ACTIVE care relationship (`treating_doctor`) | ✅ (consent basis: active care relationship) | ❌ (403, no permission) | Own side only (accept, decline, end) | Doctor must be verified and active, and the user active |
+| Doctor with pending, invited, paused or ended relationship | ❌ (404) | ❌ | Own side of that relationship | |
+| Unrelated doctor or patient | ❌ (404) | ❌ (404) | ❌ (404) | Indistinguishable from a non-existent ID |
+| Clinic admin or clinic member | ❌ (403, no `patients:read`; app layer: no consent; RLS: invisible) | ❌ | ❌ | Membership never grants patient access |
+| Platform admin, support | ❌ (403, no `patients:*`) | ❌ | ❌ | Administrative ≠ clinical access |
+| Any doctor, `medical_records:*` | ❌ (403 `consent_required`) | — | — | Until M5 consent management |
+| Anonymous, disabled user, revoked session | ❌ (401) | ❌ | ❌ | |
+
+### Clinic scope
+
+| Actor | Clinic A members | Clinic B members | Invite doctor to A |
+|---|---|---|---|
+| Clinic admin of A | ✅ | ❌ (403) | ✅ (verified doctors only) |
+| Platform admin (`admin:clinics`) | ✅ | ✅ | ✅ |
+| Doctor member of A | ❌ | ❌ | ❌ |
+
+### Defence in depth
+
+1. **Gate 1 (RBAC):** route permission plus the clinic in scope.
+2. **Gate 2 (relationship):** `modules/care-access`, independent application SQL.
+3. **Gate 3 (consent):** interim resolver; M5 replaces it with consent records.
+4. **PostgreSQL RLS** on `patients`, `patient_guardianships` and `care_relationships`,
+   keyed on a transaction-local `app.user_id`. No DELETE policies. The app role cannot
+   bypass RLS.
+5. **Audit:** all patient-data decisions (allowed and denied), plus profile, dependent,
+   care-relationship, verification and clinic events. Field names only, never values.
+   Reviewer notes are never audited.
+
+Each layer is tested on its own:
+- `rls.test.js` uses raw SQL only;
+- `careAndAccess.test.js` runs the application layer with RLS bypassed;
+- the adversarial API suite covers both layers together.
+
+### Doctor verification and roles (ADR-0018)
+
+- `DOCTOR` is granted only by an approved verification and removed on suspension.
+- `CLINIC_ADMIN` is granted only by clinic appointment.
+- Both are refused by the generic role endpoint and by provisioning.
+- Nobody can review their own verification.

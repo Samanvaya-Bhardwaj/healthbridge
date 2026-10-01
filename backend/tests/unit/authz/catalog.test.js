@@ -53,6 +53,7 @@ describe('RBAC catalog invariants', () => {
       missingPermissions: [],
       unexpectedPermissions: [],
       mappingDiff: [],
+      scopeDiff: [],
     });
     const drifted = diffPermissionCatalog({
       permissions: [...ALL_PERMISSIONS.filter((p) => p !== 'audit:read'), 'rogue:perm'],

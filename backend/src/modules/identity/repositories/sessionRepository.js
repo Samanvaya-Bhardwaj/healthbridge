@@ -65,22 +65,25 @@ export function createSessionRepository({ knex }) {
 
     /**
      * Loads everything needed to authorise a request in one round trip: session state,
-     * account state, roles and the permission union.
+     * account state, and the role/permission grants in force. Grants come from the
+     * `effective_role_grants` view, so clinic-scoped roles count only while the clinic
+     * membership and clinic are active. `clinic_id` is null for global grants.
      */
     async findPrincipal(sessionId) {
       const result = await knex.raw(
         `SELECT s.id AS session_id, s.user_id, s.revoked_at, s.idle_expires_at, s.absolute_expires_at,
                 u.email, u.full_name, u.status, u.deleted_at,
-                COALESCE(array_agg(DISTINCT r.code) FILTER (WHERE r.code IS NOT NULL), '{}') AS roles,
-                COALESCE(array_agg(DISTINCT p.code) FILTER (WHERE p.code IS NOT NULL), '{}') AS permissions
+                COALESCE((SELECT jsonb_agg(DISTINCT jsonb_build_object('role', g.role, 'clinicId', g.clinic_id))
+                            FROM effective_role_grants g WHERE g.user_id = u.id), '[]') AS role_grants,
+                COALESCE((SELECT jsonb_agg(DISTINCT jsonb_build_object('permission', p.code, 'clinicId', g.clinic_id))
+                            FROM effective_role_grants g
+                            JOIN roles r ON r.code = g.role
+                            JOIN role_permissions rp ON rp.role_id = r.id
+                            JOIN permissions p ON p.id = rp.permission_id
+                           WHERE g.user_id = u.id), '[]') AS permission_grants
            FROM sessions s
            JOIN users u ON u.id = s.user_id
-           LEFT JOIN user_roles ur ON ur.user_id = u.id
-           LEFT JOIN roles r ON r.id = ur.role_id
-           LEFT JOIN role_permissions rp ON rp.role_id = r.id
-           LEFT JOIN permissions p ON p.id = rp.permission_id
-          WHERE s.id = ?
-          GROUP BY s.id, u.id`,
+          WHERE s.id = ?`,
         [sessionId],
       );
       return result.rows[0] ?? null;

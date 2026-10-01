@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { hasSessionCookie, setAccessToken, setRefreshHandler } from '../../lib/apiClient.js';
 import { AuthContext } from './authContext.js';
+import { userHasPermission } from '../../app/navigation.js';
 import * as authApi from './authApi.js';
 
 // Refresh the access token shortly before it expires.
@@ -100,7 +101,8 @@ export function AuthProvider({ children }) {
       ...state,
       signIn,
       signOut,
-      hasPermission: (permission) => Boolean(state.user?.permissions.includes(permission)),
+      hasPermission: (permission) =>
+        Boolean(state.user && userHasPermission(state.user, permission)),
     }),
     [state, signIn, signOut],
   );

@@ -93,7 +93,7 @@ describe('AccessPolicy: three gates', () => {
   it('allows when all three gates pass and audits the patient-data access strictly', async () => {
     const { accessPolicy, audit } = policy({
       relationship: { related: true, relationship: 'treating_doctor' },
-      consent: { consentId: 'consent-1' },
+      consent: { consentId: 'consent-1', basis: 'test' },
     });
     const decision = await accessPolicy.enforce({
       principal: principal(['medical_records:read']),
@@ -101,7 +101,7 @@ describe('AccessPolicy: three gates', () => {
       resource: record,
       purpose: 'consultation',
     });
-    expect(decision).toMatchObject({ allowed: true, consentId: 'consent-1' });
+    expect(decision).toMatchObject({ allowed: true, consentId: 'consent-1', consentBasis: 'test' });
     expect(audit.events[0]).toMatchObject({
       category: 'data_access',
       outcome: 'success',
@@ -111,7 +111,9 @@ describe('AccessPolicy: three gates', () => {
   });
 
   it('the patient (self) needs no consent for their own data', async () => {
-    const { accessPolicy } = policy({ relationship: { related: true, relationship: 'self' } });
+    const { accessPolicy } = policy({
+      relationship: { related: true, relationship: 'patient_self' },
+    });
     await expect(
       accessPolicy.evaluate({
         principal: principal(['medical_records:read']),

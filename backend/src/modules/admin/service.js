@@ -1,4 +1,4 @@
-import { CURRENT_TERMS_VERSION, ROLES } from '@healthbridge/shared';
+import { CURRENT_TERMS_VERSION, ROLES, WORKFLOW_GRANTED_ROLES } from '@healthbridge/shared';
 import {
   BadRequestError,
   ConflictError,
@@ -91,7 +91,20 @@ export function createAdminUserService({ knex, users, roles, sessions, audit, ha
     return toUserView(await users.findById(userId));
   }
 
+  /** DOCTOR comes only from verification; clinic roles only from clinic workflows. */
+  function assertDirectlyGrantable(role) {
+    if (WORKFLOW_GRANTED_ROLES.includes(role)) {
+      throw new BadRequestError(
+        role === ROLES.DOCTOR
+          ? 'The doctor role is granted only through credential verification.'
+          : 'Clinic roles are granted through clinic administration.',
+        'role_requires_workflow',
+      );
+    }
+  }
+
   async function grantRole(principal, userId, role, req) {
+    assertDirectlyGrantable(role);
     await requireUser(userId);
     await knex.transaction(async (trx) => {
       const added = await roles.grant(userId, role, principal.userId, trx);
@@ -111,6 +124,7 @@ export function createAdminUserService({ knex, users, roles, sessions, audit, ha
   }
 
   async function revokeRole(principal, userId, role, req) {
+    assertDirectlyGrantable(role);
     await requireUser(userId);
     if (role === ROLES.PLATFORM_ADMIN && userId === principal.userId) {
       throw new BadRequestError(
@@ -172,6 +186,7 @@ export function createAdminUserService({ knex, users, roles, sessions, audit, ha
    * @returns {Promise<{ id: string, created: boolean, roles: string[] }>}
    */
   async function provisionUser({ email, fullName, password, roles: wanted, isDemo = false }) {
+    wanted.forEach(assertDirectlyGrantable);
     const policyError = checkPasswordPolicy(password, { email, fullName });
     if (policyError) throw new ValidationError([{ path: 'password', message: policyError }]);
     const passwordHash = await hasher.hash(password);

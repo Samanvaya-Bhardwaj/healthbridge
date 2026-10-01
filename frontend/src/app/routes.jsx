@@ -1,7 +1,8 @@
+import { PERMISSIONS } from '@healthbridge/shared';
 import { PublicLayout } from './layouts/PublicLayout.jsx';
 import { AppLayout } from './layouts/AppLayout.jsx';
 import { RouteError, NotFound } from './RouteError.jsx';
-import { ALL_SECTIONS } from './navigation.js';
+import { SECTIONS, UPCOMING_SECTIONS } from './navigation.js';
 import { HomePage } from '../features/home/HomePage.jsx';
 import { RoleHome } from '../features/home/RoleHome.jsx';
 import { UpcomingSection } from '../features/home/UpcomingSection.jsx';
@@ -9,11 +10,32 @@ import { LoginPage } from '../features/auth/LoginPage.jsx';
 import { RegisterPage } from '../features/auth/RegisterPage.jsx';
 import { RequireAuth, RequirePermission } from '../features/auth/guards.jsx';
 import { AccountPage } from '../features/account/AccountPage.jsx';
-import { PERMISSIONS } from '@healthbridge/shared';
+import { ProfilePage } from '../features/patients/ProfilePage.jsx';
+import { MyDoctorsPage } from '../features/care/MyDoctorsPage.jsx';
+import { DoctorProfilePage } from '../features/doctors/DoctorProfilePage.jsx';
+import { DoctorPatientsPage } from '../features/doctors/DoctorPatientsPage.jsx';
+import { VerificationQueuePage } from '../features/admin/VerificationQueuePage.jsx';
+import { ClinicsAdminPage } from '../features/admin/ClinicsAdminPage.jsx';
+import { ClinicPage } from '../features/clinics/ClinicPage.jsx';
+
+const guarded = (permission, element) => (
+  <RequirePermission permission={permission}>{element}</RequirePermission>
+);
+
+/** Implemented workspace sections: path → page, guarded by the section's permission. */
+const PAGES = [
+  [SECTIONS.patientProfile, <ProfilePage key="profile" />],
+  [SECTIONS.doctors, <MyDoctorsPage key="doctors" />],
+  [SECTIONS.doctorProfile, <DoctorProfilePage key="doctor-profile" />],
+  [SECTIONS.patients, <DoctorPatientsPage key="patients" />],
+  [SECTIONS.verification, <VerificationQueuePage key="verification" />],
+  [SECTIONS.clinics, <ClinicsAdminPage key="clinics" />],
+  [SECTIONS.clinic, <ClinicPage key="clinic" />],
+];
 
 /**
  * Route tree. Public pages, then the authenticated /app workspace. Each workspace
- * section is guarded by the permission the server will also enforce.
+ * section is guarded by the permission the server also enforces.
  */
 export const routes = [
   {
@@ -34,21 +56,14 @@ export const routes = [
         element: <AppLayout />,
         children: [
           { index: true, element: <RoleHome /> },
-          {
-            path: 'account',
-            element: (
-              <RequirePermission permission={PERMISSIONS.ACCOUNT_READ}>
-                <AccountPage />
-              </RequirePermission>
-            ),
-          },
-          ...ALL_SECTIONS.map((section) => ({
+          { path: 'account', element: guarded(PERMISSIONS.ACCOUNT_READ, <AccountPage />) },
+          ...PAGES.map(([section, element]) => ({
             path: section.path,
-            element: (
-              <RequirePermission permission={section.permission}>
-                <UpcomingSection section={section} />
-              </RequirePermission>
-            ),
+            element: guarded(section.permission, element),
+          })),
+          ...UPCOMING_SECTIONS.map((section) => ({
+            path: section.path,
+            element: guarded(section.permission, <UpcomingSection section={section} />),
           })),
           { path: '*', element: <NotFound /> },
         ],

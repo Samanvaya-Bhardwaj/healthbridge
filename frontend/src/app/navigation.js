@@ -3,7 +3,8 @@ import { PERMISSIONS as P, ROLES } from '@healthbridge/shared';
 /**
  * Role-aware navigation. Each section declares the permission it needs; the server
  * enforces the same permissions on every API call, so this only shapes the UI.
- * `milestone` marks sections whose features are delivered later.
+ * `milestone` marks sections whose features are delivered later (placeholder pages);
+ * sections without it have real pages wired in routes.jsx.
  *
  * @typedef {{ key: string, label: string, path: string, permission?: string, milestone?: string, description?: string }} NavItem
  */
@@ -32,16 +33,14 @@ export const SECTIONS = {
     key: 'doctors',
     label: 'Doctors',
     path: 'doctors',
-    permission: P.APPOINTMENTS_CREATE,
-    milestone: 'M2',
+    permission: P.CARE_RELATIONSHIPS_READ,
     description: 'The doctors you trust, and how to reach them.',
   },
   patients: {
     key: 'patients',
     label: 'Patients',
     path: 'patients',
-    permission: P.MEDICAL_RECORDS_READ,
-    milestone: 'M2',
+    permission: P.CARE_RELATIONSHIPS_READ,
     description: 'Patients who have chosen you as their doctor.',
   },
   medicalRecords: {
@@ -81,8 +80,7 @@ export const SECTIONS = {
     label: 'Clinic',
     path: 'clinic',
     permission: P.CLINIC_MANAGE,
-    milestone: 'M2',
-    description: 'Doctors, schedules, staff and billing for your clinic.',
+    description: 'Doctors and administrators at your clinic.',
   },
   users: {
     key: 'users',
@@ -97,8 +95,14 @@ export const SECTIONS = {
     label: 'Doctor Verification',
     path: 'admin/verification',
     permission: P.ADMIN_DOCTORS,
-    milestone: 'M2',
     description: 'Review doctor credentials before they can practise on HealthBridge.',
+  },
+  clinics: {
+    key: 'clinics',
+    label: 'Clinics',
+    path: 'admin/clinics',
+    permission: P.ADMIN_CLINICS,
+    description: 'Create clinics and appoint their administrators.',
   },
   audit: {
     key: 'audit',
@@ -108,14 +112,28 @@ export const SECTIONS = {
     milestone: 'M11',
     description: 'Security and access audit trail.',
   },
-  profile: { key: 'profile', label: 'Profile', path: 'account', permission: P.ACCOUNT_READ },
+  patientProfile: {
+    key: 'patientProfile',
+    label: 'Profile',
+    path: 'profile',
+    permission: P.PATIENTS_WRITE,
+    description: 'Your health profile and the family members whose care you manage.',
+  },
+  doctorProfile: {
+    key: 'doctorProfile',
+    label: 'Profile',
+    path: 'doctor-profile',
+    permission: P.DOCTOR_PROFILE_MANAGE,
+    description: 'Your professional profile, verification status and clinics.',
+  },
+  account: { key: 'account', label: 'Account', path: 'account', permission: P.ACCOUNT_READ },
 };
 
 const S = SECTIONS;
 
 /** Navigation per role, in display order (as specified in the architecture). */
 export const ROLE_NAVIGATION = {
-  [ROLES.PATIENT]: [S.home, S.appointments, S.records, S.doctors, S.profile],
+  [ROLES.PATIENT]: [S.home, S.appointments, S.records, S.doctors, S.patientProfile],
   [ROLES.DOCTOR]: [
     S.dashboard,
     S.appointments,
@@ -124,11 +142,11 @@ export const ROLE_NAVIGATION = {
     S.consultations,
     S.prescriptions,
     S.followUps,
-    S.profile,
+    S.doctorProfile,
   ],
-  [ROLES.CLINIC_ADMIN]: [S.dashboard, S.clinic, S.appointments, S.profile],
-  [ROLES.PLATFORM_ADMIN]: [S.dashboard, S.verification, S.users, S.audit, S.profile],
-  [ROLES.SUPPORT]: [S.dashboard, S.users, S.appointments, S.profile],
+  [ROLES.CLINIC_ADMIN]: [S.dashboard, S.clinic, S.appointments, S.account],
+  [ROLES.PLATFORM_ADMIN]: [S.dashboard, S.verification, S.clinics, S.users, S.audit, S.account],
+  [ROLES.SUPPORT]: [S.dashboard, S.users, S.appointments, S.account],
 };
 
 /** When a user holds several roles, the most operational role shapes the workspace. */
@@ -144,11 +162,17 @@ export function primaryRole(roles) {
   return ROLE_PRIORITY.find((role) => roles.includes(role)) ?? ROLES.PATIENT;
 }
 
+/** True if the permission is held globally or for any clinic (UI hint only). */
+export function userHasPermission(user, permission) {
+  if (user.permissions.includes(permission)) return true;
+  return Object.values(user.clinicPermissions ?? {}).some((perms) => perms.includes(permission));
+}
+
 /** Navigation for a user: their primary role's items that their permissions allow. */
 export function navigationFor(user) {
   const items = ROLE_NAVIGATION[primaryRole(user.roles)] ?? [];
-  return items.filter((item) => !item.permission || user.permissions.includes(item.permission));
+  return items.filter((item) => !item.permission || userHasPermission(user, item.permission));
 }
 
-/** Every section reachable under /app (used to build routes). */
-export const ALL_SECTIONS = Object.values(SECTIONS).filter((s) => s.path && s.milestone);
+/** Sections delivered in later milestones (placeholder pages). */
+export const UPCOMING_SECTIONS = Object.values(SECTIONS).filter((s) => s.path && s.milestone);

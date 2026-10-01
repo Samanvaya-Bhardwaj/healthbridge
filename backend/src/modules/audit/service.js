@@ -25,7 +25,9 @@ function actorFields(actor, req) {
   return {
     actor_type: 'user',
     actor_user_id: effective.userId,
-    actor_roles: [...(effective.roles ?? [])],
+    actor_roles: [
+      ...new Set([...(effective.roles ?? []), ...(effective.clinicRoles ?? []).map((g) => g.role)]),
+    ],
     session_id: effective.sessionId ?? null,
   };
 }

@@ -22,5 +22,7 @@ old one.
 | [0014](adr/0014-monorepo-workspaces-and-dev-environment.md) | Monorepo with npm workspaces; repository outside cloud-sync folders | Accepted |
 | [0015](adr/0015-authentication-tokens-and-sessions.md) | Ed25519 access tokens, per-request session validation, rotating refresh sessions with reuse detection, CSRF | Accepted |
 | [0016](adr/0016-audit-log-model.md) | Single append-only `audit.audit_logs` table (refines proposal's two-table sketch) | Accepted |
+| [0017](adr/0017-patient-scoped-authorization-rls.md) | Relationship types, clinic-scoped roles, interim consent basis, RLS on patient-scoped tables | Accepted |
+| [0018](adr/0018-doctor-verification-workflow-granted-roles.md) | Doctor verification state machine; DOCTOR/CLINIC_ADMIN granted only by workflows | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

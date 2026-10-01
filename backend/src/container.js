@@ -10,6 +10,15 @@ import { createSessionRepository } from './modules/identity/repositories/session
 import { createAuthService } from './modules/identity/authService.js';
 import { createAccountService } from './modules/identity/accountService.js';
 import { createAdminUserService } from './modules/admin/service.js';
+import { createCareAccess } from './modules/care-access/relationships.js';
+import { createPatientRepository } from './modules/patients/repository.js';
+import { createPatientService } from './modules/patients/service.js';
+import { createDoctorRepository } from './modules/doctors/repository.js';
+import { createDoctorService } from './modules/doctors/service.js';
+import { createClinicRepository } from './modules/clinics/repository.js';
+import { createClinicService } from './modules/clinics/service.js';
+import { createCareRepository } from './modules/care/repository.js';
+import { createCareService } from './modules/care/service.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -19,6 +28,7 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
   loginAccount: { points: 10, durationSeconds: 900 }, // per account (hashed email)
   refresh: { points: 60, durationSeconds: 60 }, // per IP
   passwordChange: { points: 5, durationSeconds: 900 }, // per user
+  careInvite: { points: 20, durationSeconds: 3600 }, // per doctor
 });
 
 /**
@@ -59,6 +69,7 @@ export function createContainer({
     accessTokenTtlSeconds: config.auth.accessTokenTtlSeconds,
   });
 
+  const careAccess = createCareAccess({ knex });
   const accessPolicy = createAccessPolicy({
     audit,
     logger,
@@ -68,8 +79,15 @@ export function createContainer({
         related: Boolean(resource.ownerUserId) && resource.ownerUserId === principal.userId,
         relationship: 'owner',
       }),
+      ...careAccess.resolvers,
     },
+    consentResolver: careAccess.consentResolver,
   });
+
+  const patients = createPatientRepository();
+  const doctors = createDoctorRepository({ knex });
+  const clinics = createClinicRepository({ knex });
+  const care = createCareRepository();
 
   const authService = createAuthService({
     knex,
@@ -93,6 +111,26 @@ export function createContainer({
     accessPolicy,
   });
   const adminUserService = createAdminUserService({ knex, users, roles, sessions, audit, hasher });
+  const patientService = createPatientService({ knex, patients, accessPolicy, audit, logger });
+  const doctorService = createDoctorService({ knex, doctors, roles, accessPolicy, audit });
+  const clinicService = createClinicService({
+    knex,
+    clinics,
+    users,
+    roles,
+    doctors,
+    accessPolicy,
+    audit,
+  });
+  const careService = createCareService({
+    knex,
+    care,
+    patients,
+    doctors,
+    clinics,
+    accessPolicy,
+    audit,
+  });
   const authenticate = createAuthenticate({
     tokenService: tokens,
     resolvePrincipal: authService.resolvePrincipal,
@@ -105,13 +143,18 @@ export function createContainer({
     rateLimits: { ...DEFAULT_RATE_LIMITS, ...rateLimits },
     audit,
     auditRepository,
-    repositories: { users, roles, sessions },
+    repositories: { users, roles, sessions, patients, doctors, clinics, care },
+    careAccess,
     hasher,
     tokens,
     accessPolicy,
     authService,
     accountService,
     adminUserService,
+    patientService,
+    doctorService,
+    clinicService,
+    careService,
     authenticate,
   };
 }
