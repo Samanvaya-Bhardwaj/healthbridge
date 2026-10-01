@@ -19,6 +19,12 @@ import { createClinicRepository } from './modules/clinics/repository.js';
 import { createClinicService } from './modules/clinics/service.js';
 import { createCareRepository } from './modules/care/repository.js';
 import { createCareService } from './modules/care/service.js';
+import {
+  createAppointmentRepository,
+  createAvailabilityRepository,
+} from './modules/scheduling/repository.js';
+import { createAvailabilityService } from './modules/scheduling/availabilityService.js';
+import { createAppointmentService } from './modules/scheduling/appointmentService.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -88,6 +94,8 @@ export function createContainer({
   const doctors = createDoctorRepository({ knex });
   const clinics = createClinicRepository({ knex });
   const care = createCareRepository();
+  const availability = createAvailabilityRepository({ knex });
+  const appointments = createAppointmentRepository();
 
   const authService = createAuthService({
     knex,
@@ -131,6 +139,26 @@ export function createContainer({
     accessPolicy,
     audit,
   });
+  const availabilityService = createAvailabilityService({
+    knex,
+    availability,
+    appointments,
+    doctors,
+    clinics,
+    accessPolicy,
+    audit,
+  });
+  const appointmentService = createAppointmentService({
+    knex,
+    appointments,
+    availability,
+    care,
+    patients,
+    doctors,
+    accessPolicy,
+    audit,
+    logger,
+  });
   const authenticate = createAuthenticate({
     tokenService: tokens,
     resolvePrincipal: authService.resolvePrincipal,
@@ -143,7 +171,17 @@ export function createContainer({
     rateLimits: { ...DEFAULT_RATE_LIMITS, ...rateLimits },
     audit,
     auditRepository,
-    repositories: { users, roles, sessions, patients, doctors, clinics, care },
+    repositories: {
+      users,
+      roles,
+      sessions,
+      patients,
+      doctors,
+      clinics,
+      care,
+      availability,
+      appointments,
+    },
     careAccess,
     hasher,
     tokens,
@@ -155,6 +193,8 @@ export function createContainer({
     doctorService,
     clinicService,
     careService,
+    availabilityService,
+    appointmentService,
     authenticate,
   };
 }

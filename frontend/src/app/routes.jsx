@@ -17,6 +17,8 @@ import { DoctorPatientsPage } from '../features/doctors/DoctorPatientsPage.jsx';
 import { VerificationQueuePage } from '../features/admin/VerificationQueuePage.jsx';
 import { ClinicsAdminPage } from '../features/admin/ClinicsAdminPage.jsx';
 import { ClinicPage } from '../features/clinics/ClinicPage.jsx';
+import { AppointmentsPage } from '../features/appointments/AppointmentsPage.jsx';
+import { BookAppointmentPage } from '../features/appointments/BookAppointmentPage.jsx';
 
 const guarded = (permission, element) => (
   <RequirePermission permission={permission}>{element}</RequirePermission>
@@ -31,6 +33,7 @@ const PAGES = [
   [SECTIONS.verification, <VerificationQueuePage key="verification" />],
   [SECTIONS.clinics, <ClinicsAdminPage key="clinics" />],
   [SECTIONS.clinic, <ClinicPage key="clinic" />],
+  [SECTIONS.appointments, <AppointmentsPage key="appointments" />],
 ];
 
 /**
@@ -57,6 +60,10 @@ export const routes = [
         children: [
           { index: true, element: <RoleHome /> },
           { path: 'account', element: guarded(PERMISSIONS.ACCOUNT_READ, <AccountPage />) },
+          {
+            path: 'appointments/book',
+            element: guarded(PERMISSIONS.APPOINTMENTS_MANAGE, <BookAppointmentPage />),
+          },
           ...PAGES.map(([section, element]) => ({
             path: section.path,
             element: guarded(section.permission, element),

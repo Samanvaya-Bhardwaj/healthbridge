@@ -173,6 +173,14 @@ export function MyDoctorsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {rel.status === 'active' && (
+                  <Link
+                    to={`/app/appointments/book?doctorId=${rel.doctorId}&patientId=${rel.patientId}`}
+                    className="min-h-11 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
+                  >
+                    Book
+                  </Link>
+                )}
                 {(PATIENT_ACTIONS[rel.status] ?? []).map(([action, label]) => (
                   <Button
                     key={action}

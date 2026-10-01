@@ -121,3 +121,24 @@ Each layer is tested on its own:
 - `CLINIC_ADMIN` is granted only by clinic appointment.
 - Both are refused by the generic role endpoint and by provisioning.
 - Nobody can review their own verification.
+
+## Scheduling (M3, ADR-0019)
+
+| Actor | Book | View appointment | Reason for visit | Cancel | Check-in | Complete / no-show |
+|---|---|---|---|---|---|---|
+| Patient / managing guardian | ✅ with an ACTIVE care relationship | ✅ | ✅ | ✅ before the start | ❌ | ❌ |
+| Doctor of the appointment | ❌ | ✅ (patient identity via AccessPolicy) | ✅ (audited) | ✅ | ✅ in-clinic | ✅ |
+| Clinic admin of the appointment's clinic | ❌ | ✅ booking reference only | ❌ (RLS) | ✅ | ✅ | No-show only |
+| Unrelated patient or doctor | ❌ (404) | ❌ (404) | ❌ | ❌ | ❌ | ❌ |
+| Treating doctor listing a patient's other appointments | — | ❌ (403 `consent_required`) | — | — | — | — |
+| Platform admin, support | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+- No double booking is enforced by PostgreSQL `EXCLUDE` constraints, which hold under
+  concurrency.
+- Idempotency keys make booking retries safe.
+- Busy-time lookups expose time ranges only.
+- Outbox payloads carry identifiers only, never reasons.
+- The doctor directory (`GET /doctors`, `GET /doctors/:id`) accepts a `doctors:read` grant
+  in any clinic scope (`requirePermission(..., { anyScope: true })`), so staff clinic
+  admins can find doctors to invite. The option is reserved for non-patient reference
+  data; patient routes always evaluate clinic scope against the resource.

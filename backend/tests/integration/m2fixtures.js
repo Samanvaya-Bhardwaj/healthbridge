@@ -96,6 +96,8 @@ export async function createClinicWithAdmin(h, platformAdmin, label = 'clinic') 
     201,
   );
   const clinicAdmin = await createUser(h, { label: `${label}-admin` });
+  // Model a staff account: clinic administrators hold only their clinic-scoped role.
+  await h.container.repositories.roles.revoke(clinicAdmin.id, 'PATIENT');
   expectOk(
     await api(h, platformAdmin).post(`/admin/clinics/${clinic.id}/admins`, {
       userId: clinicAdmin.id,

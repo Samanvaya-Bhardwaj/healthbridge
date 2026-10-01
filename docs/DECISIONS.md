@@ -24,5 +24,6 @@ old one.
 | [0016](adr/0016-audit-log-model.md) | Single append-only `audit.audit_logs` table (refines proposal's two-table sketch) | Accepted |
 | [0017](adr/0017-patient-scoped-authorization-rls.md) | Relationship types, clinic-scoped roles, interim consent basis, RLS on patient-scoped tables | Accepted |
 | [0018](adr/0018-doctor-verification-workflow-granted-roles.md) | Doctor verification state machine; DOCTOR/CLINIC_ADMIN granted only by workflows | Accepted |
+| [0019](adr/0019-scheduling-on-demand-slots.md) | On-demand slots (refines materialised slots), care-team booking, DB-enforced no double booking, appointment lifecycle | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

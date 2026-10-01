@@ -20,6 +20,8 @@ export function makeUser(roles = ['PATIENT'], overrides = {}) {
     fullName: 'Asha Rao',
     roles,
     permissions: [...permissionsForRoles(roles)].sort(),
+    clinicRoles: [],
+    clinicPermissions: {},
     ...overrides,
   };
 }

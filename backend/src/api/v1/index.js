@@ -6,6 +6,7 @@ import { patientRoutes } from '../../modules/patients/routes.js';
 import { careRoutes } from '../../modules/care/routes.js';
 import { doctorRoutes } from '../../modules/doctors/routes.js';
 import { clinicRoutes } from '../../modules/clinics/routes.js';
+import { schedulingRoutes } from '../../modules/scheduling/routes.js';
 
 /**
  * Versioned public API. Feature modules mount their routers here.
@@ -33,6 +34,7 @@ export function apiV1Router({ config, version, container }) {
   router.use(adminRoutes(container));
   router.use(patientRoutes(container));
   router.use(careRoutes(container));
+  router.use(schedulingRoutes(container));
   router.use(doctorRoutes(container));
   router.use(clinicRoutes(container));
 

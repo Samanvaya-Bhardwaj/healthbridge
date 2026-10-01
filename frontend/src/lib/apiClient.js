@@ -51,8 +51,8 @@ export function readCookie(name) {
 
 export const hasSessionCookie = () => Boolean(readCookie(CSRF_COOKIE));
 
-async function send(path, { method, body, signal, timeoutMs }) {
-  const headers = { accept: 'application/json' };
+async function send(path, { method, body, signal, timeoutMs, extraHeaders }) {
+  const headers = { accept: 'application/json', ...extraHeaders };
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (accessToken && !SESSION_ENDPOINTS.has(path)) headers.authorization = `Bearer ${accessToken}`;
   if (CSRF_ENDPOINTS.has(path)) {
@@ -104,13 +104,13 @@ async function send(path, { method, body, signal, timeoutMs }) {
  * authenticated endpoint it refreshes the session once and retries.
  *
  * @param {string} path e.g. "/auth/me"
- * @param {{ method?: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number }} [options]
+ * @param {{ method?: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number, headers?: Record<string, string> }} [options]
  */
 export async function apiRequest(
   path,
-  { method = 'GET', body, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {},
+  { method = 'GET', body, signal, timeoutMs = DEFAULT_TIMEOUT_MS, headers } = {},
 ) {
-  const options = { method, body, signal, timeoutMs };
+  const options = { method, body, signal, timeoutMs, extraHeaders: headers };
   const hadToken = Boolean(accessToken);
   try {
     return await send(path, options);

@@ -19,8 +19,9 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M0** | Foundations: monorepo, Docker stack, DB roles and migrations, health checks, CI, ADRs | ✅ Complete |
 | **M1** | Identity, sessions, RBAC, audit logging, auth UI | ✅ Complete |
 | **M2** | Patients, dependents, doctors and verification, clinics, care relationships, RLS | ✅ Complete |
-| M3 | Scheduling and booking | Next |
-| M4–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
+| **M3** | Availability, slots, booking, appointment lifecycle, clinic schedule | ✅ Complete |
+| M4 | Payments (+ outbox relay, workers) | Next |
+| M5–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
 
 ## Architecture at a glance
 

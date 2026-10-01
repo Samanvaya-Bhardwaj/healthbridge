@@ -27,6 +27,7 @@ export const doctorsApi = {
   myClinics: () => data(apiRequest('/doctors/me/clinics')),
   directory: (params = {}) => apiRequest(`/doctors${qs({ limit: 20, ...params })}`),
   myPatients: (status) => data(apiRequest(`/doctors/me/patients${qs({ status })}`)),
+  publicProfile: (id) => data(apiRequest(`/doctors/${id}`)),
 };
 
 export const careApi = {
@@ -58,4 +59,32 @@ export const adminApi = {
   appointClinicAdmin: (clinicId, userId) =>
     data(apiRequest(`/admin/clinics/${clinicId}/admins`, { method: 'POST', body: { userId } })),
   findUsers: (q) => data(apiRequest(`/admin/users${qs({ q, limit: 5 })}`)),
+};
+
+export const schedulingApi = {
+  slots: (doctorId, params) => data(apiRequest(`/doctors/${doctorId}/slots${qs(params)}`)),
+  book: (body, idempotencyKey) =>
+    data(
+      apiRequest('/appointments', {
+        method: 'POST',
+        body,
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    ),
+  mine: (params = {}) => data(apiRequest(`/appointments${qs(params)}`)),
+  get: (id) => data(apiRequest(`/appointments/${id}`)),
+  cancel: (id, reasonCode) =>
+    data(apiRequest(`/appointments/${id}/cancel`, { method: 'POST', body: { reasonCode } })),
+  reschedule: (id, startsAt) =>
+    data(apiRequest(`/appointments/${id}/reschedule`, { method: 'POST', body: { startsAt } })),
+  action: (id, action) => data(apiRequest(`/appointments/${id}/${action}`, { method: 'POST' })),
+  doctorSchedule: (from, to) => data(apiRequest(`/doctors/me/appointments${qs({ from, to })}`)),
+  clinicSchedule: (clinicId, from, to) =>
+    data(apiRequest(`/clinics/${clinicId}/appointments${qs({ from, to })}`)),
+  rules: () => data(apiRequest('/doctors/me/availability')),
+  addRule: (body) => data(apiRequest('/doctors/me/availability', { method: 'POST', body })),
+  archiveRule: (id) => apiRequest(`/doctors/me/availability/${id}`, { method: 'DELETE' }),
+  timeOff: () => data(apiRequest('/doctors/me/time-off')),
+  addTimeOff: (body) => data(apiRequest('/doctors/me/time-off', { method: 'POST', body })),
+  removeTimeOff: (id) => apiRequest(`/doctors/me/time-off/${id}`, { method: 'DELETE' }),
 };

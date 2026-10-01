@@ -87,6 +87,18 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
       .select('id')
       .whereIn('created_by_user_id', testUsers.clone());
     await ownerKnex.transaction(async (trx) => {
+      const testAppointments = trx('appointments')
+        .select('id')
+        .whereIn('patient_id', testPatients.clone())
+        .orWhereIn('doctor_id', testDoctors.clone());
+      await trx('appointment_intakes').whereIn('appointment_id', testAppointments.clone()).del();
+      await trx('appointments')
+        .whereIn('id', testAppointments.clone())
+        .whereNotNull('rescheduled_from_id')
+        .del();
+      await trx('appointments').whereIn('id', testAppointments.clone()).del();
+      await trx('availability_exceptions').whereIn('doctor_id', testDoctors.clone()).del();
+      await trx('availability_rules').whereIn('doctor_id', testDoctors.clone()).del();
       await trx('care_relationships')
         .whereIn('patient_id', testPatients.clone())
         .orWhereIn('doctor_id', testDoctors.clone())

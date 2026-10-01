@@ -179,3 +179,35 @@ Authorization: Bearer <doctor token>
 404 Not Found
 { "status": 404, "code": "not_found", "detail": "The requested resource was not found.", … }
 ```
+
+## Endpoints (M3)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET / POST | `/doctors/me/availability` | `availability:manage` | Weekly rules; overlap → `409 availability_overlap`; in-clinic requires active membership |
+| DELETE | `/doctors/me/availability/:ruleId` | `availability:manage` | Archives (existing bookings unaffected) |
+| GET / POST | `/doctors/me/time-off` | `availability:manage` | Response reports `clashingAppointments` |
+| DELETE | `/doctors/me/time-off/:id` | `availability:manage` | |
+| GET | `/doctors/:doctorId/slots?from&to&mode&clinicId` | `doctors:read` | Verified doctors; ≤ 31 days; UTC |
+| POST | `/appointments` | `appointments:create` | `{ patientId, doctorId, startsAt, mode, clinicId?, reason }`; optional `Idempotency-Key` header. Errors: `care_relationship_required`, `slot_not_offered`, `slot_unavailable`, `patient_double_booked`, `idempotency_conflict` |
+| GET | `/appointments?patientId&scope=upcoming|past` | `appointments:read` | Patient side |
+| GET | `/appointments/:id` | `appointments:read` | Reason included for the patient side and the doctor only |
+| POST | `/appointments/:id/cancel` | `appointments:manage` | `{ reasonCode }` |
+| POST | `/appointments/:id/reschedule` | `appointments:manage` | `{ startsAt }`; patient side; atomic |
+| POST | `/appointments/:id/{check-in,complete,no-show}` | `appointments:manage` | Party and time rules (ADR-0019) |
+| GET | `/doctors/me/appointments?from&to` | `appointments:read` | Doctor schedule (≤ 62 days) |
+| GET | `/clinics/:clinicId/appointments?from&to` | `appointments:read` for that clinic | References, doctors and statuses; no patient identity |
+
+**Example: booking**
+
+```http
+POST /api/v1/appointments
+Idempotency-Key: 6f1c…
+{ "patientId": "0199…", "doctorId": "0199…", "startsAt": "2026-10-05T09:15:00+05:30",
+  "mode": "online", "reason": "Follow-up on blood sugar readings" }
+
+201 Created
+{ "data": { "id": "0199…", "reference": "4F2A9C1B", "status": "confirmed",
+  "startsAt": "2026-10-05T03:45:00.000Z", "endsAt": "2026-10-05T04:00:00.000Z",
+  "mode": "online", "feePaise": 0, "reason": "Follow-up on blood sugar readings", … } }
+```

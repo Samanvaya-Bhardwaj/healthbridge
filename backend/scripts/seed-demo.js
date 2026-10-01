@@ -240,6 +240,57 @@ try {
     }),
   );
 
+  // ── Availability and a synthetic upcoming appointment (M3) ────
+  const meeraNow = await principalFor(ids['dr.meera']);
+  const existingRules = await container.availabilityService.listRules(meeraNow);
+  if (existingRules.length === 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const weekday of [1, 2, 3, 4, 5]) {
+      await container.availabilityService.createRule(meeraNow, {
+        mode: 'online',
+        weekday,
+        startTime: '09:00',
+        endTime: '12:00',
+        slotMinutes: 15,
+        timezone: 'Asia/Kolkata',
+        validFrom: today,
+        feePaise: 0,
+      });
+      await container.availabilityService.createRule(meeraNow, {
+        mode: 'in_clinic',
+        clinicId: clinic.id,
+        weekday,
+        startTime: '17:00',
+        endTime: '19:00',
+        slotMinutes: 20,
+        timezone: 'Asia/Kolkata',
+        validFrom: today,
+        feePaise: 0,
+      });
+    }
+    log('dr.meera availability published');
+  }
+  const upcoming = await container.appointmentService.listForPatient(asha, { scope: 'upcoming' });
+  if (upcoming.length === 0) {
+    const from = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 8 * 86_400_000).toISOString().slice(0, 10);
+    const [slot] = await container.availabilityService.slots(asha, meera.id, {
+      from,
+      to,
+      mode: 'online',
+    });
+    if (slot) {
+      await container.appointmentService.book(asha, {
+        patientId: ashaProfile.id,
+        doctorId: meera.id,
+        startsAt: slot.startsAt,
+        mode: 'online',
+        reason: 'Synthetic demo: follow-up on blood sugar readings',
+      });
+      log('asha appointment booked', { startsAt: slot.startsAt });
+    }
+  }
+
   log('demo seed complete', { password: 'DEMO_USER_PASSWORD from .env' });
 } catch (err) {
   console.error(

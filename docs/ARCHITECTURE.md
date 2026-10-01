@@ -159,6 +159,18 @@ routes → controllers → application services → domain (pure rules) → repo
   - DOCTOR and CLINIC_ADMIN are workflow-granted
     ([ADR-0018](adr/0018-doctor-verification-workflow-granted-roles.md)).
 
+### Scheduling (M3)
+
+- Doctors publish weekly availability. Slots are computed on demand.
+- Two PostgreSQL `EXCLUDE` constraints guarantee no doctor or patient double booking.
+- Booking requires an active care relationship.
+- Paid slots create 15-minute holds, which are paid for in M4.
+- The reason for visit lives in an RLS-protected intake table, visible to the patient and
+  the doctor only.
+- Clinic staff work with booking references, not patient identity.
+- Every change writes an audit row and an outbox event in one transaction
+  ([ADR-0019](adr/0019-scheduling-on-demand-slots.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -174,5 +186,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M2 complete (patients, dependents, doctors and verification, clinics, care relationships, patient-scoped authorization with RLS); awaiting approval for M3.**
+Current status: **M3 complete (availability, on-demand slots, booking, appointment lifecycle, clinic schedule); awaiting approval for M4.**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

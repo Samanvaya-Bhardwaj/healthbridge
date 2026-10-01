@@ -18,7 +18,6 @@ export const SECTIONS = {
     label: 'Appointments',
     path: 'appointments',
     permission: P.APPOINTMENTS_READ,
-    milestone: 'M3',
     description: 'Book and manage online and in-clinic consultations.',
   },
   records: {

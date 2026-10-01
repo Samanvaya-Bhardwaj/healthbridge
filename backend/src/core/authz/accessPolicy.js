@@ -163,18 +163,26 @@ export function createAccessPolicy({
   }
 
   /**
-   * Express middleware for gate 1 on a whole route. For clinic-scoped routes, pass the
-   * route parameter holding the clinic id so clinic-scoped grants are honoured.
+   * Express middleware for gate 1 on a whole route.
+   * - `clinicParam`: the route parameter holding the clinic id, so clinic-scoped grants
+   *   for that clinic are honoured.
+   * - `anyScope`: for non-patient reference data (e.g. the doctor directory), a grant in
+   *   any clinic scope suffices. Never use it for patient data.
    * @param {string} permission
-   * @param {{ clinicParam?: string }} [options]
+   * @param {{ clinicParam?: string, anyScope?: boolean }} [options]
    */
-  function requirePermission(permission, { clinicParam } = {}) {
+  function requirePermission(permission, { clinicParam, anyScope = false } = {}) {
     return async (req, _res, next) => {
       try {
+        const scopedClinic = anyScope
+          ? [...(req.principal?.clinicPermissions ?? [])].find(([, perms]) =>
+              perms.has(permission),
+            )?.[0]
+          : undefined;
         await enforce({
           principal: req.principal,
           permission,
-          clinicId: clinicParam ? req.params[clinicParam] : undefined,
+          clinicId: clinicParam ? req.params[clinicParam] : scopedClinic,
           req,
         });
         next();

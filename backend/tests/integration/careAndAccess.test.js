@@ -211,6 +211,16 @@ describe('adversarial authorization (fail closed)', () => {
     ).toBe(404);
   });
 
+  it('a staff clinic admin can browse the doctor directory via its clinic-scoped grant', async () => {
+    const list = await api(h, clinicA.clinicAdmin).get('/doctors');
+    expect(list.status).toBe(200);
+    expect((await api(h, clinicA.clinicAdmin).get(`/doctors/${doctorA.doctor.id}`)).status).toBe(
+      200,
+    );
+    // Directory access does not extend to patient data.
+    expect((await readPatient(clinicA.clinicAdmin, patientA.patient.id)).status).toBe(403);
+  });
+
   it('an unrelated doctor cannot access a patient (and the denial is audited)', async () => {
     const res = await readPatient(doctorB, patientA.patient.id);
     expect(res.status).toBe(404);
@@ -247,8 +257,8 @@ describe('adversarial authorization (fail closed)', () => {
   const patientRes = (p) => ({ type: 'patient', id: p.patient.id, patientId: p.patient.id });
 
   it('a clinic member has no access: RLS hides the patient, and the app layer alone denies at consent', async () => {
-    // Through the API (both layers): not related → 404.
-    expect((await readPatient(clinicA.clinicAdmin, patientA.patient.id)).status).toBe(404);
+    // Through the API: a clinic administrator holds no patient permissions at all → 403.
+    expect((await readPatient(clinicA.clinicAdmin, patientA.patient.id)).status).toBe(403);
 
     const principal = principalOf(
       clinicA.clinicAdmin,
@@ -304,7 +314,7 @@ describe('adversarial authorization (fail closed)', () => {
     expect(
       (await api(h, clinicB.clinicAdmin).get(`/clinics/${clinicA.clinic.id}/members`)).status,
     ).toBe(403);
-    expect((await readPatient(clinicB.clinicAdmin, patientA.patient.id)).status).toBe(404);
+    expect((await readPatient(clinicB.clinicAdmin, patientA.patient.id)).status).toBe(403);
   });
 
   it('administrative access never implies clinical access (platform admin, support)', async () => {

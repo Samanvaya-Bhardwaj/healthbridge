@@ -138,7 +138,9 @@ function ClinicCard({ clinicId }) {
 export function ClinicPage() {
   const { user } = useAuth();
   const clinicIds = [
-    ...new Set(user.clinicRoles.filter((g) => g.role === 'CLINIC_ADMIN').map((g) => g.clinicId)),
+    ...new Set(
+      (user.clinicRoles ?? []).filter((g) => g.role === 'CLINIC_ADMIN').map((g) => g.clinicId),
+    ),
   ];
   return (
     <div className="space-y-6">

@@ -35,6 +35,8 @@ export const PERMISSIONS = Object.freeze({
   // Care workflows (enforced on endpoints from later milestones)
   APPOINTMENTS_CREATE: 'appointments:create',
   APPOINTMENTS_READ: 'appointments:read',
+  APPOINTMENTS_MANAGE: 'appointments:manage',
+  AVAILABILITY_MANAGE: 'availability:manage',
   MEDICAL_RECORDS_READ: 'medical_records:read',
   MEDICAL_RECORDS_WRITE: 'medical_records:write',
   PRESCRIPTIONS_READ: 'prescriptions:read',
@@ -66,6 +68,9 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'clinic:manage': 'Manage own clinic (doctors, slots, staff)',
   'appointments:create': 'Create appointments',
   'appointments:read': 'Read appointments within relationship scope',
+  'appointments:manage':
+    'Cancel, reschedule, check in and complete appointments within relationship scope',
+  'availability:manage': 'Manage consultation availability and time off',
   'medical_records:read': 'Read medical records within relationship and consent scope',
   'medical_records:write': 'Add medical records within relationship and consent scope',
   'prescriptions:read': 'Read prescriptions within relationship and consent scope',
@@ -107,6 +112,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.DOCTORS_READ,
     P.APPOINTMENTS_CREATE,
     P.APPOINTMENTS_READ,
+    P.APPOINTMENTS_MANAGE,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
@@ -120,6 +126,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.DOCTORS_READ,
     P.CLINICS_READ,
     P.APPOINTMENTS_READ,
+    P.APPOINTMENTS_MANAGE,
+    P.AVAILABILITY_MANAGE,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
@@ -133,6 +141,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.DOCTORS_READ,
     P.APPOINTMENTS_CREATE,
     P.APPOINTMENTS_READ,
+    P.APPOINTMENTS_MANAGE,
   ]),
   // Platform administrators manage accounts, clinics and verification; they do NOT
   // receive patient or clinical-record permissions.

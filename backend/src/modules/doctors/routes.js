@@ -42,7 +42,12 @@ const suspendBody = z
 export function doctorRoutes(container) {
   const { authenticate, accessPolicy, doctorService, clinicService } = container;
   const router = Router();
-  const can = (permission) => [authenticate(), accessPolicy.requirePermission(permission)];
+  const can = (permission, options) => [
+    authenticate(),
+    accessPolicy.requirePermission(permission, options),
+  ];
+  // The directory is professional reference data: clinic-scoped grants suffice.
+  const directory = can(PERMISSIONS.DOCTORS_READ, { anyScope: true });
 
   // ── Own doctor profile ──────────────────────────────────────────
   router.post(
@@ -85,18 +90,13 @@ export function doctorRoutes(container) {
   });
 
   // ── Directory (verified, active doctors only) ───────────────────
-  router.get(
-    '/doctors',
-    can(PERMISSIONS.DOCTORS_READ),
-    validate({ query: directoryQuery }),
-    async (req, res) => {
-      const page = await doctorService.directory(req.valid.query);
-      res.json({ data: page.items, meta: { nextCursor: page.nextCursor } });
-    },
-  );
+  router.get('/doctors', directory, validate({ query: directoryQuery }), async (req, res) => {
+    const page = await doctorService.directory(req.valid.query);
+    res.json({ data: page.items, meta: { nextCursor: page.nextCursor } });
+  });
   router.get(
     '/doctors/:doctorId',
-    can(PERMISSIONS.DOCTORS_READ),
+    directory,
     validate({ params: idParam('doctorId') }),
     async (req, res) => {
       res.json({ data: await doctorService.publicProfile(req.valid.params.doctorId) });

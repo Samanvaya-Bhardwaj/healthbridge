@@ -27,6 +27,8 @@ const PATIENT_WRITE_PERMISSIONS = new Set([
   PERMISSIONS.DEPENDENTS_MANAGE,
   PERMISSIONS.CARE_RELATIONSHIPS_MANAGE,
   PERMISSIONS.MEDICAL_RECORDS_WRITE,
+  PERMISSIONS.APPOINTMENTS_CREATE,
+  PERMISSIONS.APPOINTMENTS_MANAGE,
 ]);
 
 /**
@@ -119,11 +121,41 @@ export function createCareAccess({ knex }) {
     return { related: false, reason: 'not_related' };
   }
 
+  /**
+   * Appointments: the doctor party, the patient side (self, or a guardian; `manage` scope
+   * for changes), or a clinic administrator of the appointment's clinic ("clinic
+   * scheduler"). Appointment metadata is scheduling data; the clinical reason for visit
+   * is released by the service only to the patient side and the doctor.
+   */
+  async function appointmentResolver(principal, resource, ctx) {
+    if (resource.doctorUserId && resource.doctorUserId === principal.userId) {
+      return { related: true, relationship: 'doctor_party' };
+    }
+    if (resource.relPatientId) {
+      const side = await careRelationshipResolver(
+        principal,
+        { relPatientId: resource.relPatientId },
+        ctx,
+      );
+      if (side.related) return side;
+    }
+    if (
+      resource.clinicId &&
+      principal.clinicRoles.some(
+        (g) => g.clinicId === resource.clinicId && g.role === 'CLINIC_ADMIN',
+      )
+    ) {
+      return { related: true, relationship: 'clinic_scheduler' };
+    }
+    return { related: false, reason: 'not_related' };
+  }
+
   return {
     patientRelationships,
     resolvers: {
       patient: patientResolver,
       care_relationship: careRelationshipResolver,
+      appointment: appointmentResolver,
       // A doctor profile is managed only by its owner.
       doctor_profile: (principal, resource) => ({
         related: Boolean(resource.ownerUserId) && resource.ownerUserId === principal.userId,

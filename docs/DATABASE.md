@@ -18,6 +18,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261001000000_foundation` | extensions, `ai` and `audit` schemas, default privileges, `set_updated_at()` |
 | `20261002000000_identity_rbac_audit` | `roles`, `permissions`, `role_permissions`, `users`, `user_roles`, `sessions`, `audit.audit_logs` + append-only triggers, RBAC seed |
 | `20261003000000_patients_doctors_clinics` | `roles.scope`, 9 permissions, `clinics`, `clinic_memberships`, `user_roles.clinic_id` FK + scope trigger, `effective_role_grants`, `patients`, `patient_guardianships`, `doctors`, `doctor_verifications`, `care_relationships`, schema `authz`, RLS policies |
+| `20261004000000_scheduling_appointments` | `availability_rules`, `availability_exceptions`, `appointments` (two EXCLUDE constraints), `appointment_intakes`, `outbox_events`, RLS and `authz` functions for scheduling, `appointments:manage` / `availability:manage` |
 
 ## Identity, RBAC and audit (M1)
 
@@ -218,3 +219,69 @@ erDiagram
 | `patients` | self, any active guardian, treating doctor | creator = actor and (`user_id` = actor or NULL) | self or `manage` guardian | none |
 | `patient_guardianships` | the guardian, or the patient themself | guardian = creator = actor, for a dependent the actor created | guardian or patient | none |
 | `care_relationships` | patient side (self/guardian) or the doctor party | patient-initiated by a patient manager, or doctor-initiated by the doctor; requester = actor | patient manager or doctor party | none |
+
+## Scheduling (M3)
+
+```mermaid
+erDiagram
+  DOCTORS ||--o{ AVAILABILITY_RULES : publishes
+  DOCTORS ||--o{ AVAILABILITY_EXCEPTIONS : "takes time off"
+  CLINICS ||--o{ AVAILABILITY_RULES : "hosts (in-clinic)"
+  PATIENTS ||--o{ APPOINTMENTS : books
+  DOCTORS ||--o{ APPOINTMENTS : attends
+  CARE_RELATIONSHIPS ||--o{ APPOINTMENTS : "required (active)"
+  AVAILABILITY_RULES ||--o{ APPOINTMENTS : "slot provenance"
+  APPOINTMENTS ||--|| APPOINTMENT_INTAKES : "reason for visit"
+  APPOINTMENTS ||--o| APPOINTMENTS : "rescheduled from"
+
+  AVAILABILITY_RULES {
+    uuid id PK
+    uuid doctor_id FK
+    uuid clinic_id FK "required for in_clinic"
+    text mode "online | in_clinic"
+    smallint weekday "ISO 1-7"
+    time start_time
+    time end_time
+    smallint slot_minutes "10-120"
+    text timezone "IANA"
+    date valid_from
+    date valid_until
+    int fee_paise
+    text status "active | archived"
+  }
+  AVAILABILITY_EXCEPTIONS {
+    uuid id PK
+    uuid doctor_id FK
+    timestamptz starts_at
+    timestamptz ends_at
+    text reason_code
+  }
+  APPOINTMENTS {
+    uuid id PK
+    uuid patient_id FK
+    uuid doctor_id FK
+    uuid clinic_id FK
+    uuid care_relationship_id FK
+    text mode
+    text status "pending_payment | confirmed | checked_in | in_consultation | completed | cancelled | no_show | expired"
+    timestamptz starts_at
+    timestamptz ends_at
+    tstzrange during "generated; EXCLUDE per doctor and per patient"
+    int fee_paise
+    timestamptz hold_expires_at
+    text idempotency_key "unique per booking user"
+    uuid rescheduled_from_id FK
+  }
+  APPOINTMENT_INTAKES {
+    uuid appointment_id PK
+    text reason "patient side and doctor only"
+  }
+```
+
+| Table | RLS SELECT | INSERT | UPDATE |
+|---|---|---|---|
+| `appointments` | patient side, doctor party, clinic manager of the appointment clinic | booked by actor, who manages the patient | patient manager, doctor party, clinic manager |
+| `appointment_intakes` | patient side and doctor party (**not** clinic staff) | patient manager | none |
+
+`outbox_events` (aggregate, event type, identifier-only payload, `published_at`) is
+written in the same transaction as each appointment change.
