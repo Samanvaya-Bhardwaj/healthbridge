@@ -1,0 +1,11 @@
+# Normalise line endings to LF in the repository. Shell scripts copied into Linux
+# containers break with CRLF, so this matters on Windows.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.ps1  text eol=crlf
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.pdf  binary
+*.ico  binary

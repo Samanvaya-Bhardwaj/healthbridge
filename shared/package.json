@@ -1,0 +1,11 @@
+{
+  "name": "@healthbridge/shared",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Constants and validation schemas shared by the HealthBridge frontend and backend.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "sideEffects": false
+}

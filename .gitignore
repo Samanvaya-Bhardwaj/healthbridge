@@ -1,0 +1,65 @@
+# ── Secrets & local configuration ─────────────────────────────
+# Only .env.example (variable names, no real values) is committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+**/secrets/
+
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+.venv/
+venv/
+
+# ── Build output ──────────────────────────────────────────────
+dist/
+build/
+*.tsbuildinfo
+
+# ── Test / coverage / reports ─────────────────────────────────
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+junit*.xml
+
+# ── Python caches ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# ── Model weights / ML caches (never committed) ───────────────
+models/
+.cache/
+hf_cache/
+*.onnx
+*.safetensors
+*.bin
+
+# ── Docker volumes / local data / temp ────────────────────────
+volumes/
+data/
+.docker-data/
+tmp/
+temp/
+*.tmp
+*.log
+logs/
+
+# ── OS / editor ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json

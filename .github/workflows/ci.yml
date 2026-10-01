@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: '0.9.30'
+  PYTHON_VERSION: '3.12'
+
+# Third-party actions are pinned to commit SHAs (supply-chain hardening);
+# Dependabot keeps them current.
+jobs:
+  secrets-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  javascript:
+    name: JavaScript (lint, unit tests, build, audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - name: Backend unit tests
+        run: npm run test -w backend
+      - name: Frontend unit tests
+        run: npm run test -w frontend
+      - name: Frontend production build
+        run: npm run build -w frontend
+      - name: Dependency audit (production, high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  ai-service:
+    name: AI service (lint, tests, audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          working-directory: ai-service
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - name: Dependency audit
+        run: |
+          uv export --frozen --no-dev --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit --disable-pip --requirement "$RUNNER_TEMP/requirements.txt"
+
+  integration:
+    name: Integration (PostgreSQL + pgvector, Redis, MinIO)
+    runs-on: ubuntu-latest
+    needs: [javascript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Generate ephemeral environment
+        run: node scripts/generate-env.mjs
+      - name: Start data services
+        run: docker compose up -d --wait postgres redis minio
+      - name: Apply migrations
+        run: npm run migrate:latest -w backend
+      - name: Bootstrap object storage
+        run: npm run storage:bootstrap -w backend
+      - name: Integration tests
+        run: npm run test:integration -w backend
+      - name: Migrations are reversible
+        run: |
+          npm run migrate:rollback -w backend
+          npm run migrate:latest -w backend
+          npm run migrate:status -w backend
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down -v
+
+  stack:
+    name: Container build + smoke test + image scan
+    runs-on: ubuntu-latest
+    needs: [javascript, ai-service]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Generate ephemeral environment
+        run: node scripts/generate-env.mjs
+      - name: Build images
+        run: docker compose build
+      - name: Start full stack
+        run: docker compose up -d --wait
+      - name: Smoke tests
+        run: |
+          set -euo pipefail
+          set -a; . ./.env; set +a
+          web="http://127.0.0.1:${HOST_PORT_WEB}"
+          api="http://127.0.0.1:${HOST_PORT_API}"
+
+          curl -fsS "$web/healthz"
+          curl -fsS "$web/" | grep -q '<div id="root">'
+          curl -fsS "$web/api/v1/meta" | jq -e '.data.apiVersion == "v1"'
+          curl -fsS "$api/health/ready" | jq -e '.status == "ok"
+            and .checks.database.status == "up"
+            and .checks.redis.status == "up"
+            and .checks.objectStorage.status == "up"
+            and .checks.aiService.status == "up"'
+
+          # The AI service must not be reachable from the host.
+          if curl -s -m 3 "http://127.0.0.1:8000/health/live"; then
+            echo "AI service is exposed on the host" >&2; exit 1
+          fi
+          # Unauthenticated internal calls are rejected.
+          status=$(docker compose exec -T api node -e "fetch('http://ai-service:8000/v1/meta').then(r=>console.log(r.status))")
+          test "$status" = "401"
+      - name: Scan images (high+critical, fixable)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: healthbridge-backend:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: healthbridge-ai:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          skip-setup-trivy: true
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: healthbridge-web:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          skip-setup-trivy: true
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down -v

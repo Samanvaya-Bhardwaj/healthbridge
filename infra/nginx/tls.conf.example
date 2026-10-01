@@ -1,0 +1,18 @@
+# Staging/production TLS server block (example). Certificates are mounted from the
+# platform's secret store and never committed.
+#
+# server {
+#     listen 8443 ssl;
+#     http2 on;
+#     ssl_certificate     /etc/nginx/tls/fullchain.pem;
+#     ssl_certificate_key /etc/nginx/tls/privkey.pem;
+#     ssl_protocols TLSv1.2 TLSv1.3;
+#     ssl_prefer_server_ciphers off;
+#     ssl_session_timeout 1d;
+#     ssl_session_cache shared:SSL:10m;
+#     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+#     # ...same locations as default.conf...
+# }
+#
+# Plain-HTTP listener in production only redirects:
+# server { listen 8080; return 301 https://$host$request_uri; }

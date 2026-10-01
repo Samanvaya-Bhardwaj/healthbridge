@@ -1,0 +1,16 @@
+# Build context for backend/ and frontend/ images is the repository root
+# (npm workspaces share a single lockfile). Keep the context small and secret-free.
+.git
+.github
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+docs
+ai-service
+infra/postgres
+**/*.log
+**/tests/integration
