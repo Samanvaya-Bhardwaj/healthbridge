@@ -18,6 +18,19 @@ const STATUS_TONES = {
   rejected: 'danger',
   suspended: 'danger',
   ended: 'neutral',
+  // Appointments and payments (M3/M4)
+  confirmed: 'success',
+  pending_payment: 'warning',
+  checked_in: 'primary',
+  completed: 'success',
+  no_show: 'danger',
+  cancelled: 'neutral',
+  expired: 'neutral',
+  paid: 'success',
+  authorized: 'warning',
+  failed: 'danger',
+  refunded: 'neutral',
+  partially_refunded: 'neutral',
 };
 
 const label = (status) => status.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());

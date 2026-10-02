@@ -88,3 +88,21 @@ export const schedulingApi = {
   addTimeOff: (body) => data(apiRequest('/doctors/me/time-off', { method: 'POST', body })),
   removeTimeOff: (id) => apiRequest(`/doctors/me/time-off/${id}`, { method: 'DELETE' }),
 };
+
+/**
+ * Payments (M4). The browser only starts a checkout and reads status: a payment becomes
+ * "paid" solely through the provider's verified webhook on the server.
+ */
+export const paymentsApi = {
+  checkout: (appointmentId) =>
+    data(apiRequest(`/appointments/${appointmentId}/payment`, { method: 'POST', body: {} })),
+  get: (appointmentId) => data(apiRequest(`/appointments/${appointmentId}/payment`)),
+  /** Development/test only (fake provider): asks the server to emit a signed test webhook. */
+  simulate: (appointmentId, outcome) =>
+    data(
+      apiRequest(`/appointments/${appointmentId}/payment/simulate`, {
+        method: 'POST',
+        body: { outcome },
+      }),
+    ),
+};

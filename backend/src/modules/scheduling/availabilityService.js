@@ -200,11 +200,14 @@ export function createAvailabilityService({
     return withActor(knex, principal.userId, async (trx) => {
       const rangeStart = DateTime.fromISO(from).minus({ days: 1 }).toJSDate();
       const rangeEnd = DateTime.fromISO(to).plus({ days: 2 }).toJSDate();
-      const [rules, exceptions, busy] = await Promise.all([
-        availability.activeRules(doctor.id, trx),
-        availability.timeOff(doctor.id, { from: rangeStart, to: rangeEnd }, trx),
-        appointments.busyRanges(trx, doctor.id, rangeStart, rangeEnd),
-      ]);
+      // Sequential: a transaction is a single connection (pg rejects concurrent queries).
+      const rules = await availability.activeRules(doctor.id, trx);
+      const exceptions = await availability.timeOff(
+        doctor.id,
+        { from: rangeStart, to: rangeEnd },
+        trx,
+      );
+      const busy = await appointments.busyRanges(trx, doctor.id, rangeStart, rangeEnd);
       return generateSlots({
         rules,
         exceptions,

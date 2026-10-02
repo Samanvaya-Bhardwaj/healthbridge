@@ -241,6 +241,7 @@ try {
   );
 
   // ── Availability and a synthetic upcoming appointment (M3) ────
+  const IN_CLINIC_FEE_PAISE = 50_000; // ₹500, synthetic
   const meeraNow = await principalFor(ids['dr.meera']);
   const existingRules = await container.availabilityService.listRules(meeraNow);
   if (existingRules.length === 0) {
@@ -265,10 +266,24 @@ try {
         slotMinutes: 20,
         timezone: 'Asia/Kolkata',
         validFrom: today,
-        feePaise: 0,
+        feePaise: IN_CLINIC_FEE_PAISE,
       });
     }
     log('dr.meera availability published');
+  }
+  // M4: in-clinic visits carry a synthetic fee (paid with the fake provider; no money moves).
+  // Databases seeded before M4 get their free in-clinic rules replaced once.
+  for (const rule of (await container.availabilityService.listRules(meeraNow)).filter(
+    (r) => r.mode === 'in_clinic' && r.status === 'active' && r.feePaise === 0,
+  )) {
+    await container.availabilityService.archiveRule(meeraNow, rule.id);
+    const { id: _id, doctorId: _doctor, status: _status, ...input } = rule;
+    await container.availabilityService.createRule(meeraNow, {
+      ...input,
+      validUntil: input.validUntil ?? undefined,
+      feePaise: IN_CLINIC_FEE_PAISE,
+    });
+    log('dr.meera in-clinic fee set', { weekday: rule.weekday });
   }
   const upcoming = await container.appointmentService.listForPatient(asha, { scope: 'upcoming' });
   if (upcoming.length === 0) {

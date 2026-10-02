@@ -44,6 +44,13 @@ x-backend-env: &backend-env
   AUTH_ACCESS_TOKEN_TTL_SECONDS: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:-600}
   AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
   DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-fake}
+  PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?run node scripts/generate-env.mjs --update}
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+  NOTIFICATION_EMAIL_PROVIDER: ${NOTIFICATION_EMAIL_PROVIDER:-smtp}
+  REMINDER_OFFSETS_MINUTES: ${REMINDER_OFFSETS_MINUTES:-1440,60}
+  WORKER_METRICS_PORT: 9465
 
 services:
   postgres:
@@ -178,6 +185,31 @@ services:
       timeout: 4s
       start_period: 20s
       retries: 6
+    restart: unless-stopped
+
+  # Background workers (ADR-0020): outbox relay, notifications, payments, reminders,
+  # payment-hold expiry. Same image as the API; no published ports.
+  worker:
+    image: healthbridge-backend:local
+    command: ['node', 'src/worker.js']
+    environment: *backend-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    networks: [private]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:9465/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 4s
+      start_period: 20s
+      retries: 4
+    # Active jobs finish before exit (graceful shutdown waits up to 30 s).
+    stop_grace_period: 35s
     restart: unless-stopped
 
   ai-service:

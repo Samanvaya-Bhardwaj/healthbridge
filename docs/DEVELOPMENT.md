@@ -33,7 +33,8 @@ To use Claude instead of the offline fake LLM, set `LLM_PROVIDER=claude` and
 | PostgreSQL | `localhost:${HOST_PORT_POSTGRES}` | owner `hb_owner`; runtime roles `hb_app`, `hb_ai` |
 | Redis | `localhost:${HOST_PORT_REDIS}` | password-protected, AOF, `noeviction` |
 | MinIO | API `:${HOST_PORT_MINIO}`, console `:${HOST_PORT_MINIO_CONSOLE}` | bucket `healthbridge-documents`, versioned |
-| Mailpit | UI `:${HOST_PORT_MAILPIT_UI}`, SMTP `:${HOST_PORT_SMTP}` | captures all outgoing email |
+| Mailpit | UI `:${HOST_PORT_MAILPIT_UI}`, SMTP `:${HOST_PORT_SMTP}` | captures all outgoing email (worker notifications) |
+| Worker | not published (`:9465` inside the network) | outbox relay, BullMQ workers, hold and reminder sweeps; `npm run worker -w backend` on the host |
 
 All published ports bind to `127.0.0.1`.
 
@@ -78,7 +79,8 @@ When running the backend on the host, the AI service must also be reachable at
 ```bash
 npm run lint && npm run format:check
 npm run test -w backend              # unit
-npm run test:integration -w backend  # needs postgres, redis, minio + migrations
+npm run test:integration -w backend  # needs postgres, redis, minio + migrations; stop the worker first:
+                                     #   docker compose stop worker   (tests refuse to run alongside one)
 npm run test -w frontend
 cd ai-service && uv run ruff check . && uv run ruff format --check . && uv run pytest
 # or, without local Python:
@@ -112,3 +114,14 @@ node scripts/generate-env.mjs --force     # new secrets (requires the reset abov
   `docker compose down -v`, or edit the `HOST_PORT_*` values.
 - **CRLF errors in shell scripts:** `.gitattributes` enforces LF. Re-checkout if your
   editor converted line endings.
+
+## Payments in development
+
+`PAYMENT_PROVIDER=fake` (the default) moves no money. On the payment page, **Simulate
+successful/failed payment** makes the server emit a signed test webhook through the real
+verification path. Refunds settle automatically: the worker emulates the provider's
+`refund.processed` webhook.
+
+To try Razorpay's test mode, set `PAYMENT_PROVIDER=razorpay` with `rzp_test_…` keys and the
+webhook secret. Live keys are refused outside production. Webhooks need a public URL
+(for example a tunnel) pointing at `/api/v1/webhooks/payments/razorpay`.

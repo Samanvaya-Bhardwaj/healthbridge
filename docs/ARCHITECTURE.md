@@ -164,12 +164,33 @@ routes → controllers → application services → domain (pure rules) → repo
 - Doctors publish weekly availability. Slots are computed on demand.
 - Two PostgreSQL `EXCLUDE` constraints guarantee no doctor or patient double booking.
 - Booking requires an active care relationship.
-- Paid slots create 15-minute holds, which are paid for in M4.
+- Paid slots create 15-minute holds, paid for through M4 payments.
 - The reason for visit lives in an RLS-protected intake table, visible to the patient and
   the doctor only.
 - Clinic staff work with booking references, not patient identity.
 - Every change writes an audit row and an outbox event in one transaction
   ([ADR-0019](adr/0019-scheduling-on-demand-slots.md)).
+
+### Payments, outbox and workers (M4)
+
+- Payments run through `PaymentProvider`: Razorpay in production, a deterministic fake
+  for development, tests and demo (refused in production).
+- **Only a verified provider webhook marks a payment paid.** It confirms the appointment
+  through the system-only `confirm_payment` transition.
+- Webhook events are deduplicated by provider event ID and by payload digest.
+- `ledger_entries` is append-only; corrections are compensating entries.
+- Hold expiry and payment confirmation lock the appointment row first, so they always end
+  in one valid state. A capture that arrives after expiry is refunded automatically.
+- The worker process (`src/worker.js`, same image) runs:
+  - the outbox relay (`FOR UPDATE SKIP LOCKED` → BullMQ, at-least-once, deterministic
+    job IDs);
+  - the `notifications`, `payments`, `appointments` and `maintenance` queues;
+  - database-driven reminders;
+  - a PostgreSQL dead-letter table.
+- Webhooks and workers use purpose-scoped **system transactions** (`withSystem`), which
+  RLS keeps separate from user transactions
+  ([ADR-0020](adr/0020-payments-webhook-authority-outbox-workers.md), which also has the
+  flow diagrams).
 
 ## 6. Observability baseline
 
@@ -182,9 +203,18 @@ routes → controllers → application services → domain (pure rules) → repo
     service (non-critical, degraded).
   - AI readiness checks the database and the LLM configuration, without making paid calls.
 - AI calls emit `llm_call` metadata events (see invariant 9).
+- Payment, outbox, queue and notification metrics are exposed on the API (`:9464`) and the
+  worker (`:9465/metrics`, with `/health/live`). Labels are low-cardinality enums only.
+  - Counters: `payments_created_total`, `payments_succeeded_total`,
+    `payments_failed_total`, `payment_webhooks_{received,duplicate,invalid}_total`,
+    `refunds_{created,completed}_total`, `outbox_events_{created,dispatched,failed}_total`,
+    `queue_jobs_{processed,failed,retried,dlq}_total`, `appointment_holds_expired_total`,
+    `notifications_{sent,failed}_total`, `reminders_sent_total`.
+  - Latency histograms: payment provider, webhook processing, outbox relay batch, worker
+    job, notification provider.
 
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M3 complete (availability, on-demand slots, booking, appointment lifecycle, clinic schedule); awaiting approval for M4.**
+Current status: **M4 complete (payments, webhooks, ledger, outbox relay, workers, notifications, reminders); awaiting approval for M5.**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

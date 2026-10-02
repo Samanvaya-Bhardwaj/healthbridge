@@ -13,6 +13,8 @@ import { createKnex } from '../../src/core/db/knex.js';
 import { createRedis } from '../../src/core/cache/redis.js';
 import { createMemoryMailer } from '../../src/core/mail/mailer.js';
 import { createContainer } from '../../src/container.js';
+import { createFakePaymentProvider } from '../../src/modules/payments/providers/fakePaymentProvider.js';
+import { createFakeNotificationProvider } from '../../src/modules/notifications/notificationProvider.js';
 import { createApp } from '../../src/app.js';
 import { REFRESH_COOKIE } from '../../src/core/auth/cookies.js';
 import { FAST_HASH_PARAMS, TEST_ORIGIN, captureLogs, testSigningKey } from '../helpers.js';
@@ -22,6 +24,8 @@ if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 export const TEST_EMAIL_DOMAIN = 'test.healthbridge.local';
 export const PASSWORD = 'synthetic river lantern 2026';
+/** Test-only webhook secret for the fake payment provider (never a real secret). */
+export const TEST_WEBHOOK_SECRET = 'test-webhook-secret-not-real-0001';
 
 const GENEROUS = { points: 100_000, durationSeconds: 60 };
 const NO_LIMITS = {
@@ -33,13 +37,20 @@ const NO_LIMITS = {
   passwordChange: GENEROUS,
 };
 
+/** Redis settings for test-owned BullMQ queues (same server, isolated key prefix). */
+export const testRedisConfig = () => ({
+  host: process.env.REDIS_HOST ?? 'localhost',
+  port: Number(process.env.REDIS_PORT ?? 6379),
+  password: process.env.REDIS_PASSWORD,
+});
+
 export const uniqueEmail = (label = 'user') =>
   `${label}.${randomUUID().slice(0, 8)}@${TEST_EMAIL_DOMAIN}`;
 
 /**
- * @param {{ rateLimits?: object, env?: Record<string, string> }} [options]
+ * @param {{ rateLimits?: object, env?: Record<string, string>, queues?: object, now?: () => Date }} [options]
  */
-export async function createHarness({ rateLimits = {}, env = {} } = {}) {
+export async function createHarness({ rateLimits = {}, env = {}, queues, now } = {}) {
   const config = loadConfig({
     ...process.env,
     AI_SERVICE_URL: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
@@ -47,6 +58,9 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
     AUTH_COOKIE_SECURE: 'false',
     CORS_ORIGINS: TEST_ORIGIN,
     APP_ENV: 'test',
+    PAYMENT_PROVIDER: 'fake',
+    PAYMENT_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
+    NOTIFICATION_EMAIL_PROVIDER: 'fake',
     ...env,
   });
   const { lines: logs, destination } = captureLogs();
@@ -57,8 +71,19 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
   // Rate-limit counters from earlier runs must not leak into this one.
   const keys = await redis.keys('rl:*');
   if (keys.length) await redis.del(...keys);
+  // A running worker would claim this suite's outbox events and race the assertions.
+  const heartbeats = await redis.keys('*:worker:heartbeat:*');
+  if (heartbeats.length) {
+    await redis.quit();
+    throw new Error(
+      'A HealthBridge worker is running against this database. Stop it before running ' +
+        'integration tests (docker compose stop worker).',
+    );
+  }
 
   const mailer = createMemoryMailer();
+  const paymentProvider = createFakePaymentProvider({ webhookSecret: TEST_WEBHOOK_SECRET });
+  const notificationProvider = createFakeNotificationProvider();
   const container = createContainer({
     config,
     logger,
@@ -67,6 +92,10 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
     mailer,
     passwordHashParams: FAST_HASH_PARAMS,
     rateLimits: { ...NO_LIMITS, ...rateLimits },
+    paymentProvider,
+    notificationProvider,
+    queues,
+    ...(now ? { now } : {}),
   });
   const app = createApp({ config, logger, container, redis, healthChecks: [], version: 'test' });
 
@@ -91,6 +120,30 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
         .select('id')
         .whereIn('patient_id', testPatients.clone())
         .orWhereIn('doctor_id', testDoctors.clone());
+      // M4 rows. The ledger is append-only even for the owner (trigger); test cleanup
+      // disables the trigger inside this transaction only.
+      const testPayments = trx('payments')
+        .select('id')
+        .whereIn('appointment_id', testAppointments.clone());
+      await trx('notification_deliveries')
+        .whereIn('appointment_id', testAppointments.clone())
+        .del();
+      await trx('appointment_reminders').whereIn('appointment_id', testAppointments.clone()).del();
+      await trx.raw('ALTER TABLE ledger_entries DISABLE TRIGGER ledger_no_update_delete');
+      await trx('ledger_entries').whereIn('payment_id', testPayments.clone()).del();
+      await trx.raw('ALTER TABLE ledger_entries ENABLE TRIGGER ledger_no_update_delete');
+      await trx('payment_events').whereIn('payment_id', testPayments.clone()).del();
+      await trx('payment_refunds').whereIn('payment_id', testPayments.clone()).del();
+      await trx('payments').whereIn('id', testPayments.clone()).del();
+      await trx('dead_letter_jobs')
+        .whereIn('aggregate_id', testAppointments.clone())
+        .orWhereIn('aggregate_id', testPayments.clone())
+        .orWhereIn('retried_by_user_id', testUsers.clone())
+        .del();
+      await trx('outbox_events')
+        .whereIn('aggregate_id', testAppointments.clone())
+        .orWhereIn('aggregate_id', testPayments.clone())
+        .del();
       await trx('appointment_intakes').whereIn('appointment_id', testAppointments.clone()).del();
       await trx('appointments')
         .whereIn('id', testAppointments.clone())
@@ -122,7 +175,19 @@ export async function createHarness({ rateLimits = {}, env = {} } = {}) {
     await Promise.allSettled([knex.destroy(), ownerKnex.destroy(), redis.quit()]);
   }
 
-  return { app, config, container, knex, ownerKnex, redis, mailer, logs, close };
+  return {
+    app,
+    config,
+    container,
+    knex,
+    ownerKnex,
+    redis,
+    mailer,
+    logs,
+    paymentProvider,
+    notificationProvider,
+    close,
+  };
 }
 
 /** Parses Set-Cookie headers into { name: { value, attributes } }. */

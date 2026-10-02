@@ -27,3 +27,4 @@ export {
 export * from './auth/schemas.js';
 export * from './domain/schemas.js';
 export * from './domain/scheduling.js';
+export * from './domain/payments.js';

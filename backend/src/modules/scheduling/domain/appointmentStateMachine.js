@@ -3,8 +3,8 @@ import { ConflictError, ForbiddenError } from '../../../core/http/errors.js';
 /**
  * Appointment lifecycle (ADR-0019).
  *
- *   book ──fee 0──► CONFIRMED            book ──fee > 0──► PENDING_PAYMENT ──pay (M4)──► CONFIRMED
- *   PENDING_PAYMENT ──hold expires──► EXPIRED (system)
+ *   book ──fee 0──► CONFIRMED            book ──fee > 0──► PENDING_PAYMENT ──confirm_payment──► CONFIRMED
+ *   PENDING_PAYMENT ──expire (hold elapsed)──► EXPIRED
  *   PENDING_PAYMENT | CONFIRMED ──cancel──► CANCELLED
  *   CONFIRMED ──check_in (in clinic)──► CHECKED_IN
  *   CONFIRMED | CHECKED_IN | IN_CONSULTATION ──complete──► COMPLETED
@@ -12,7 +12,14 @@ import { ConflictError, ForbiddenError } from '../../../core/http/errors.js';
  *   (IN_CONSULTATION is entered by the consultation module, M9)
  *
  * Parties: 'patient' (patient or managing guardian), 'doctor', 'clinic' (clinic
- * administrator of the appointment's clinic). Time rules use the appointment window.
+ * administrator of the appointment's clinic), 'system' (verified payment webhooks and
+ * workers, ADR-0020). Time rules use the appointment window.
+ *
+ * confirm_payment and expire are system-only. Both run with the appointment row locked,
+ * so whichever commits first decides: a verified capture confirms an appointment that is
+ * still PENDING_PAYMENT even if its hold has just elapsed (no other booking can have
+ * taken the slot while the row is active), and a capture that arrives after expiry is
+ * refunded by the payments module instead.
  */
 
 const NO_SHOW_GRACE_MINUTES = 15;
@@ -51,6 +58,21 @@ const RULES = {
     when: (a, now) => now >= a.starts_at,
     whenMessage: 'An appointment can be completed only after it starts.',
   },
+  confirm_payment: {
+    from: ['pending_payment'],
+    parties: ['system'],
+    to: 'confirmed',
+    ignoresHold: true,
+    when: () => true,
+  },
+  expire: {
+    from: ['pending_payment'],
+    parties: ['system'],
+    to: 'expired',
+    ignoresHold: true,
+    when: (a, now) => Boolean(a.hold_expires_at) && a.hold_expires_at <= now,
+    whenMessage: 'The payment hold has not elapsed yet.',
+  },
   no_show: {
     from: ['confirmed'],
     parties: ['doctor', 'clinic'],
@@ -76,6 +98,7 @@ export function appointmentTransition(appointment, action, party, now = new Date
     );
   }
   const heldExpired =
+    !rule.ignoresHold &&
     appointment.status === 'pending_payment' &&
     appointment.hold_expires_at &&
     appointment.hold_expires_at <= now;

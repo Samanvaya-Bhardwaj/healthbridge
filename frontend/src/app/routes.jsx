@@ -19,6 +19,7 @@ import { ClinicsAdminPage } from '../features/admin/ClinicsAdminPage.jsx';
 import { ClinicPage } from '../features/clinics/ClinicPage.jsx';
 import { AppointmentsPage } from '../features/appointments/AppointmentsPage.jsx';
 import { BookAppointmentPage } from '../features/appointments/BookAppointmentPage.jsx';
+import { PaymentPage } from '../features/appointments/PaymentPage.jsx';
 
 const guarded = (permission, element) => (
   <RequirePermission permission={permission}>{element}</RequirePermission>
@@ -63,6 +64,10 @@ export const routes = [
           {
             path: 'appointments/book',
             element: guarded(PERMISSIONS.APPOINTMENTS_MANAGE, <BookAppointmentPage />),
+          },
+          {
+            path: 'appointments/:id/pay',
+            element: guarded(PERMISSIONS.PAYMENTS_CREATE, <PaymentPage />),
           },
           ...PAGES.map(([section, element]) => ({
             path: section.path,

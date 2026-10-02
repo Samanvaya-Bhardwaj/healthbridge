@@ -1,8 +1,11 @@
-import { createPrivateKey, createPublicKey } from 'node:crypto';
+import { createPrivateKey, createPublicKey, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 const port = z.coerce.number().int().min(1).max(65535);
 const positiveInt = z.coerce.number().int().positive();
+/** Compose passes unset optional variables as empty strings: treat them as absent. */
+const optional = (schema) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
 const csv = z.string().transform((value) =>
   value
     .split(',')
@@ -60,6 +63,36 @@ const envSchema = z
     PRIVILEGED_SESSION_IDLE_TTL_MINUTES: positiveInt.default(720), // 12 hours
     PRIVILEGED_SESSION_ABSOLUTE_TTL_HOURS: positiveInt.default(72), // 3 days
     AUTH_COOKIE_SECURE: z.stringbool().default(true),
+
+    // ── Payments (ADR-0020) ──
+    PAYMENT_PROVIDER: z.enum(['fake', 'razorpay']).default('fake'),
+    // HMAC secret for provider webhooks (Razorpay dashboard secret, or the fake provider's).
+    PAYMENT_WEBHOOK_SECRET: optional(z.string().min(16, 'must be at least 16 characters')),
+    RAZORPAY_KEY_ID: optional(
+      z.string().regex(/^rzp_(test|live)_[A-Za-z0-9]+$/, 'must be a Razorpay key id'),
+    ),
+    RAZORPAY_KEY_SECRET: optional(z.string().min(8)),
+    PAYMENT_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
+
+    // ── Notifications ──
+    NOTIFICATION_EMAIL_PROVIDER: z.enum(['fake', 'smtp']).default('fake'),
+    // Minutes before the start; e.g. "1440,60" = 24-hour and 1-hour reminders.
+    REMINDER_OFFSETS_MINUTES: csv
+      .pipe(z.array(z.coerce.number().int().min(5).max(10080)).max(5))
+      .default([1440, 60]),
+
+    // ── Workers ──
+    WORKER_METRICS_PORT: port.default(9465),
+    QUEUE_PREFIX: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{0,30}$/)
+      .default('hb'),
+    JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(6),
+    JOB_BACKOFF_MS: z.coerce.number().int().min(10).max(600_000).default(5_000),
+    OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(1_000),
+    OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(20),
+    HOLD_SWEEP_INTERVAL_MS: z.coerce.number().int().min(1_000).max(600_000).default(30_000),
+    REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().int().min(1_000).max(600_000).default(60_000),
   })
   .superRefine((env, ctx) => {
     if (env.APP_ENV === 'production' && env.DEMO_MODE) {
@@ -75,6 +108,46 @@ const envSchema = z
         path: ['AUTH_COOKIE_SECURE'],
         message: 'secure cookies are required outside development/test',
       });
+    }
+    // Payments: no fake provider in production; no live keys (real money) elsewhere.
+    if (env.APP_ENV === 'production' && env.PAYMENT_PROVIDER === 'fake') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYMENT_PROVIDER'],
+        message: 'the fake payment provider cannot be used when APP_ENV=production',
+      });
+    }
+    if (env.PAYMENT_PROVIDER === 'razorpay') {
+      for (const name of ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'PAYMENT_WEBHOOK_SECRET']) {
+        if (!env[name]) {
+          ctx.addIssue({ code: 'custom', path: [name], message: 'required for razorpay' });
+        }
+      }
+      const live = env.RAZORPAY_KEY_ID?.startsWith('rzp_live_');
+      if (env.APP_ENV === 'production' && env.RAZORPAY_KEY_ID && !live) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['RAZORPAY_KEY_ID'],
+          message: 'production requires a live key',
+        });
+      }
+      if (env.APP_ENV !== 'production' && live) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['RAZORPAY_KEY_ID'],
+          message: 'live keys are allowed only when APP_ENV=production',
+        });
+      }
+    }
+    if (env.APP_ENV === 'production' && env.NOTIFICATION_EMAIL_PROVIDER === 'fake') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['NOTIFICATION_EMAIL_PROVIDER'],
+        message: 'the fake notification provider cannot be used when APP_ENV=production',
+      });
+    }
+    if (env.NOTIFICATION_EMAIL_PROVIDER === 'smtp' && !env.SMTP_HOST) {
+      ctx.addIssue({ code: 'custom', path: ['SMTP_HOST'], message: 'required for smtp' });
     }
     if (env.SESSION_IDLE_TTL_MINUTES > env.SESSION_ABSOLUTE_TTL_HOURS * 60) {
       ctx.addIssue({
@@ -131,6 +204,9 @@ export function loadConfig(env = process.env) {
   if (!result.success) throw new ConfigError(result.error.issues);
   const e = result.data;
   const keys = loadSigningKeys(e);
+  // Development/test without a configured secret: a per-process random secret keeps the
+  // fake provider's webhooks verifiable without ever committing one.
+  const webhookSecret = e.PAYMENT_WEBHOOK_SECRET ?? randomBytes(32).toString('hex');
 
   return deepFreeze({
     nodeEnv: e.NODE_ENV,
@@ -162,6 +238,28 @@ export function loadConfig(env = process.env) {
       forcePathStyle: e.S3_FORCE_PATH_STYLE,
     },
     mail: { smtpHost: e.SMTP_HOST, smtpPort: e.SMTP_PORT, from: e.MAIL_FROM },
+    payments: {
+      provider: e.PAYMENT_PROVIDER,
+      webhookSecret,
+      timeoutMs: e.PAYMENT_PROVIDER_TIMEOUT_MS,
+      razorpay: { keyId: e.RAZORPAY_KEY_ID, keySecret: e.RAZORPAY_KEY_SECRET },
+      // The simulated checkout exists only with the fake provider outside production.
+      simulationEnabled: e.PAYMENT_PROVIDER === 'fake' && e.APP_ENV !== 'production',
+    },
+    notifications: {
+      emailProvider: e.NOTIFICATION_EMAIL_PROVIDER,
+      reminderOffsetsMinutes: [...new Set(e.REMINDER_OFFSETS_MINUTES)].sort((a, b) => b - a),
+    },
+    workers: {
+      metricsPort: e.WORKER_METRICS_PORT,
+      queuePrefix: e.QUEUE_PREFIX,
+      maxAttempts: e.JOB_MAX_ATTEMPTS,
+      backoffMs: e.JOB_BACKOFF_MS,
+      outboxPollIntervalMs: e.OUTBOX_POLL_INTERVAL_MS,
+      outboxMaxAttempts: e.OUTBOX_MAX_ATTEMPTS,
+      holdSweepIntervalMs: e.HOLD_SWEEP_INTERVAL_MS,
+      reminderSweepIntervalMs: e.REMINDER_SWEEP_INTERVAL_MS,
+    },
     aiService: { url: e.AI_SERVICE_URL, internalSecret: e.INTERNAL_SERVICE_SECRET },
     auth: {
       // KeyObjects are not frozen (deepFreeze skips non-plain objects).

@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=../.env --watch src/server.js",
     "start": "node src/server.js",
+    "worker": "node --env-file-if-exists=../.env src/worker.js",
     "migrate:latest": "node --env-file-if-exists=../.env scripts/migrate.js latest",
     "migrate:rollback": "node --env-file-if-exists=../.env scripts/migrate.js rollback",
     "migrate:status": "node --env-file-if-exists=../.env scripts/migrate.js status",
@@ -26,6 +27,7 @@
     "@aws-sdk/client-s3": "^3.1144.0",
     "@healthbridge/shared": "0.1.0",
     "@node-rs/argon2": "^2.2.1",
+    "bullmq": "^6.3.11",
     "cookie": "^0.7.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",

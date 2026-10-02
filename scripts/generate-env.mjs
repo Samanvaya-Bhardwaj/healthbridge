@@ -128,6 +128,13 @@ const values = {
   AUTH_COOKIE_SECURE: 'false',
   // Password for the synthetic demo accounts created by `npm run seed:demo -w backend`.
   DEMO_USER_PASSWORD: secret(18),
+
+  // Payments (ADR-0020): the fake provider moves no money. Its webhooks are signed with
+  // this local secret. Razorpay test keys are added by hand only when needed.
+  PAYMENT_PROVIDER: 'fake',
+  PAYMENT_WEBHOOK_SECRET: secret(32),
+  // Mailpit locally (see SMTP_HOST); tests use an in-memory provider.
+  NOTIFICATION_EMAIL_PROVIDER: 'smtp',
 };
 
 if (update && existsSync(target)) {

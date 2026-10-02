@@ -12,7 +12,14 @@ import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { AvailabilityManager } from './AvailabilityManager.jsx';
-import { MODE_LABELS, formatDateTime, formatDay, formatTime, groupByDay } from './format.js';
+import {
+  MODE_LABELS,
+  formatDateTime,
+  formatDay,
+  formatFee,
+  formatTime,
+  groupByDay,
+} from './format.js';
 
 const weekRange = () => {
   const from = new Date();
@@ -93,8 +100,13 @@ function PatientAppointments() {
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="flex items-center gap-2 font-medium text-text">
+                  <p className="flex flex-wrap items-center gap-2 font-medium text-text">
                     {formatDateTime(a.startsAt)} <StatusBadge status={a.status} />
+                    {a.paymentStatus && a.paymentStatus !== 'pending' && (
+                      <span className="text-xs font-normal text-text-muted">
+                        Payment: <StatusBadge status={a.paymentStatus} />
+                      </span>
+                    )}
                   </p>
                   <p className="mt-1 text-sm text-text-muted">
                     {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
@@ -102,7 +114,15 @@ function PatientAppointments() {
                   </p>
                 </div>
                 {['confirmed', 'pending_payment'].includes(a.status) && scope === 'upcoming' && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {a.status === 'pending_payment' && (
+                      <Link
+                        to={`/app/appointments/${a.id}/pay`}
+                        className="min-h-11 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
+                      >
+                        Pay {formatFee(a.feePaise)}
+                      </Link>
+                    )}
                     <Link
                       to={`/app/appointments/book?rescheduleId=${a.id}&doctorId=${a.doctorId}&mode=${a.mode}`}
                       className="min-h-11 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text hover:bg-surface-muted"

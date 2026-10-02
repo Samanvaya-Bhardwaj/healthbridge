@@ -1,4 +1,4 @@
-import { assertActorTransaction } from '../../core/db/actorContext.js';
+import { assertActorTransaction, assertScopedTransaction } from '../../core/db/actorContext.js';
 
 const toIsoDate = (value) =>
   value instanceof Date
@@ -29,7 +29,7 @@ export function toTimeOffView(row) {
 
 /**
  * @param {object} row appointment row (optionally joined with doctor/clinic names)
- * @param {{ reason?: string|null, patient?: object|null }} [extra]
+ * @param {{ reason?: string|null, patient?: object|null, paymentStatus?: string|null }} [extra]
  */
 export function toAppointmentView(row, extra = {}) {
   return {
@@ -63,6 +63,7 @@ export function toAppointmentView(row, extra = {}) {
     ...(row.clinic_name ? { clinic: { id: row.clinic_id, name: row.clinic_name } } : {}),
     ...(extra.reason !== undefined ? { reason: extra.reason } : {}),
     ...(extra.patient !== undefined ? { patient: extra.patient } : {}),
+    ...(extra.paymentStatus !== undefined ? { paymentStatus: extra.paymentStatus } : {}),
   };
 }
 
@@ -124,12 +125,14 @@ export function createAppointmentRepository() {
       assertActorTransaction(trx);
       await trx('appointments').insert(row);
     },
+    // Also used by system workers (payments, scheduler, notifications); RLS grants each
+    // system purpose only what it needs (ADR-0020).
     findById(trx, id) {
-      assertActorTransaction(trx);
+      assertScopedTransaction(trx);
       return withNames(trx).where('a.id', id).first();
     },
     findForUpdate(trx, id) {
-      assertActorTransaction(trx);
+      assertScopedTransaction(trx);
       return trx('appointments as a')
         .join('doctors as d', 'd.id', 'a.doctor_id')
         .where('a.id', id)
@@ -143,8 +146,25 @@ export function createAppointmentRepository() {
         .first();
     },
     async update(trx, id, patch) {
-      assertActorTransaction(trx);
+      assertScopedTransaction(trx);
       return trx('appointments').where({ id }).update(patch);
+    },
+    /** Payment status only, for parties who may see the appointment (doctor, clinic desk). */
+    async paymentStatus(trx, id) {
+      assertActorTransaction(trx);
+      const { rows } = await trx.raw('SELECT authz.appointment_payment_status(?) AS status', [id]);
+      return rows[0]?.status ?? null;
+    },
+    /** Pending-payment appointments whose hold elapsed, locked for this worker (system). */
+    async claimExpiredHolds(trx, limit) {
+      assertScopedTransaction(trx);
+      return trx('appointments')
+        .where({ status: 'pending_payment' })
+        .where('hold_expires_at', '<=', trx.fn.now())
+        .orderBy('hold_expires_at')
+        .limit(limit)
+        .forUpdate()
+        .skipLocked();
     },
     forPatient(trx, patientId, { scope = 'upcoming', limit = 50 } = {}) {
       assertActorTransaction(trx);

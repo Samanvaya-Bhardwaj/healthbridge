@@ -11,6 +11,7 @@ import { createApp } from './app.js';
 import { createContainer } from './container.js';
 import { createNoopMailer, createSmtpMailer } from './core/mail/mailer.js';
 import { assertPermissionCatalog } from './core/authz/catalogCheck.js';
+import { createQueues, defaultJobOptions } from './core/queue/queues.js';
 
 const { version } = createRequire(import.meta.url)('../package.json');
 const SHUTDOWN_GRACE_MS = 10_000;
@@ -44,7 +45,13 @@ async function main() {
   const mailer = config.mail.smtpHost
     ? createSmtpMailer({ ...config.mail, logger })
     : createNoopMailer({ logger });
-  const container = createContainer({ config, logger, knex, redis, mailer });
+  // Producers only (dead-letter retries); jobs are processed by the worker process.
+  const queues = createQueues({
+    redis: config.redis,
+    prefix: config.workers.queuePrefix,
+    jobOptions: defaultJobOptions(config.workers),
+  });
+  const container = createContainer({ config, logger, knex, redis, mailer, queues });
 
   // Fail fast if the database RBAC catalog drifted from the code contract.
   await assertPermissionCatalog(container.repositories.roles);
@@ -78,7 +85,7 @@ async function main() {
       new Promise((resolve) => server.close(resolve)),
       new Promise((resolve) => metricsServer.close(resolve)),
     ]);
-    await Promise.allSettled([knex.destroy(), redis.quit()]);
+    await Promise.allSettled([knex.destroy(), redis.quit(), queues.close()]);
     s3.destroy();
     logger.info('shutdown complete');
     process.exit(0);

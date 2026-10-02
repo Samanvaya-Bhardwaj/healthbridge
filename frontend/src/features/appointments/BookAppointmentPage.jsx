@@ -63,10 +63,12 @@ export function BookAppointmentPage() {
             },
             idempotencyKey,
           ),
-    onSuccess: () =>
-      navigate('/app/appointments', {
-        state: { notice: rescheduleId ? 'Appointment rescheduled.' : 'Appointment booked.' },
-      }),
+    onSuccess: (appointment) =>
+      appointment?.status === 'pending_payment'
+        ? navigate(`/app/appointments/${appointment.id}/pay`)
+        : navigate('/app/appointments', {
+            state: { notice: rescheduleId ? 'Appointment rescheduled.' : 'Appointment booked.' },
+          }),
   });
 
   if (!doctorId || (!patientId && !rescheduleId)) {

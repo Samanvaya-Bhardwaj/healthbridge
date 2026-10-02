@@ -25,6 +25,15 @@ import {
 } from './modules/scheduling/repository.js';
 import { createAvailabilityService } from './modules/scheduling/availabilityService.js';
 import { createAppointmentService } from './modules/scheduling/appointmentService.js';
+import { createPaymentRepository } from './modules/payments/repository.js';
+import { createPaymentProvider } from './modules/payments/providers/index.js';
+import { createPaymentSettlement } from './modules/payments/settlement.js';
+import { createWebhookService } from './modules/payments/webhookService.js';
+import { createPaymentService } from './modules/payments/paymentService.js';
+import { createFakeRefundSettler } from './modules/payments/fakeRefundSettler.js';
+import { createNotificationProvider } from './modules/notifications/notificationProvider.js';
+import { createNotificationService } from './modules/notifications/notificationService.js';
+import { createOperationsService } from './modules/operations/service.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -50,6 +59,10 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
  *   passwordHashParams?: typeof DEFAULT_ARGON2_PARAMS,
  *   rateLimits?: Partial<typeof DEFAULT_RATE_LIMITS>,
  *   now?: () => Date,
+ *   paymentProvider?: import('./modules/payments/providers/paymentProvider.js').PaymentProvider,
+ *   notificationProvider?: import('./modules/notifications/notificationProvider.js').NotificationProvider,
+ *   queues?: Record<string, import('bullmq').Queue>,
+ *   options?: { fakeAutoSettleRefunds?: boolean },
  * }} deps
  */
 export function createContainer({
@@ -61,6 +74,10 @@ export function createContainer({
   passwordHashParams = DEFAULT_ARGON2_PARAMS,
   rateLimits = {},
   now,
+  paymentProvider = createPaymentProvider(config.payments),
+  notificationProvider = createNotificationProvider(config, { logger }),
+  queues,
+  options = {},
 }) {
   const audit = createAuditService({ knex, logger });
   const auditRepository = createAuditRepository({ knex });
@@ -96,6 +113,7 @@ export function createContainer({
   const care = createCareRepository();
   const availability = createAvailabilityRepository({ knex });
   const appointments = createAppointmentRepository();
+  const payments = createPaymentRepository();
 
   const authService = createAuthService({
     knex,
@@ -159,6 +177,46 @@ export function createContainer({
     audit,
     logger,
   });
+  const settlement = createPaymentSettlement({
+    knex,
+    payments,
+    appointments,
+    audit,
+    provider: paymentProvider,
+    logger,
+    ...(now ? { now } : {}),
+  });
+  const webhookService = createWebhookService({
+    provider: paymentProvider,
+    settlement,
+    audit,
+    logger,
+  });
+  const paymentService = createPaymentService({
+    knex,
+    config,
+    payments,
+    appointments,
+    accessPolicy,
+    audit,
+    provider: paymentProvider,
+    settlement,
+    webhookService,
+    ...(now ? { now } : {}),
+  });
+  const notificationService = createNotificationService({
+    knex,
+    appointments,
+    provider: notificationProvider,
+    logger,
+    config,
+    ...(now ? { now } : {}),
+  });
+  const operationsService = createOperationsService({ knex, audit, queues });
+  const fakeRefundSettler =
+    paymentProvider.name === 'fake'
+      ? createFakeRefundSettler({ knex, payments, provider: paymentProvider, webhookService })
+      : null;
   const authenticate = createAuthenticate({
     tokenService: tokens,
     resolvePrincipal: authService.resolvePrincipal,
@@ -167,7 +225,10 @@ export function createContainer({
   return {
     config,
     logger,
+    knex,
     redis,
+    queues,
+    options,
     rateLimits: { ...DEFAULT_RATE_LIMITS, ...rateLimits },
     audit,
     auditRepository,
@@ -181,6 +242,7 @@ export function createContainer({
       care,
       availability,
       appointments,
+      payments,
     },
     careAccess,
     hasher,
@@ -195,6 +257,14 @@ export function createContainer({
     careService,
     availabilityService,
     appointmentService,
+    paymentProvider,
+    notificationProvider,
+    settlement,
+    webhookService,
+    paymentService,
+    notificationService,
+    operationsService,
+    fakeRefundSettler,
     authenticate,
   };
 }

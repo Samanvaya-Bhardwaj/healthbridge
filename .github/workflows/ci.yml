@@ -144,6 +144,11 @@ jobs:
 
           # Protected API endpoints reject anonymous callers.
           test "$(curl -s -o /dev/null -w '%{http_code}' "$web/api/v1/auth/me")" = "401"
+
+          # The background worker is live; unsigned payment webhooks are rejected.
+          status=$(docker compose exec -T worker node -e "fetch('http://127.0.0.1:9465/health/live').then(r=>console.log(r.status))")
+          test "$status" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$web/api/v1/webhooks/payments/fake" -H 'content-type: application/json' -d '{"event":"payment.captured"}')" = "400"
       - name: Auth smoke test (synthetic demo accounts)
         run: |
           set -euo pipefail

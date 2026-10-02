@@ -7,7 +7,7 @@ const MAX_USER_AGENT = 512;
 
 /**
  * @typedef {object} AuditEvent
- * @property {'authentication'|'authorization'|'account'|'administration'|'data_access'|'system'} category
+ * @property {'authentication'|'authorization'|'account'|'administration'|'data_access'|'system'|'financial'} category
  * @property {string} action          e.g. "auth.login", "admin.user.role_grant", "users:read"
  * @property {'success'|'failure'|'denied'} outcome
  * @property {import('../../core/authz/principal.js').Principal | { userId: string, roles?: string[], sessionId?: string } | 'system' | null} [actor]

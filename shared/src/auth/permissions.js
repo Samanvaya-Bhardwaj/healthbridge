@@ -37,6 +37,11 @@ export const PERMISSIONS = Object.freeze({
   APPOINTMENTS_READ: 'appointments:read',
   APPOINTMENTS_MANAGE: 'appointments:manage',
   AVAILABILITY_MANAGE: 'availability:manage',
+
+  // Payments (M4)
+  PAYMENTS_CREATE: 'payments:create',
+  PAYMENTS_READ: 'payments:read',
+  PAYMENTS_REFUND: 'payments:refund',
   MEDICAL_RECORDS_READ: 'medical_records:read',
   MEDICAL_RECORDS_WRITE: 'medical_records:write',
   PRESCRIPTIONS_READ: 'prescriptions:read',
@@ -50,6 +55,7 @@ export const PERMISSIONS = Object.freeze({
   ADMIN_CLINICS: 'admin:clinics',
   ADMIN_SESSIONS: 'admin:sessions',
   AUDIT_READ: 'audit:read',
+  OPERATIONS_MANAGE: 'operations:manage',
 });
 
 export const PERMISSION_DESCRIPTIONS = Object.freeze({
@@ -71,6 +77,9 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'appointments:manage':
     'Cancel, reschedule, check in and complete appointments within relationship scope',
   'availability:manage': 'Manage consultation availability and time off',
+  'payments:create': 'Pay for own or managed dependents’ appointments',
+  'payments:read': 'Read own or managed dependents’ payment and refund details',
+  'payments:refund': 'Issue refunds for appointments within relationship scope',
   'medical_records:read': 'Read medical records within relationship and consent scope',
   'medical_records:write': 'Add medical records within relationship and consent scope',
   'prescriptions:read': 'Read prescriptions within relationship and consent scope',
@@ -82,6 +91,7 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'admin:clinics': 'Create clinics and appoint clinic administrators',
   'admin:sessions': 'Revoke any user’s sessions',
   'audit:read': 'Read audit logs',
+  'operations:manage': 'Inspect and retry failed background jobs (no patient data)',
 });
 
 const P = PERMISSIONS;
@@ -113,6 +123,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.APPOINTMENTS_CREATE,
     P.APPOINTMENTS_READ,
     P.APPOINTMENTS_MANAGE,
+    P.PAYMENTS_CREATE,
+    P.PAYMENTS_READ,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
@@ -128,6 +140,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.APPOINTMENTS_READ,
     P.APPOINTMENTS_MANAGE,
     P.AVAILABILITY_MANAGE,
+    // Refunds for the doctor's own appointments; no access to payment details.
+    P.PAYMENTS_REFUND,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
@@ -142,6 +156,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.APPOINTMENTS_CREATE,
     P.APPOINTMENTS_READ,
     P.APPOINTMENTS_MANAGE,
+    P.PAYMENTS_REFUND,
   ]),
   // Platform administrators manage accounts, clinics and verification; they do NOT
   // receive patient or clinical-record permissions.
@@ -156,6 +171,9 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.AUDIT_READ,
     P.CLINICS_READ,
     P.DOCTORS_READ,
+    // Background-job operations: identifiers and failure reasons only, no financial or
+    // clinical content.
+    P.OPERATIONS_MANAGE,
   ]),
   // Support staff help users with accounts and appointments; no patient or clinical
   // records, no account changes.

@@ -112,14 +112,13 @@ export function createAppointmentService({
     }
 
     const start = DateTime.fromISO(startsAt);
-    const [rules, exceptions] = await Promise.all([
-      availability.activeRules(doctor.id, trx),
-      availability.timeOff(
-        doctor.id,
-        { from: start.minus({ days: 1 }).toJSDate(), to: start.plus({ days: 1 }).toJSDate() },
-        trx,
-      ),
-    ]);
+    // Sequential: a transaction is a single connection (pg rejects concurrent queries).
+    const rules = await availability.activeRules(doctor.id, trx);
+    const exceptions = await availability.timeOff(
+      doctor.id,
+      { from: start.minus({ days: 1 }).toJSDate(), to: start.plus({ days: 1 }).toJSDate() },
+      trx,
+    );
     // Busy time is not passed: the database EXCLUDE constraint is the single authority.
     const slot = findSlot(
       {
@@ -262,7 +261,9 @@ export function createAppointmentService({
         req,
       );
       const row = await appointments.findById(trx, id);
-      if (party === 'clinic') return toAppointmentView(row);
+      // Payment status only (no amounts or provider data) for every party (ADR-0020).
+      const paymentStatus = row.fee_paise > 0 ? await appointments.paymentStatus(trx, id) : null;
+      if (party === 'clinic') return toAppointmentView(row, { paymentStatus });
       const reason = await appointments.intakeReason(trx, id);
       if (party === 'doctor') {
         await audit.record(
@@ -279,7 +280,7 @@ export function createAppointmentService({
           { req, trx },
         );
       }
-      return toAppointmentView(row, { reason });
+      return toAppointmentView(row, { reason, paymentStatus });
     });
   }
 
@@ -392,9 +393,14 @@ export function createAppointmentService({
         req,
         trx,
       });
-      return (await appointments.forPatient(trx, id, { scope })).map((row) =>
-        toAppointmentView(row),
-      );
+      const rows = await appointments.forPatient(trx, id, { scope });
+      const views = [];
+      for (const row of rows) {
+        const paymentStatus =
+          row.fee_paise > 0 ? await appointments.paymentStatus(trx, row.id) : null;
+        views.push(toAppointmentView(row, { paymentStatus }));
+      }
+      return views;
     });
   }
 

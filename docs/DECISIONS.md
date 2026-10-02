@@ -25,5 +25,6 @@ old one.
 | [0017](adr/0017-patient-scoped-authorization-rls.md) | Relationship types, clinic-scoped roles, interim consent basis, RLS on patient-scoped tables | Accepted |
 | [0018](adr/0018-doctor-verification-workflow-granted-roles.md) | Doctor verification state machine; DOCTOR/CLINIC_ADMIN granted only by workflows | Accepted |
 | [0019](adr/0019-scheduling-on-demand-slots.md) | On-demand slots (refines materialised slots), care-team booking, DB-enforced no double booking, appointment lifecycle | Accepted |
+| [0020](adr/0020-payments-webhook-authority-outbox-workers.md) | PaymentProvider/NotificationProvider, webhook-only payment authority, append-only ledger, outbox relay, BullMQ workers, DB-driven reminders, purpose-scoped system RLS | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

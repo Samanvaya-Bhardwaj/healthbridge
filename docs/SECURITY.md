@@ -64,6 +64,12 @@ Public registration only ever creates PATIENT accounts.
 
 ## Known gaps / planned
 
+- Payments: no reconciliation job yet. `getPaymentStatus` exists but is not used for
+  automatic correction; the webhook stays the only authority.
+- Rescheduling a paid appointment refunds the old payment in full and asks for a new one
+  (no carry-over).
+- SMS has no real provider yet (the fake records messages only).
+
 - MFA (TOTP) for staff roles: Phase 2.
 - Email verification and password reset: later milestone.
 - Breached-password checks (k-anonymity).
@@ -142,3 +148,49 @@ Each layer is tested on its own:
   in any clinic scope (`requirePermission(..., { anyScope: true })`), so staff clinic
   admins can find doctors to invite. The option is reserved for non-patient reference
   data; patient routes always evaluate clinic scope against the resource.
+
+## Payments, webhooks and workers (M4, ADR-0020)
+
+| Actor | Start checkout | Payment details (amount, refunds) | Payment status | Issue refund | Mark paid |
+|---|---|---|---|---|---|
+| Patient / managing guardian | ✅ own appointments (empty body; server amount) | ✅ | ✅ | ❌ (403) | ❌ |
+| View-only guardian | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Doctor of the appointment | ❌ | ❌ (403) | ✅ status only | ✅ goodwill/duplicate, ≤ amount paid | ❌ |
+| Clinic admin of the appointment's clinic | ❌ | ❌ | ✅ status only | ✅ | ❌ |
+| Other clinic's admin | ❌ | ❌ | ❌ | ❌ (403, clinic-scoped gate 1) | ❌ |
+| Unrelated patient or doctor | ❌ (404) | ❌ (404) | ❌ | ❌ | ❌ |
+| Platform admin / support | ❌ | ❌ (403) | ❌ | ❌ | ❌ |
+| Platform admin (`operations:manage`) | Dead letters and queue health: identifiers and failure reasons only | | | | |
+| **Verified provider webhook** | — | — | — | — | ✅ **the only path** |
+
+- **Webhook verification:**
+  - HMAC-SHA256 over the raw body, compared in constant time.
+  - Unsigned, mis-signed or malformed bodies get 400, a `payment.webhook_invalid` audit
+    row and a metric.
+  - Duplicates and replays are no-ops (unique event ID and payload digest).
+  - Unknown orders, amount or currency mismatches, wrong references and reused provider
+    payment IDs are recorded as rejected and audited.
+  - The raw body is never stored: it can contain the payer's contact details.
+- **Never trusted:** frontend success callbacks, client-supplied amounts and the
+  Checkout handler's signature.
+- **Refunds:**
+  - they require an `Idempotency-Key`;
+  - they are capped at the amount paid, under a row lock;
+  - only the provider's `refund.processed` webhook writes the ledger debit.
+- **Secrets:**
+  - `PAYMENT_WEBHOOK_SECRET` and `RAZORPAY_KEY_SECRET` come from the environment only.
+  - Configuration refuses the fake provider in production and live keys elsewhere.
+  - The browser receives only the public key ID and the order ID.
+- **Audit:**
+  - Category `financial` covers payment creation, capture, failure, cancellation, late
+    capture, refund request, processing and failure, and invalid, duplicate or rejected
+    webhooks.
+  - `appointment.confirm_payment` and `appointment.expire` are recorded under
+    `data_access` with actor `system`.
+- **Data minimisation:**
+  - Outbox payloads, Redis jobs, dead letters and notification templates carry
+    identifiers, schedule and amount only — never the reason for visit.
+  - Logs record template, channel and event type, never addresses or bodies.
+- **Nginx CSP** allows only `checkout.razorpay.com` (script), `api.razorpay.com` (frame,
+  connect), `lumberjack.razorpay.com` (connect) and `cdn.razorpay.com` (images). COOP is
+  `same-origin-allow-popups` for bank and UPI pop-ups.

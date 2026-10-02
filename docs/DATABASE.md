@@ -19,6 +19,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261002000000_identity_rbac_audit` | `roles`, `permissions`, `role_permissions`, `users`, `user_roles`, `sessions`, `audit.audit_logs` + append-only triggers, RBAC seed |
 | `20261003000000_patients_doctors_clinics` | `roles.scope`, 9 permissions, `clinics`, `clinic_memberships`, `user_roles.clinic_id` FK + scope trigger, `effective_role_grants`, `patients`, `patient_guardianships`, `doctors`, `doctor_verifications`, `care_relationships`, schema `authz`, RLS policies |
 | `20261004000000_scheduling_appointments` | `availability_rules`, `availability_exceptions`, `appointments` (two EXCLUDE constraints), `appointment_intakes`, `outbox_events`, RLS and `authz` functions for scheduling, `appointments:manage` / `availability:manage` |
+| `20261005000000_payments_outbox_workers` | `payments`, `payment_events`, `payment_refunds`, append-only `ledger_entries`, outbox relay columns, `notification_deliveries`, `appointment_reminders`, `dead_letter_jobs`, system-purpose RLS, audit category `financial`, `payments:*` / `operations:manage` |
 
 ## Identity, RBAC and audit (M1)
 
@@ -285,3 +286,91 @@ erDiagram
 
 `outbox_events` (aggregate, event type, identifier-only payload, `published_at`) is
 written in the same transaction as each appointment change.
+
+## Payments, notifications and workers (M4)
+
+```mermaid
+erDiagram
+  APPOINTMENTS ||--o| PAYMENTS : "paid by (one order)"
+  PATIENTS ||--o{ PAYMENTS : "patient side"
+  PAYMENTS ||--o{ PAYMENT_EVENTS : "verified webhooks"
+  PAYMENTS ||--o{ PAYMENT_REFUNDS : refunds
+  PAYMENTS ||--o{ LEDGER_ENTRIES : "append-only"
+  PAYMENT_REFUNDS ||--o| LEDGER_ENTRIES : "refund debit"
+  APPOINTMENTS ||--o{ APPOINTMENT_REMINDERS : reminders
+  APPOINTMENTS ||--o{ NOTIFICATION_DELIVERIES : notifications
+
+  PAYMENTS {
+    uuid id PK
+    uuid appointment_id FK "unique"
+    uuid patient_id FK
+    text provider "fake | razorpay"
+    text provider_order_id "unique per provider"
+    text provider_payment_id "unique per provider"
+    int amount_paise "from the appointment"
+    text status "pending | authorized | paid | failed | cancelled | refunded | partially_refunded"
+    int refunded_paise
+  }
+  PAYMENT_EVENTS {
+    uuid id PK
+    text provider_event_id "UNIQUE (provider, id)"
+    text payload_sha256 "UNIQUE (provider, digest)"
+    text event_type
+    text processing_status "received | processed | ignored | rejected"
+    text outcome
+  }
+  PAYMENT_REFUNDS {
+    uuid id PK
+    int amount_paise
+    text status "pending | processing | processed | failed"
+    text reason
+    text idempotency_key "unique"
+  }
+  LEDGER_ENTRIES {
+    uuid id PK
+    text entry_type "payment_captured | refund_processed | adjustment"
+    text direction "credit | debit"
+    int amount_paise
+    uuid reverses_entry_id "compensating entries"
+  }
+  APPOINTMENT_REMINDERS {
+    uuid id PK
+    int offset_minutes
+    timestamptz occurrence_starts_at "UNIQUE (appointment, offset, occurrence)"
+    text status "pending | sent | skipped | failed"
+  }
+  NOTIFICATION_DELIVERIES {
+    uuid id PK
+    text dedupe_key "unique"
+    text template
+    text channel "email | sms"
+    text status "pending | sent | failed | skipped"
+  }
+```
+
+`outbox_events` gains `status` (`pending | dispatched | failed`), `available_at` and
+`last_error`. `dead_letter_jobs` (queue, job ID, attempts, bounded failure reason,
+identifiers) has no patient content.
+
+### System context and RLS
+
+Webhooks and workers run with `app.system_purpose` set and `app.user_id` unset.
+`authz.system_purpose()` returns NULL whenever a user is set.
+
+| Table | User access (RLS) | System purpose |
+|---|---|---|
+| `payments` | SELECT: patient or guardian. INSERT: patient side opening a `pending` payment | `payments`: SELECT, UPDATE |
+| `payment_refunds` | SELECT: patient side | `payments`: all but DELETE |
+| `payment_events` | none | `payments` |
+| `ledger_entries` | none | `payments`: SELECT, INSERT only; UPDATE/DELETE revoked and rejected by a trigger for every role |
+| `notification_deliveries` | none | `notifications` |
+| `appointment_reminders` | none | `scheduler`, `notifications` |
+| `appointments` (added) | — | SELECT: all three purposes; UPDATE: `payments`, `scheduler` |
+
+Functions:
+
+- `authz.appointment_payment_status(id)` returns the status only, to any party who can see
+  the appointment.
+- `authz.notification_recipients(patient)` returns contacts only, to the notification
+  worker only.
+- The app role has no DELETE on payment tables.

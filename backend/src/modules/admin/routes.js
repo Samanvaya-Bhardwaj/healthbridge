@@ -44,6 +44,7 @@ const auditQuery = z
         'administration',
         'data_access',
         'system',
+        'financial',
       ])
       .optional(),
     requestId: z.string().max(64).optional(),

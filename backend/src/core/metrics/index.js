@@ -1,5 +1,6 @@
 import express from 'express';
 import client from 'prom-client';
+import { domainRegistry } from './domain.js';
 
 export function createMetrics({ service = 'healthbridge-api' } = {}) {
   const registry = new client.Registry();
@@ -27,12 +28,17 @@ export function createMetrics({ service = 'healthbridge-api' } = {}) {
   return { registry, httpMiddleware };
 }
 
-/** Separate, internal-only listener for Prometheus scraping. */
-export function createMetricsApp(registry) {
+/**
+ * Separate, internal-only listener for Prometheus scraping (process metrics plus the
+ * domain metrics of core/metrics/domain.js). `extraRoutes` lets the worker add liveness.
+ */
+export function createMetricsApp(registry, extraRoutes) {
+  const merged = client.Registry.merge([registry, domainRegistry]);
   const app = express();
   app.disable('x-powered-by');
   app.get('/metrics', async (_req, res) => {
-    res.type(registry.contentType).send(await registry.metrics());
+    res.type(merged.contentType).send(await merged.metrics());
   });
+  extraRoutes?.(app);
   return app;
 }

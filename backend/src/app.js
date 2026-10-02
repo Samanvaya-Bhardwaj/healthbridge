@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './core/http/errorHandler.js';
 import { rateLimit } from './core/http/rateLimit.js';
 import { healthRoutes } from './core/health/routes.js';
 import { apiV1Router } from './api/v1/index.js';
+import { paymentWebhookRouter } from './modules/payments/routes.js';
 
 const JSON_BODY_LIMIT = '100kb';
 
@@ -69,6 +70,10 @@ export function createApp({
   // Infrastructure endpoints: no CORS, no rate limiting, not exposed via Nginx.
   app.use(healthRoutes({ checks: healthChecks, version }));
 
+  // Provider webhooks: server-to-server, raw body for signature verification, own rate
+  // limit; no CORS, cookies or user authentication (ADR-0020).
+  app.use(`${API_BASE_PATH}/webhooks/payments`, paymentWebhookRouter(container));
+
   const allowedOrigins = new Set(config.http.corsOrigins);
   app.use(
     API_BASE_PATH,
@@ -76,7 +81,13 @@ export function createApp({
       origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
       credentials: true,
       exposedHeaders: ['X-Request-Id', 'Retry-After', 'RateLimit-Limit', 'RateLimit-Remaining'],
-      allowedHeaders: ['Authorization', 'Content-Type', 'X-CSRF-Token', 'X-Request-Id'],
+      allowedHeaders: [
+        'Authorization',
+        'Content-Type',
+        'X-CSRF-Token',
+        'X-Request-Id',
+        'Idempotency-Key',
+      ],
       maxAge: 600,
     }),
     rateLimit({ redis, keyPrefix: 'api-global', ...container.rateLimits.global }),

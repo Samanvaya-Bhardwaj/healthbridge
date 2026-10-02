@@ -14,6 +14,7 @@ export function authErrorMessage(error) {
     }
     case 'network_error':
     case 'timeout':
+    case 'payment_provider_unavailable':
       return error.detail;
     default:
       return error.status >= 500

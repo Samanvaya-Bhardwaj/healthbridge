@@ -211,3 +211,20 @@ Idempotency-Key: 6f1c…
   "startsAt": "2026-10-05T03:45:00.000Z", "endsAt": "2026-10-05T04:00:00.000Z",
   "mode": "online", "feePaise": 0, "reason": "Follow-up on blood sugar readings", … } }
 ```
+
+## Endpoints (M4)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/appointments/:id/payment` | `payments:create` (patient side) | Body must be `{}`. Creates or reuses the order. Returns `{ payment, holdExpiresAt, checkout: { provider, orderId, amountPaise, currency, keyId? } }`. Errors: `payment_not_required`, `appointment_not_payable`, `payment_hold_expired`, `payment_not_open`, `503 payment_provider_unavailable` |
+| GET | `/appointments/:id/payment` | `payments:read` (patient side) | Receipt: status, amount, refunded amount, refunds |
+| POST | `/appointments/:id/refunds` | `payments:refund` (doctor party, or that clinic's admin) | `{ reasonCode: goodwill \| duplicate_payment \| other, amountPaise? }`. **`Idempotency-Key` required**. `202` new, `200` replay. `409 refund_exceeds_payment` |
+| POST | `/appointments/:id/payment/simulate` | `payments:create` | **Fake provider, non-production only.** `{ outcome: success \| failure }`. Submits a signed test webhook through the normal path |
+| POST | `/webhooks/payments/:provider` | none (HMAC signature) | Raw body; `x-razorpay-signature` / `x-razorpay-event-id` (or the fake's `x-fake-*`). `200 { received, duplicate, status }`, or `400 invalid_webhook` |
+| GET | `/admin/operations/summary` | `operations:manage` | Outbox and dead-letter counts, queue counts |
+| GET | `/admin/operations/dead-letters?status&limit` | `operations:manage` | Identifiers and failure reasons only |
+| POST | `/admin/operations/dead-letters/:id/retry` | `operations:manage` | Re-queues the job (or re-opens the outbox event); audited |
+
+Appointment views now include `paymentStatus`, the status only, for every party who can
+see the appointment. `GET /admin/audit-logs?category=financial` filters financial audit
+rows.
