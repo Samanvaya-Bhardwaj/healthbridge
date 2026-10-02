@@ -21,6 +21,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261004000000_scheduling_appointments` | `availability_rules`, `availability_exceptions`, `appointments` (two EXCLUDE constraints), `appointment_intakes`, `outbox_events`, RLS and `authz` functions for scheduling, `appointments:manage` / `availability:manage` |
 | `20261005000000_payments_outbox_workers` | `payments`, `payment_events`, `payment_refunds`, append-only `ledger_entries`, outbox relay columns, `notification_deliveries`, `appointment_reminders`, `dead_letter_jobs`, system-purpose RLS, audit category `financial`, `payments:*` / `operations:manage` |
 | `20261006000000_consents_medical_documents` | `consents`, `medical_documents` (key/lifecycle/immutability guards), `authz.has_consent` / `is_patient_side` / `document_ref`, system purposes `documents` and `consents`, document notification templates, `consents:*` / `access_log:read` |
+| `20261007000000_document_intelligence` | `extensions` schema (pgvector moved), `ai.ai_runs`/`ai_sources`/`document_extractions`/`document_chunks` (vector 1024, HNSW, tsvector) with per-role RLS, `ai.scope_patient_id()`, `document_metadata`, immutable `lab_results`, `patients.ai_document_processing`, `authz.ai_processing_enabled()`, `lab_results:verify` |
 
 ## Identity, RBAC and audit (M1)
 
@@ -430,3 +431,17 @@ The trigger `guard_medical_document_update` rejects, for every role:
 - status transitions outside the lifecycle.
 
 CHECK constraints tie both object keys to the row's patient and document.
+
+## Document intelligence (M6)
+
+| Table | AI role (`hb_ai`) | App role (`hb_app`) |
+|---|---|---|
+| `ai.ai_runs` | Rows of the scoped patient (`ai.scope_patient_id()`); insert/update | `documents` system purpose only (read) |
+| `ai.ai_sources` | Scoped insert/select | None |
+| `ai.document_extractions` | Scoped insert/select (append-only) | Read: patient side, `authz.has_consent(…, 'medical_documents', type)`, `documents` system |
+| `ai.document_chunks` | Scoped insert/select (append-only) | **None** |
+| `document_metadata` | None | Read like documents; insert/update `documents` system only |
+| `lab_results` | None | Read: patient side and consented doctors. Insert: consented treating doctor as themself. Immutable (trigger) |
+
+Neither runtime role may DELETE AI rows. pgvector lives in the `extensions` schema;
+`hb_ai` has no usage on `public`.

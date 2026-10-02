@@ -137,3 +137,13 @@ webhook secret. Live keys are refused outside production. Webhooks need a public
 - For real scanning, run `docker compose --profile scanner up -d clamav` and set
   `DOCUMENT_SCANNER=clamav` and `CLAMAV_HOST=clamav`.
 - Use synthetic files only. Never upload real medical documents.
+
+## Document intelligence in development
+
+- `LLM_PROVIDER=fake` (default) uses deterministic rule-based handlers. They read synthetic
+  lab reports in the format `Analyte: value unit (ref low-high)` and quote the source.
+- `EMBEDDING_PROVIDER=hashing` (default) is offline.
+- Opt in from Health Records ("Read my documents…"), upload a synthetic PDF, and open
+  "Extracted values".
+- AI service database tests run on the compose network:
+  `docker run --rm --network healthbridge_private -e AI_DB_TESTS=1 -e DB_HOST=postgres … healthbridge-ai:dev pytest`.

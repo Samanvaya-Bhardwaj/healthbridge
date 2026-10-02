@@ -12,11 +12,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 
-from app.api import health, internal
+from app.api import documents, health, internal
 from app.core.config import Settings, get_settings
 from app.core.db import Database, DatabaseLike
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, log_event, request_id_ctx
+from app.embeddings import EmbeddingProvider, HashingEmbeddingProvider, VoyageEmbeddingProvider
 from app.llm.base import LLMProvider
 from app.llm.factory import build_llm_provider
 
@@ -30,6 +31,7 @@ def create_app(
     *,
     database: DatabaseLike | None = None,
     llm_provider: LLMProvider | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -40,8 +42,18 @@ def create_app(
         db = database or Database(settings)
         await db.open()
         llm = llm_provider or build_llm_provider(settings)
+        embedder = embedding_provider or (
+            VoyageEmbeddingProvider(
+                api_key=settings.voyage_api_key.get_secret_value(),
+                model=settings.voyage_model,
+                timeout_seconds=settings.llm_timeout_seconds,
+            )
+            if settings.embedding_provider == "voyage" and settings.voyage_api_key
+            else HashingEmbeddingProvider()
+        )
         app.state.db = db
         app.state.llm = llm
+        app.state.embedder = embedder
         log_event(
             logger,
             logging.INFO,
@@ -53,6 +65,7 @@ def create_app(
             yield
         finally:
             await llm.aclose()
+            await embedder.aclose()
             await db.close()
 
     app = FastAPI(
@@ -93,4 +106,5 @@ def create_app(
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(internal.router)
+    app.include_router(documents.router)
     return app

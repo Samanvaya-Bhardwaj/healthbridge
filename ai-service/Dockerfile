@@ -31,6 +31,8 @@ FROM ${PYTHON_IMAGE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}"
+# Tesseract OCR for image documents (ADR-0022); OCR output is never authoritative.
+RUN apt-get update   && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng   && apt-get upgrade -y   && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --no-create-home app
 WORKDIR /app
 COPY --from=deps /opt/venv /opt/venv

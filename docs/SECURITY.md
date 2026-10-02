@@ -254,3 +254,25 @@ Each layer is tested on its own:
   - Signed URLs, keys, contents and tokens are never recorded.
 - **Notifications** use generic wording only ("Your document is ready"), never the
   document's name, type or contents.
+
+## Document intelligence (M6, ADR-0022)
+
+- **Opt-in:** AI reads a patient's documents only after the patient or a managing guardian
+  switches processing on (audited). Switching it off stops new analysis.
+- **Least privilege:**
+  - The AI service never reads MinIO or core tables (it has no grants).
+  - It receives one document at a time with a backend-signed patient-scope token
+    (120 s; patient, document IDs and purpose).
+  - Its database transactions are RLS-confined to that patient.
+  - Database tests prove that one scope cannot read or write another patient's artifacts
+    and that the role cannot delete AI history.
+- **Prompt injection:**
+  - Document text is delimited data under explicit system rules.
+  - Agent nodes have no tools.
+  - Instruction-like text is flagged and the extraction marked for clinician review.
+  - Values are kept only when quoted verbatim from the source.
+- **No AI writes to the record:** proposals stay in `ai`. Lab values enter the record only
+  when a consented treating doctor verifies them. Values are copied server-side; clients
+  send only keys.
+- **Logging:** logs and `ai_runs` hold metadata only — counts, flags, tokens, cost,
+  prompt version and input hash — never text, quotes or values.

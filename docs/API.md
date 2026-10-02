@@ -246,3 +246,14 @@ rows.
 | GET | `/patients/:patientId/access-log?cursor&limit` | `access_log:read` (patient side) | Plain-language entries; `meta.nextCursor` |
 
 Responses never contain storage keys, credentials, permanent URLs or document contents.
+
+## Endpoints (M6)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET / PUT | `/patients/:patientId/ai-processing` | `patients:read` / `patients:write` (patient side) | `{ enabled }`. Enabling queues existing documents |
+| GET | `/documents/:id/extraction` | `medical_records:read` + consent | Latest AI proposal: `{ status, needsReview, injectionWarning, classification, documentDate, issuer, labResults[{ key, analyte, value, unit, referenceRange, flag, quote, verified }] }` |
+| POST | `/documents/:id/lab-results/verify` | `lab_results:verify` (treating doctor + `medical_documents` consent) | `{ fieldKeys[] }` only. Errors: `unknown_field`, `no_extraction` |
+| GET | `/patients/:patientId/lab-results` | `medical_records:read` + consent | Verified values with source quote and verifier |
+
+Internal (AI service): `POST /v1/documents/analyze` (service token + `X-Patient-Scope`).

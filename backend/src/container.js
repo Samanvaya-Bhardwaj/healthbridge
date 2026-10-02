@@ -41,6 +41,7 @@ import { createDocumentService } from './modules/documents/service.js';
 import { createDocumentPipeline } from './modules/documents/pipeline.js';
 import { createConsentRepository, createConsentService } from './modules/consents/service.js';
 import { createAccessLogService } from './modules/consents/accessLog.js';
+import { createIntelligenceService } from './modules/intelligence/service.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -71,6 +72,7 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
  *   queues?: Record<string, import('bullmq').Queue>,
  *   documentStorage?: ReturnType<typeof import('./core/storage/documentStorage.js').createDocumentStorage>,
  *   documentScanner?: import('./modules/documents/scanning/documentScanner.js').DocumentScanner,
+ *   aiClient?: ReturnType<typeof import('./core/ai/client.js').createAiClient>,
  *   options?: { fakeAutoSettleRefunds?: boolean },
  * }} deps
  */
@@ -88,6 +90,7 @@ export function createContainer({
   queues,
   documentStorage = createDocumentStorage(config.storage),
   documentScanner = createDocumentScanner(config.documents),
+  aiClient,
   options = {},
 }) {
   const audit = createAuditService({ knex, logger });
@@ -237,6 +240,16 @@ export function createContainer({
     ...(now ? { now } : {}),
   });
   const accessLogService = createAccessLogService({ knex, accessPolicy });
+  const intelligenceService = createIntelligenceService({
+    knex,
+    config,
+    aiClient,
+    storage: documentStorage,
+    documents: medicalDocuments,
+    accessPolicy,
+    audit,
+    logger,
+  });
   const documentService = createDocumentService({
     knex,
     config,
@@ -317,6 +330,8 @@ export function createContainer({
     accessLogService,
     documentService,
     documentPipeline,
+    intelligenceService,
+    aiClient,
     authenticate,
   };
 }

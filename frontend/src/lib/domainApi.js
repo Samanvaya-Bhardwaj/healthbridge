@@ -129,3 +129,19 @@ export const consentsApi = {
   accessLog: (patientId, cursor) =>
     apiRequest(`/patients/${patientId}/access-log${qs({ cursor, limit: 30 })}`),
 };
+
+/** Document intelligence (M6): AI proposals are suggestions until a doctor verifies them. */
+export const intelligenceApi = {
+  extraction: (documentId) => data(apiRequest(`/documents/${documentId}/extraction`)),
+  verify: (documentId, fieldKeys) =>
+    data(
+      apiRequest(`/documents/${documentId}/lab-results/verify`, {
+        method: 'POST',
+        body: { fieldKeys },
+      }),
+    ),
+  labResults: (patientId) => data(apiRequest(`/patients/${patientId}/lab-results`)),
+  aiProcessing: (patientId) => data(apiRequest(`/patients/${patientId}/ai-processing`)),
+  setAiProcessing: (patientId, enabled) =>
+    data(apiRequest(`/patients/${patientId}/ai-processing`, { method: 'PUT', body: { enabled } })),
+};

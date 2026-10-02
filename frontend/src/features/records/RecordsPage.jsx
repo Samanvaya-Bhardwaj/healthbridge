@@ -14,6 +14,8 @@ import { usePatientChoice } from './usePatientChoice.js';
 import { PatientSelect } from './PatientSelect.jsx';
 import { DocumentList } from './DocumentList.jsx';
 import { useDownload } from './useDownload.js';
+import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
+import { intelligenceApi } from '../../lib/domainApi.js';
 import {
   ACCEPT,
   DOCUMENT_TYPE_LABELS,
@@ -121,6 +123,44 @@ function UploadForm({ patientId, onUploaded }) {
   );
 }
 
+/** Opt-in for AI reading of documents (off by default; per patient). */
+function AiProcessingCard({ patientId }) {
+  const queryClient = useQueryClient();
+  const setting = useQuery({
+    queryKey: ['ai-processing', patientId],
+    queryFn: () => intelligenceApi.aiProcessing(patientId),
+    enabled: Boolean(patientId),
+  });
+  const toggle = useMutation({
+    mutationFn: (enabled) => intelligenceApi.setAiProcessing(patientId, enabled),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai-processing', patientId] }),
+  });
+  if (!setting.data) return null;
+  return (
+    <Card>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={setting.data.enabled}
+          disabled={toggle.isPending}
+          onChange={(e) => toggle.mutate(e.target.checked)}
+        />
+        <span>
+          <span className="block text-sm font-semibold text-text">
+            Read my documents to suggest key values
+          </span>
+          <span className="block text-sm text-text-muted">
+            HealthBridge AI reads your documents to pull out values such as test results, each with
+            the exact text it came from. They stay suggestions until a doctor you shared them with
+            verifies them. You can switch this off at any time.
+          </span>
+        </span>
+      </label>
+    </Card>
+  );
+}
+
 /** Patient (and managing guardian) health records. */
 export function RecordsPage() {
   const queryClient = useQueryClient();
@@ -151,6 +191,7 @@ export function RecordsPage() {
         </div>
         <PatientSelect choices={choices} value={patientId} onChange={setPatientId} />
       </div>
+      <AiProcessingCard patientId={patientId} />
       <UploadForm patientId={patientId} onUploaded={refresh} />
       {download.isError && <Alert tone="error">{authErrorMessage(download.error)}</Alert>}
       {remove.isError && <Alert tone="error">{authErrorMessage(remove.error)}</Alert>}
@@ -165,12 +206,24 @@ export function RecordsPage() {
         )}
         {documents.data?.length > 0 && (
           <DocumentList
+            renderDetails={(d) => (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-primary">Extracted values</summary>
+                <div className="mt-2">
+                  <ExtractionPanel documentId={d.id} />
+                </div>
+              </details>
+            )}
             documents={documents.data}
             download={download}
             onRemove={(id) => remove.mutate(id)}
             removing={remove.isPending}
           />
         )}
+      </Card>
+      <Card>
+        <h2 className="mb-2 text-sm font-semibold text-text">Verified lab values</h2>
+        <LabResults patientId={patientId} />
       </Card>
     </div>
   );

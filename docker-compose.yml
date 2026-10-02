@@ -250,6 +250,9 @@ services:
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
       LLM_REFUSAL_FALLBACK: ${LLM_REFUSAL_FALLBACK:-true}
       LLM_EXTERNAL_PROCESSING_APPROVED: ${LLM_EXTERNAL_PROCESSING_APPROVED:-false}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hashing}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3.5}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }

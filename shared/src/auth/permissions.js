@@ -52,6 +52,9 @@ export const PERMISSIONS = Object.freeze({
   CONSENTS_READ: 'consents:read',
   ACCESS_LOG_READ: 'access_log:read',
 
+  // Document intelligence (M6)
+  LAB_RESULTS_VERIFY: 'lab_results:verify',
+
   // Administration
   USERS_READ: 'users:read',
   USERS_UPDATE: 'users:update',
@@ -92,6 +95,7 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'consents:manage': 'Grant and revoke access to own or managed dependents’ records',
   'consents:read': 'List consents given (patient side) or received (doctor)',
   'access_log:read': 'See who accessed own or managed dependents’ records',
+  'lab_results:verify': 'Verify AI-extracted lab values into the record',
   'users:read': 'Read user accounts (administration/support)',
   'users:update': 'Change user account status',
   'admin:users': 'Grant and revoke user roles',
@@ -155,6 +159,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.PAYMENTS_REFUND,
     // Consents received; record access still needs an active consent per patient.
     P.CONSENTS_READ,
+    // Human promotion of AI-extracted lab values (with consent).
+    P.LAB_RESULTS_VERIFY,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,

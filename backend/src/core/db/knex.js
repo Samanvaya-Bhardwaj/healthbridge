@@ -1,4 +1,9 @@
 import knexFactory from 'knex';
+import pg from 'pg';
+
+// Calendar dates (DATE, OID 1082) stay 'YYYY-MM-DD' strings. node-postgres would otherwise
+// build a JS Date at local midnight, which serialises as the previous day east of UTC.
+pg.types.setTypeParser(1082, (value) => value);
 
 /**
  * Runtime database connection using the least-privilege application role.

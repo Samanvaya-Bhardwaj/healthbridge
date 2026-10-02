@@ -70,6 +70,12 @@ export const domainMetrics = Object.freeze({
   documentWorkerRetries: counter('document_worker_retries_total', 'Document job retries'),
   documentWorkerDlq: counter('document_worker_dlq_total', 'Document jobs dead-lettered'),
 
+  // M6: document intelligence
+  documentsAnalyzed: counter('documents_analyzed_total', 'AI document analyses committed', [
+    'status',
+  ]),
+  labResultsVerified: counter('lab_results_verified_total', 'Lab values verified by doctors'),
+
   providerLatency: histogram('payment_provider_duration_seconds', 'Payment provider call latency', [
     'operation',
     'outcome',

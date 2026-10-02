@@ -17,7 +17,9 @@ export const EVENT_ROUTES = Object.freeze({
   'payment.refund_requested': [PAYMENTS],
   'payment.refunded': [NOTIFICATIONS],
   'document.uploaded': [DOCUMENTS],
-  'document.available': [NOTIFICATIONS],
+  // M6: available documents are analysed (patients who opted in) and notified.
+  'document.available': [NOTIFICATIONS, DOCUMENTS],
+  'document.analysis_requested': [DOCUMENTS],
   'document.rejected': [NOTIFICATIONS],
 });
 

@@ -37,6 +37,7 @@ export function createJobProcessors(container, queues) {
     logger,
     documentPipeline,
     consentService,
+    intelligenceService,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -80,8 +81,17 @@ export function createJobProcessors(container, queues) {
     // M5: quarantine → scan → promotion. Idempotent: see modules/documents/pipeline.js.
     [QUEUE_NAMES.DOCUMENTS]: {
       concurrency: 2,
-      schemas: { 'document.uploaded': documentJob },
-      handle: (job) => documentPipeline.scanAndPromote(job.data.payload.documentId),
+      schemas: {
+        'document.uploaded': documentJob,
+        'document.available': documentJob,
+        'document.analysis_requested': documentJob,
+      },
+      handle(job) {
+        const { documentId } = job.data.payload;
+        if (job.name === 'document.uploaded') return documentPipeline.scanAndPromote(documentId);
+        // M6: AI analysis (opt-in, idempotent; AI-service errors are retried).
+        return intelligenceService.analyzeDocument(documentId, { requestId: job.data.requestId });
+      },
     },
     [QUEUE_NAMES.MAINTENANCE]: {
       concurrency: 1,

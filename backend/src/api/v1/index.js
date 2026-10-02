@@ -11,6 +11,7 @@ import { paymentRoutes } from '../../modules/payments/routes.js';
 import { operationsRoutes } from '../../modules/operations/routes.js';
 import { consentRoutes } from '../../modules/consents/routes.js';
 import { documentRoutes } from '../../modules/documents/routes.js';
+import { intelligenceRoutes } from '../../modules/intelligence/routes.js';
 
 /**
  * Versioned public API. Feature modules mount their routers here.
@@ -44,6 +45,7 @@ export function apiV1Router({ config, version, container }) {
   router.use(operationsRoutes(container));
   router.use(consentRoutes(container));
   router.use(documentRoutes(container));
+  router.use(intelligenceRoutes(container));
   router.use(doctorRoutes(container));
   router.use(clinicRoutes(container));
 

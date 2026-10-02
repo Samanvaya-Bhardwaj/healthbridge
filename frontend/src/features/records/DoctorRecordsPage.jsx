@@ -8,6 +8,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { formatDateTime } from '../appointments/format.js';
 import { DocumentList } from './DocumentList.jsx';
+import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
 import { useDownload } from './useDownload.js';
 import { SCOPE_LABELS } from './labels.js';
 
@@ -83,7 +84,26 @@ export function DoctorPatientRecordsPage() {
       )}
       {documents.data?.length > 0 && (
         <Card>
-          <DocumentList documents={documents.data} download={download} />
+          <DocumentList
+            documents={documents.data}
+            download={download}
+            renderDetails={(d) => (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-primary">
+                  Review extracted values
+                </summary>
+                <div className="mt-2">
+                  <ExtractionPanel documentId={d.id} canVerify />
+                </div>
+              </details>
+            )}
+          />
+        </Card>
+      )}
+      {documents.isSuccess && (
+        <Card>
+          <h2 className="mb-2 text-sm font-semibold text-text">Verified lab values</h2>
+          <LabResults patientId={patientId} />
         </Card>
       )}
     </div>

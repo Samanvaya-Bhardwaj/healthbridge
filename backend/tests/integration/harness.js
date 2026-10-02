@@ -51,7 +51,7 @@ export const uniqueEmail = (label = 'user') =>
 /**
  * @param {{ rateLimits?: object, env?: Record<string, string>, queues?: object, now?: () => Date }} [options]
  */
-export async function createHarness({ rateLimits = {}, env = {}, queues, now } = {}) {
+export async function createHarness({ rateLimits = {}, env = {}, queues, now, aiClient } = {}) {
   const config = loadConfig({
     ...process.env,
     AI_SERVICE_URL: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
@@ -98,6 +98,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
     notificationProvider,
     documentScanner,
     queues,
+    aiClient,
     ...(now ? { now } : {}),
   });
   const app = createApp({ config, logger, container, redis, healthChecks: [], version: 'test' });
@@ -127,6 +128,16 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
       const testDocuments = trx('medical_documents')
         .select('id')
         .whereIn('patient_id', testPatients.clone());
+      // M6 rows (AI artifacts are append-only for runtime roles; the owner cleans tests).
+      await trx.raw('ALTER TABLE lab_results DISABLE TRIGGER lab_results_immutable');
+      await trx('lab_results').whereIn('patient_id', testPatients.clone()).del();
+      await trx.raw('ALTER TABLE lab_results ENABLE TRIGGER lab_results_immutable');
+      await trx('document_metadata').whereIn('patient_id', testPatients.clone()).del();
+      await trx('ai.document_chunks').whereIn('patient_id', testPatients.clone()).del();
+      await trx('ai.document_extractions').whereIn('patient_id', testPatients.clone()).del();
+      await trx('ai.ai_sources').whereIn('patient_id', testPatients.clone()).del();
+      await trx('ai.ai_runs').whereIn('patient_id', testPatients.clone()).del();
+
       await trx('outbox_events').whereIn('aggregate_id', testDocuments.clone()).del();
       await trx('medical_documents').whereIn('patient_id', testPatients.clone()).del();
       await trx('consents')

@@ -51,7 +51,7 @@ async function main() {
     prefix: config.workers.queuePrefix,
     jobOptions: defaultJobOptions(config.workers),
   });
-  const container = createContainer({ config, logger, knex, redis, mailer, queues });
+  const container = createContainer({ config, logger, knex, redis, mailer, queues, aiClient });
 
   // Fail fast if the database RBAC catalog drifted from the code contract.
   await assertPermissionCatalog(container.repositories.roles);

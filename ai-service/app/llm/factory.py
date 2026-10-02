@@ -2,6 +2,7 @@
 
 from app.core.config import Settings
 from app.llm.base import LLMProvider
+from app.llm.fake_handlers import DEFAULT_HANDLERS
 from app.llm.instrumented import InstrumentedLLMProvider
 from app.llm.providers.fake import FakeLLMProvider
 
@@ -22,5 +23,6 @@ def build_llm_provider(settings: Settings) -> LLMProvider:
             refusal_fallback=settings.llm_refusal_fallback,
         )
     else:
-        inner = FakeLLMProvider()
+        # Deterministic, rule-based stand-ins for the document/RAG workflows.
+        inner = FakeLLMProvider(dict(DEFAULT_HANDLERS))
     return InstrumentedLLMProvider(inner)

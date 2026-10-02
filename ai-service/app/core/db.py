@@ -1,6 +1,8 @@
 """PostgreSQL access for the AI service (least-privilege role, `ai` schema only)."""
 
-from typing import Protocol
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any, Protocol
 
 from psycopg.conninfo import make_conninfo
 from psycopg_pool import AsyncConnectionPool
@@ -12,6 +14,7 @@ class DatabaseLike(Protocol):
     async def open(self) -> None: ...
     async def close(self) -> None: ...
     async def ping(self) -> None: ...
+    def patient_scope(self, patient_id: str) -> Any: ...
 
 
 class Database:
@@ -44,3 +47,10 @@ class Database:
     async def ping(self) -> None:
         async with self._pool.connection(timeout=2) as conn:
             await conn.execute("select 1")
+
+    @asynccontextmanager
+    async def patient_scope(self, patient_id: str) -> AsyncIterator[Any]:
+        """A transaction confined to one patient: RLS reads `ai.patient_id` (ADR-0022)."""
+        async with self._pool.connection() as conn, conn.transaction():
+            await conn.execute("SELECT set_config('ai.patient_id', %s, true)", (patient_id,))
+            yield conn

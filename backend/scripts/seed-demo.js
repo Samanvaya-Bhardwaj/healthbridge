@@ -320,6 +320,13 @@ try {
     log('asha granted dr.meera document access (90 days)');
   }
 
+  // ── M6: Asha opts in to AI reading of her (synthetic) documents ──
+  const aiSetting = await container.intelligenceService.getAiProcessing(asha, ashaProfile.id);
+  if (!aiSetting.enabled) {
+    await container.intelligenceService.setAiProcessing(asha, ashaProfile.id, { enabled: true });
+    log('asha enabled AI document processing');
+  }
+
   log('demo seed complete', { password: 'DEMO_USER_PASSWORD from .env' });
 } catch (err) {
   console.error(

@@ -22,10 +22,12 @@ export const api = (h, who) => ({
       .patch(`/api/v1${path}`)
       .set(who ? authHeader(who.session) : {})
       .send(body),
-  put: (path) =>
-    request(h.app)
+  put: (path, body) => {
+    const req = request(h.app)
       .put(`/api/v1${path}`)
-      .set(who ? authHeader(who.session) : {}),
+      .set(who ? authHeader(who.session) : {});
+    return body === undefined ? req : req.send(body);
+  },
 });
 
 export function expectOk(res, status = 200) {

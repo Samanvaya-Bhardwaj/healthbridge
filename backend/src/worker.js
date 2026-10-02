@@ -9,6 +9,7 @@ import { createOutboxRelay } from './core/queue/outboxRelay.js';
 import { createWorkerRuntime } from './core/queue/workerRuntime.js';
 import { failureReason } from './core/queue/deadLetters.js';
 import { createContainer } from './container.js';
+import { createAiClient } from './core/ai/client.js';
 import { createJobProcessors, registerSchedules } from './workers/handlers.js';
 
 const SHUTDOWN_GRACE_MS = 30_000;
@@ -46,6 +47,7 @@ async function main() {
     redis,
     mailer: createNoopMailer({ logger }),
     queues,
+    aiClient: createAiClient(config.aiService),
   });
 
   const relay = createOutboxRelay({

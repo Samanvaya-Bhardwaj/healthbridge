@@ -211,6 +211,19 @@ routes → controllers → application services → domain (pure rules) → repo
 - **Details:** [ADR-0021](adr/0021-consent-medical-documents-secure-access.md), with flow
   diagrams.
 
+### Document intelligence (M6)
+
+- AI processing is opt-in per patient.
+- Available documents go from the `documents` worker to the AI service with a
+  patient-scope token (one patient and document, 120 s).
+- A LangGraph **document agent** with no tools runs text/OCR → classify → extract →
+  validate (grounding).
+- Grounded proposals, chunks and embeddings are stored in RLS-scoped `ai` tables, with an
+  `ai_runs` record per execution.
+- The backend commits validated, versioned `document_metadata`.
+- Lab values become record data only when a consented treating doctor verifies them
+  ([ADR-0022](adr/0022-document-intelligence.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -240,5 +253,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M5 complete (consent, medical documents with quarantine/scan/promotion, signed downloads, access log); awaiting approval for M6.**
+Current status: **M6 complete (opt-in grounded document intelligence, chunk index, doctor-verified lab values).**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

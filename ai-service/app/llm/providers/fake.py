@@ -1,6 +1,7 @@
 """Deterministic, offline provider for tests, CI and local development without an API key."""
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from app.llm.base import (
@@ -12,14 +13,14 @@ from app.llm.base import (
     StopReason,
 )
 
-CannedOutput = str | dict[str, Any] | list[Any]
+CannedOutput = str | dict[str, Any] | list[Any] | Callable[[LLMRequest], Any]
 
 
 class FakeLLMProvider(LLMProvider):
     name = "fake"
 
     def __init__(self, responses: dict[str, CannedOutput] | None = None) -> None:
-        # Canned outputs keyed by workflow name.
+        # Canned outputs (or deterministic handlers) keyed by workflow name.
         self._responses = responses or {}
         self.calls: list[LLMRequest] = []
 
@@ -29,6 +30,8 @@ class FakeLLMProvider(LLMProvider):
     async def generate(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(request)
         canned = self._responses.get(request.workflow)
+        if callable(canned):
+            canned = canned(request)
         json_output: dict[str, Any] | list[Any] | None = None
         if request.json_schema is not None:
             json_output = canned if isinstance(canned, dict | list) else {}
