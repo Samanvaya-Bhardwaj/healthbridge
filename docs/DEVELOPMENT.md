@@ -125,3 +125,15 @@ verification path. Refunds settle automatically: the worker emulates the provide
 To try Razorpay's test mode, set `PAYMENT_PROVIDER=razorpay` with `rzp_test_…` keys and the
 webhook secret. Live keys are refused outside production. Webhooks need a public URL
 (for example a tunnel) pointing at `/api/v1/webhooks/payments/razorpay`.
+
+## Medical documents in development
+
+- Uploads and downloads go through Nginx at `/healthbridge-documents/…` using presigned
+  URLs signed for `http://localhost:${HOST_PORT_WEB}`. Open the app on `localhost`, not
+  `127.0.0.1`: the host is part of the signature.
+- `DOCUMENT_SCANNER=fake` (default) is deterministic and provides **no protection**:
+  - files containing the EICAR test string are rejected as infected;
+  - the marker `HB-FAKE-SCANNER-FAILURE` simulates a scanner outage.
+- For real scanning, run `docker compose --profile scanner up -d clamav` and set
+  `DOCUMENT_SCANNER=clamav` and `CLAMAV_HOST=clamav`.
+- Use synthetic files only. Never upload real medical documents.

@@ -23,6 +23,7 @@ import { createWorkerRuntime } from '../../src/core/queue/workerRuntime.js';
 import { outboxJobId } from '../../src/core/queue/routing.js';
 import { createJobProcessors, MAINTENANCE_JOBS } from '../../src/workers/handlers.js';
 import { counterValue, domainMetrics } from '../../src/core/metrics/domain.js';
+import { FILES, uploadDocument } from './m5fixtures.js';
 
 const PREFIX = `hbt-${randomUUID().slice(0, 8)}`;
 const JOB_OPTIONS = defaultJobOptions({ maxAttempts: 3, backoffMs: 20 });
@@ -510,4 +511,88 @@ describe('appointment reminders', () => {
       'skipped_occurrence_changed',
     );
   });
+});
+
+describe('medical documents through the workers (M5)', () => {
+  it(
+    'upload completed → outbox → documents queue → scan → available → generic notification',
+    { timeout: 60_000 },
+    async () => {
+      const relay = relayFor(queues);
+      const runtime = createWorkerRuntime({
+        redis: testRedisConfig(),
+        prefix: PREFIX,
+        knex: h.knex,
+        processors: createJobProcessors(h.container, queues),
+      });
+      relay.start();
+      try {
+        const patient = await createPatient(h, 'wk-doc');
+        const doc = await uploadDocument(h, patient, patient.patient.id, {
+          scan: false,
+          title: 'Synthetic thyroid panel',
+        });
+        await waitFor(
+          async () =>
+            (await h.ownerKnex('medical_documents').where({ id: doc.id }).first()).status ===
+            'available',
+        );
+        await waitFor(() => sentFor('document_available').some((m) => m.to === patient.email));
+        const mail = sentFor('document_available').find((m) => m.to === patient.email);
+        // Generic wording only: no title, type or content.
+        expect(mail.text).not.toMatch(/thyroid|lab_report|lab report|Synthetic/i);
+
+        // A duplicate scan job for the same document changes nothing.
+        const [event] = await h
+          .ownerKnex('outbox_events')
+          .where({ aggregate_id: doc.id, event_type: 'document.uploaded' })
+          .select('*');
+        await queues.documents.add('document.uploaded', {
+          eventId: event.id,
+          eventType: event.event_type,
+          aggregateType: event.aggregate_type,
+          aggregateId: event.aggregate_id,
+          payload: event.payload,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const promoted = await h.ownerKnex('audit.audit_logs').where({
+          resource_id: doc.id,
+          action: 'document.promoted',
+        });
+        expect(promoted).toHaveLength(1);
+
+        // Infected → rejected → generic notice.
+        const bad = await uploadDocument(h, patient, patient.patient.id, {
+          scan: false,
+          content: FILES.infectedPdf(),
+        });
+        await waitFor(
+          async () =>
+            (await h.ownerKnex('medical_documents').where({ id: bad.id }).first()).status ===
+            'rejected',
+        );
+        await waitFor(() => sentFor('document_rejected').some((m) => m.to === patient.email));
+
+        // A scanner that keeps failing: retries, then a dead letter; never available.
+        const stuck = await uploadDocument(h, patient, patient.patient.id, {
+          scan: false,
+          content: FILES.scannerFailurePdf(),
+        });
+        const dead = await waitFor(async () =>
+          h
+            .ownerKnex('dead_letter_jobs')
+            .where({ queue: 'documents', aggregate_id: stuck.id })
+            .first(),
+        );
+        expect(dead.failure_reason).toMatch(/ScannerError/);
+        expect(
+          (await h.ownerKnex('medical_documents').where({ id: stuck.id }).first()).status,
+        ).toBe('quarantined');
+        expect(await counterValue(domainMetrics.documentWorkerDlq)).toBeGreaterThan(0);
+      } finally {
+        await relay.stop();
+        await runtime.close();
+      }
+    },
+  );
 });

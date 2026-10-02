@@ -25,6 +25,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",
+    "@aws-sdk/s3-presigned-post": "^3.1144.0",
+    "@aws-sdk/s3-request-presigner": "^3.1144.0",
     "@healthbridge/shared": "0.1.0",
     "@node-rs/argon2": "^2.2.1",
     "bullmq": "^6.3.11",

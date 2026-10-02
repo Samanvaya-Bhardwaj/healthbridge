@@ -47,6 +47,11 @@ export const PERMISSIONS = Object.freeze({
   PRESCRIPTIONS_READ: 'prescriptions:read',
   PRESCRIPTIONS_SIGN: 'prescriptions:sign',
 
+  // Consent and access transparency (M5)
+  CONSENTS_MANAGE: 'consents:manage',
+  CONSENTS_READ: 'consents:read',
+  ACCESS_LOG_READ: 'access_log:read',
+
   // Administration
   USERS_READ: 'users:read',
   USERS_UPDATE: 'users:update',
@@ -84,6 +89,9 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'medical_records:write': 'Add medical records within relationship and consent scope',
   'prescriptions:read': 'Read prescriptions within relationship and consent scope',
   'prescriptions:sign': 'Create and sign prescriptions for own consultations',
+  'consents:manage': 'Grant and revoke access to own or managed dependents’ records',
+  'consents:read': 'List consents given (patient side) or received (doctor)',
+  'access_log:read': 'See who accessed own or managed dependents’ records',
   'users:read': 'Read user accounts (administration/support)',
   'users:update': 'Change user account status',
   'admin:users': 'Grant and revoke user roles',
@@ -125,6 +133,9 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.APPOINTMENTS_MANAGE,
     P.PAYMENTS_CREATE,
     P.PAYMENTS_READ,
+    P.CONSENTS_MANAGE,
+    P.CONSENTS_READ,
+    P.ACCESS_LOG_READ,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
@@ -142,6 +153,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.AVAILABILITY_MANAGE,
     // Refunds for the doctor's own appointments; no access to payment details.
     P.PAYMENTS_REFUND,
+    // Consents received; record access still needs an active consent per patient.
+    P.CONSENTS_READ,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,

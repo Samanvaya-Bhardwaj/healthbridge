@@ -228,3 +228,21 @@ Idempotency-Key: 6f1c…
 Appointment views now include `paymentStatus`, the status only, for every party who can
 see the appointment. `GET /admin/audit-logs?category=financial` filters financial audit
 rows.
+
+## Endpoints (M5)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/consents` | `consents:manage` (patient or managing guardian) | `{ patientId, doctorId, kind: manual \| appointment, appointmentId?, scopes[], documentTypes?, purpose, expiresInDays? }`. Errors: `care_relationship_required`, `appointment_not_eligible`, `409 consent_exists` |
+| GET | `/consents?patientId` | `consents:read` (patient side) | Effective status (`expired` once elapsed) |
+| GET | `/consents/received` | `consents:read` | Doctor: consents held |
+| POST | `/consents/:id/revoke` | `consents:manage` | `{ reasonCode? }`. Takes effect on the next request. `409 consent_not_active` |
+| POST | `/patients/:patientId/documents/upload-intent` | `medical_records:write` (+ upload consent for doctors) | `{ documentType, title, filename, contentType, sizeBytes, sha256 }`. Returns `{ document, upload: { method: POST, url, fields, expiresAt } }`. `413 file_too_large` |
+| POST | `/documents/:id/complete` | `medical_records:write` (uploader) | Idempotent. `409 upload_not_found` |
+| GET | `/patients/:patientId/documents?includeRetired` | `medical_records:read` + consent | Metadata only |
+| GET | `/documents/:id` | `medical_records:read` + consent | Metadata only |
+| GET | `/documents/:id/download` | `medical_records:read` + consent | `{ url, expiresAt, filename }`: presigned GET (TTL 60 s by default). `409 document_not_available` |
+| POST | `/documents/:id/retire` | `medical_records:write` (patient side) | Record kept; hidden |
+| GET | `/patients/:patientId/access-log?cursor&limit` | `access_log:read` (patient side) | Plain-language entries; `meta.nextCursor` |
+
+Responses never contain storage keys, credentials, permanent URLs or document contents.

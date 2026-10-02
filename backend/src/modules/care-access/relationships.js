@@ -30,14 +30,28 @@ const PATIENT_WRITE_PERMISSIONS = new Set([
   PERMISSIONS.APPOINTMENTS_CREATE,
   PERMISSIONS.APPOINTMENTS_MANAGE,
   PERMISSIONS.PAYMENTS_CREATE,
+  PERMISSIONS.CONSENTS_MANAGE,
 ]);
 
 /**
- * Until consent management exists (M5), an ACTIVE care relationship — which the patient
- * (or their guardian) explicitly requested or accepted — is the only consent basis, and
- * only for reading the patient profile. Clinical records stay denied (fail closed).
+ * Interim basis kept from M2 for backward compatibility (ADR-0021): an ACTIVE care
+ * relationship — which the patient explicitly requested or accepted — still allows a
+ * treating doctor to read the patient PROFILE (names on schedules). Everything in the
+ * medical record requires an explicit consent; this basis never extends to it.
  */
 export const CARE_RELATIONSHIP_CONSENT_PERMISSIONS = new Set([PERMISSIONS.PATIENTS_READ]);
+
+/** Permission → the consent scope that must cover it (ADR-0021). */
+export const CONSENT_SCOPE_FOR_PERMISSION = Object.freeze({
+  [PERMISSIONS.PATIENTS_READ]: 'patient_profile',
+  [PERMISSIONS.MEDICAL_RECORDS_READ]: 'medical_documents',
+  [PERMISSIONS.MEDICAL_RECORDS_WRITE]: 'medical_documents_upload',
+});
+
+const DOCUMENT_PERMISSIONS = new Set([
+  PERMISSIONS.MEDICAL_RECORDS_READ,
+  PERMISSIONS.MEDICAL_RECORDS_WRITE,
+]);
 
 /**
  * @param {{ knex: import('knex').Knex }} deps  `knex` is used only when no transaction is
@@ -151,9 +165,90 @@ export function createCareAccess({ knex }) {
     return { related: false, reason: 'not_related' };
   }
 
+  /**
+   * Explicit consent lookup, evaluated on every request (no cache): an active, unexpired
+   * consent to this user, covering the scope (and document type), whose appointment —
+   * for appointment-scoped consent — still stands. Independent of the RLS function
+   * authz.has_consent, so application and database checks are separate controls.
+   */
+  async function findConsent(db, { userId, patientId, scope, documentType }) {
+    const { rows } = await db.raw(
+      `SELECT c.id FROM consents c
+        WHERE c.patient_id = :patientId AND c.grantee_user_id = :userId
+          AND c.status = 'active' AND c.expires_at > now()
+          AND :scope = ANY (c.scopes)
+          AND (CAST(:documentType AS text) IS NULL OR c.document_types IS NULL
+               OR CAST(:documentType AS text) = ANY (c.document_types))
+          AND (c.kind = 'manual' OR EXISTS (
+                SELECT 1 FROM appointments a WHERE a.id = c.appointment_id
+                   AND a.status NOT IN ('cancelled', 'expired', 'no_show')))
+        ORDER BY c.granted_at DESC LIMIT 1`,
+      { patientId, userId, scope, documentType: documentType ?? null },
+    );
+    return rows[0]?.id ?? null;
+  }
+
+  /**
+   * Medical documents: the patient side, or a treating doctor (consent is checked at
+   * gate 3). Resource state is part of the relationship: other parties never relate to
+   * a document that is not AVAILABLE, except the uploader completing their own upload.
+   * Clinic membership never relates anyone to a document.
+   */
+  async function medicalDocumentResolver(principal, resource, { permission, trx }) {
+    const rel = await patientRelationships(
+      dbFor(principal, trx),
+      principal.userId,
+      resource.patientId,
+    );
+    if (rel.is_self) return { related: true, relationship: 'patient_self' };
+    if (rel.guardian_scope) {
+      if (rel.guardian_scope !== 'manage' && PATIENT_WRITE_PERMISSIONS.has(permission)) {
+        return { related: false, reason: 'guardian_scope_insufficient' };
+      }
+      return { related: true, relationship: 'guardian_dependent' };
+    }
+    if (rel.is_treating && DOCUMENT_PERMISSIONS.has(permission)) {
+      const ownUpload =
+        permission === PERMISSIONS.MEDICAL_RECORDS_WRITE &&
+        resource.uploadedByUserId === principal.userId;
+      if (resource.status === 'available' || ownUpload) {
+        return { related: true, relationship: 'treating_doctor' };
+      }
+      return { related: false, reason: 'document_not_available' };
+    }
+    return { related: false, reason: 'not_related' };
+  }
+
+  /** Consents: the patient side manages; the grantee may read the consents they hold. */
+  async function consentResolver(principal, resource, { permission, trx }) {
+    if (
+      permission === PERMISSIONS.CONSENTS_READ &&
+      resource.granteeUserId &&
+      resource.granteeUserId === principal.userId
+    ) {
+      return { related: true, relationship: 'grantee' };
+    }
+    const rel = await patientRelationships(
+      dbFor(principal, trx),
+      principal.userId,
+      resource.relPatientId,
+    );
+    if (rel.is_self) return { related: true, relationship: 'patient_party' };
+    if (
+      rel.guardian_scope === 'manage' ||
+      (rel.guardian_scope && !PATIENT_WRITE_PERMISSIONS.has(permission))
+    ) {
+      return { related: true, relationship: 'patient_party' };
+    }
+    return { related: false, reason: 'not_related' };
+  }
+
   return {
     patientRelationships,
+    findConsent,
     resolvers: {
+      medical_document: medicalDocumentResolver,
+      consent: consentResolver,
       patient: patientResolver,
       care_relationship: careRelationshipResolver,
       appointment: appointmentResolver,
@@ -190,11 +285,19 @@ export function createCareAccess({ knex }) {
     },
 
     /** @type {import('../../core/authz/accessPolicy.js').ConsentResolver} */
-    async consentResolver({ relationship, permission }) {
-      if (
-        relationship === 'treating_doctor' &&
-        CARE_RELATIONSHIP_CONSENT_PERMISSIONS.has(permission)
-      ) {
+    async consentResolver({ principal, patientId, relationship, permission, resource, trx }) {
+      if (relationship !== 'treating_doctor') return null;
+      const scope = CONSENT_SCOPE_FOR_PERMISSION[permission];
+      if (scope) {
+        const consentId = await findConsent(dbFor(principal, trx), {
+          userId: principal.userId,
+          patientId,
+          scope,
+          documentType: resource?.documentType,
+        });
+        if (consentId) return { basis: 'consent', consentId };
+      }
+      if (CARE_RELATIONSHIP_CONSENT_PERMISSIONS.has(permission)) {
         return { basis: 'active_care_relationship', consentId: null };
       }
       return null;

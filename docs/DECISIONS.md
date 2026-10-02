@@ -26,5 +26,6 @@ old one.
 | [0018](adr/0018-doctor-verification-workflow-granted-roles.md) | Doctor verification state machine; DOCTOR/CLINIC_ADMIN granted only by workflows | Accepted |
 | [0019](adr/0019-scheduling-on-demand-slots.md) | On-demand slots (refines materialised slots), care-team booking, DB-enforced no double booking, appointment lifecycle | Accepted |
 | [0020](adr/0020-payments-webhook-authority-outbox-workers.md) | PaymentProvider/NotificationProvider, webhook-only payment authority, append-only ledger, outbox relay, BullMQ workers, DB-driven reminders, purpose-scoped system RLS | Accepted |
+| [0021](adr/0021-consent-medical-documents-secure-access.md) | Explicit scoped/expiring consent checked per request; medical documents behind quarantine → scan → promotion; DocumentStorage with presigned POST/GET; patient access log on the audit trail | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

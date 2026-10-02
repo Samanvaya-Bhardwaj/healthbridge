@@ -277,6 +277,9 @@ describe('payment and notification configuration', () => {
   const PROD = {
     APP_ENV: 'production',
     AUTH_COOKIE_SECURE: 'true',
+    // M5: production also requires a real document scanner.
+    DOCUMENT_SCANNER: 'clamav',
+    CLAMAV_HOST: 'clamav.internal',
     NOTIFICATION_EMAIL_PROVIDER: 'smtp',
     SMTP_HOST: 'smtp.example.test',
   };

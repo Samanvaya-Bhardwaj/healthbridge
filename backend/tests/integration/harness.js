@@ -15,6 +15,7 @@ import { createMemoryMailer } from '../../src/core/mail/mailer.js';
 import { createContainer } from '../../src/container.js';
 import { createFakePaymentProvider } from '../../src/modules/payments/providers/fakePaymentProvider.js';
 import { createFakeNotificationProvider } from '../../src/modules/notifications/notificationProvider.js';
+import { createFakeScanner } from '../../src/modules/documents/scanning/documentScanner.js';
 import { createApp } from '../../src/app.js';
 import { REFRESH_COOKIE } from '../../src/core/auth/cookies.js';
 import { FAST_HASH_PARAMS, TEST_ORIGIN, captureLogs, testSigningKey } from '../helpers.js';
@@ -84,6 +85,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
   const mailer = createMemoryMailer();
   const paymentProvider = createFakePaymentProvider({ webhookSecret: TEST_WEBHOOK_SECRET });
   const notificationProvider = createFakeNotificationProvider();
+  const documentScanner = createFakeScanner();
   const container = createContainer({
     config,
     logger,
@@ -94,6 +96,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
     rateLimits: { ...NO_LIMITS, ...rateLimits },
     paymentProvider,
     notificationProvider,
+    documentScanner,
     queues,
     ...(now ? { now } : {}),
   });
@@ -120,6 +123,16 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
         .select('id')
         .whereIn('patient_id', testPatients.clone())
         .orWhereIn('doctor_id', testDoctors.clone());
+      // M5 rows (objects are left to the bucket; keys are random and test-only).
+      const testDocuments = trx('medical_documents')
+        .select('id')
+        .whereIn('patient_id', testPatients.clone());
+      await trx('outbox_events').whereIn('aggregate_id', testDocuments.clone()).del();
+      await trx('medical_documents').whereIn('patient_id', testPatients.clone()).del();
+      await trx('consents')
+        .whereIn('patient_id', testPatients.clone())
+        .orWhereIn('grantee_user_id', testUsers.clone())
+        .del();
       // M4 rows. The ledger is append-only even for the owner (trigger); test cleanup
       // disables the trigger inside this transaction only.
       const testPayments = trx('payments')
@@ -127,6 +140,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
         .whereIn('appointment_id', testAppointments.clone());
       await trx('notification_deliveries')
         .whereIn('appointment_id', testAppointments.clone())
+        .orWhereIn('recipient_user_id', testUsers.clone())
         .del();
       await trx('appointment_reminders').whereIn('appointment_id', testAppointments.clone()).del();
       await trx.raw('ALTER TABLE ledger_entries DISABLE TRIGGER ledger_no_update_delete');
@@ -186,6 +200,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now } =
     logs,
     paymentProvider,
     notificationProvider,
+    documentScanner,
     close,
   };
 }

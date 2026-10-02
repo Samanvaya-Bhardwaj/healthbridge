@@ -50,6 +50,9 @@ export const NOTIFICATION_TEMPLATES = Object.freeze([
   'appointment_expired',
   'appointment_reminder',
   'payment_refunded',
+  // M5: generic wording only (never document names or contents)
+  'document_available',
+  'document_rejected',
 ]);
 
 export const manualRefundSchema = z

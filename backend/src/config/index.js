@@ -44,6 +44,23 @@ const envSchema = z
     S3_SECRET_ACCESS_KEY: z.string().min(1),
     S3_BUCKET_DOCUMENTS: z.string().min(3),
     S3_FORCE_PATH_STYLE: z.stringbool().default(false),
+    // Endpoint browsers use for presigned uploads/downloads (e.g. the Nginx origin); the
+    // API itself talks to S3_ENDPOINT. Defaults to S3_ENDPOINT.
+    S3_PUBLIC_ENDPOINT: optional(z.url()),
+
+    // ── Medical documents (ADR-0021) ──
+    // fake = deterministic test scanner (NOT malware protection); clamav = clamd INSTREAM.
+    DOCUMENT_SCANNER: z.enum(['fake', 'clamav']).default('fake'),
+    CLAMAV_HOST: optional(z.string().min(1)),
+    CLAMAV_PORT: port.default(3310),
+    DOCUMENT_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(25 * 1024 * 1024)
+      .default(10 * 1024 * 1024),
+    DOCUMENT_UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
+    DOCUMENT_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(1).max(300).default(60),
 
     SMTP_HOST: z.string().min(1).optional(),
     SMTP_PORT: port.default(1025),
@@ -138,6 +155,17 @@ const envSchema = z
           message: 'live keys are allowed only when APP_ENV=production',
         });
       }
+    }
+    // Documents: never mark files clean without a real scanner outside dev/test.
+    if (['staging', 'production'].includes(env.APP_ENV) && env.DOCUMENT_SCANNER === 'fake') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DOCUMENT_SCANNER'],
+        message: 'the fake document scanner provides no malware protection; use clamav',
+      });
+    }
+    if (env.DOCUMENT_SCANNER === 'clamav' && !env.CLAMAV_HOST) {
+      ctx.addIssue({ code: 'custom', path: ['CLAMAV_HOST'], message: 'required for clamav' });
     }
     if (env.APP_ENV === 'production' && env.NOTIFICATION_EMAIL_PROVIDER === 'fake') {
       ctx.addIssue({
@@ -236,6 +264,14 @@ export function loadConfig(env = process.env) {
       secretAccessKey: e.S3_SECRET_ACCESS_KEY,
       documentsBucket: e.S3_BUCKET_DOCUMENTS,
       forcePathStyle: e.S3_FORCE_PATH_STYLE,
+      publicEndpoint: e.S3_PUBLIC_ENDPOINT ?? e.S3_ENDPOINT,
+    },
+    documents: {
+      scanner: e.DOCUMENT_SCANNER,
+      clamav: { host: e.CLAMAV_HOST, port: e.CLAMAV_PORT },
+      maxBytes: e.DOCUMENT_MAX_BYTES,
+      uploadUrlTtlSeconds: e.DOCUMENT_UPLOAD_URL_TTL_SECONDS,
+      downloadUrlTtlSeconds: e.DOCUMENT_DOWNLOAD_URL_TTL_SECONDS,
     },
     mail: { smtpHost: e.SMTP_HOST, smtpPort: e.SMTP_PORT, from: e.MAIL_FROM },
     payments: {

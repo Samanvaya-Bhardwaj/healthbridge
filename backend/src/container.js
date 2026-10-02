@@ -34,6 +34,13 @@ import { createFakeRefundSettler } from './modules/payments/fakeRefundSettler.js
 import { createNotificationProvider } from './modules/notifications/notificationProvider.js';
 import { createNotificationService } from './modules/notifications/notificationService.js';
 import { createOperationsService } from './modules/operations/service.js';
+import { createDocumentStorage } from './core/storage/documentStorage.js';
+import { createDocumentScanner } from './modules/documents/scanning/documentScanner.js';
+import { createDocumentRepository } from './modules/documents/repository.js';
+import { createDocumentService } from './modules/documents/service.js';
+import { createDocumentPipeline } from './modules/documents/pipeline.js';
+import { createConsentRepository, createConsentService } from './modules/consents/service.js';
+import { createAccessLogService } from './modules/consents/accessLog.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -62,6 +69,8 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
  *   paymentProvider?: import('./modules/payments/providers/paymentProvider.js').PaymentProvider,
  *   notificationProvider?: import('./modules/notifications/notificationProvider.js').NotificationProvider,
  *   queues?: Record<string, import('bullmq').Queue>,
+ *   documentStorage?: ReturnType<typeof import('./core/storage/documentStorage.js').createDocumentStorage>,
+ *   documentScanner?: import('./modules/documents/scanning/documentScanner.js').DocumentScanner,
  *   options?: { fakeAutoSettleRefunds?: boolean },
  * }} deps
  */
@@ -77,6 +86,8 @@ export function createContainer({
   paymentProvider = createPaymentProvider(config.payments),
   notificationProvider = createNotificationProvider(config, { logger }),
   queues,
+  documentStorage = createDocumentStorage(config.storage),
+  documentScanner = createDocumentScanner(config.documents),
   options = {},
 }) {
   const audit = createAuditService({ knex, logger });
@@ -114,6 +125,8 @@ export function createContainer({
   const availability = createAvailabilityRepository({ knex });
   const appointments = createAppointmentRepository();
   const payments = createPaymentRepository();
+  const consents = createConsentRepository();
+  const medicalDocuments = createDocumentRepository();
 
   const authService = createAuthService({
     knex,
@@ -213,6 +226,37 @@ export function createContainer({
     ...(now ? { now } : {}),
   });
   const operationsService = createOperationsService({ knex, audit, queues });
+  const consentService = createConsentService({
+    knex,
+    consents,
+    doctors,
+    appointments,
+    careAccess,
+    accessPolicy,
+    audit,
+    ...(now ? { now } : {}),
+  });
+  const accessLogService = createAccessLogService({ knex, accessPolicy });
+  const documentService = createDocumentService({
+    knex,
+    config,
+    documents: medicalDocuments,
+    storage: documentStorage,
+    accessPolicy,
+    audit,
+    logger,
+    ...(now ? { now } : {}),
+  });
+  const documentPipeline = createDocumentPipeline({
+    knex,
+    config,
+    documents: medicalDocuments,
+    storage: documentStorage,
+    scanner: documentScanner,
+    audit,
+    logger,
+    ...(now ? { now } : {}),
+  });
   const fakeRefundSettler =
     paymentProvider.name === 'fake'
       ? createFakeRefundSettler({ knex, payments, provider: paymentProvider, webhookService })
@@ -243,6 +287,8 @@ export function createContainer({
       availability,
       appointments,
       payments,
+      consents,
+      medicalDocuments,
     },
     careAccess,
     hasher,
@@ -265,6 +311,12 @@ export function createContainer({
     notificationService,
     operationsService,
     fakeRefundSettler,
+    documentStorage,
+    documentScanner,
+    consentService,
+    accessLogService,
+    documentService,
+    documentPipeline,
     authenticate,
   };
 }

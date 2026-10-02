@@ -12,7 +12,13 @@ const ACTOR = Symbol('healthbridge.actorContext');
 const SYSTEM = Symbol('healthbridge.systemContext');
 
 /** System purposes recognised by the database (authz.system_purpose(), ADR-0020). */
-export const SYSTEM_PURPOSES = Object.freeze(['payments', 'scheduler', 'notifications']);
+export const SYSTEM_PURPOSES = Object.freeze([
+  'payments',
+  'scheduler',
+  'notifications',
+  'documents',
+  'consents',
+]);
 
 /**
  * Runs `fn` in a transaction scoped to `userId`. Reuses an existing actor transaction
@@ -45,7 +51,7 @@ export async function withActor(knex, userId, fn, existing) {
  * user id, and the database ignores the purpose whenever a user id is set.
  * @template T
  * @param {import('knex').Knex} knex
- * @param {'payments'|'scheduler'|'notifications'} purpose
+ * @param {'payments'|'scheduler'|'notifications'|'documents'|'consents'} purpose
  * @param {(trx: import('knex').Knex.Transaction) => Promise<T>} fn
  * @param {import('knex').Knex.TransactionConfig} [options]
  * @returns {Promise<T>}

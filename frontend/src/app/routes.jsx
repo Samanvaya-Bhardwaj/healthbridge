@@ -20,6 +20,12 @@ import { ClinicPage } from '../features/clinics/ClinicPage.jsx';
 import { AppointmentsPage } from '../features/appointments/AppointmentsPage.jsx';
 import { BookAppointmentPage } from '../features/appointments/BookAppointmentPage.jsx';
 import { PaymentPage } from '../features/appointments/PaymentPage.jsx';
+import { RecordsPage } from '../features/records/RecordsPage.jsx';
+import { PrivacyPage } from '../features/records/PrivacyPage.jsx';
+import {
+  DoctorRecordsPage,
+  DoctorPatientRecordsPage,
+} from '../features/records/DoctorRecordsPage.jsx';
 
 const guarded = (permission, element) => (
   <RequirePermission permission={permission}>{element}</RequirePermission>
@@ -35,6 +41,9 @@ const PAGES = [
   [SECTIONS.clinics, <ClinicsAdminPage key="clinics" />],
   [SECTIONS.clinic, <ClinicPage key="clinic" />],
   [SECTIONS.appointments, <AppointmentsPage key="appointments" />],
+  [SECTIONS.records, <RecordsPage key="records" />],
+  [SECTIONS.privacy, <PrivacyPage key="privacy" />],
+  [SECTIONS.medicalRecords, <DoctorRecordsPage key="medical-records" />],
 ];
 
 /**
@@ -64,6 +73,10 @@ export const routes = [
           {
             path: 'appointments/book',
             element: guarded(PERMISSIONS.APPOINTMENTS_MANAGE, <BookAppointmentPage />),
+          },
+          {
+            path: 'medical-records/:patientId',
+            element: guarded(PERMISSIONS.MEDICAL_RECORDS_READ, <DoctorPatientRecordsPage />),
           },
           {
             path: 'appointments/:id/pay',

@@ -12,11 +12,13 @@ const outboxJob = z.looseObject({
   payload: z.record(z.string(), z.unknown()).default({}),
 });
 const reminderJob = z.object({ reminderId: uuid }).strict();
+const documentJob = outboxJob.refine((j) => uuid.safeParse(j.payload?.documentId).success);
 const maintenanceJob = z.looseObject({});
 
 export const MAINTENANCE_JOBS = Object.freeze({
   EXPIRE_HOLDS: 'expire-holds',
   SCHEDULE_REMINDERS: 'schedule-reminders',
+  RECORDS_HOUSEKEEPING: 'records-housekeeping',
 });
 
 /**
@@ -27,7 +29,15 @@ export const MAINTENANCE_JOBS = Object.freeze({
  * @param {Record<string, import('bullmq').Queue>} queues
  */
 export function createJobProcessors(container, queues) {
-  const { settlement, notificationService, paymentProvider, config, logger } = container;
+  const {
+    settlement,
+    notificationService,
+    paymentProvider,
+    config,
+    logger,
+    documentPipeline,
+    consentService,
+  } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
   // emulate the provider by delivering a signed `refund.processed` through the normal
@@ -67,14 +77,27 @@ export function createJobProcessors(container, queues) {
       schemas: { 'appointment.reminder': reminderJob },
       handle: (job) => notificationService.sendReminder(job.data.reminderId),
     },
+    // M5: quarantine → scan → promotion. Idempotent: see modules/documents/pipeline.js.
+    [QUEUE_NAMES.DOCUMENTS]: {
+      concurrency: 2,
+      schemas: { 'document.uploaded': documentJob },
+      handle: (job) => documentPipeline.scanAndPromote(job.data.payload.documentId),
+    },
     [QUEUE_NAMES.MAINTENANCE]: {
       concurrency: 1,
       schemas: {
         [MAINTENANCE_JOBS.EXPIRE_HOLDS]: maintenanceJob,
         [MAINTENANCE_JOBS.SCHEDULE_REMINDERS]: maintenanceJob,
+        [MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
+        if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
+          return {
+            consents: await consentService.expireDue(),
+            uploads: await documentPipeline.expireStaleIntents(),
+          };
+        }
         const ids = await notificationService.collectDueReminders();
         for (const reminderId of ids) {
           // A failed enqueue is retried from PostgreSQL by a later sweep (enqueued_at).
@@ -103,5 +126,10 @@ export async function registerSchedules(queues, workers) {
     MAINTENANCE_JOBS.SCHEDULE_REMINDERS,
     { every: workers.reminderSweepIntervalMs },
     { name: MAINTENANCE_JOBS.SCHEDULE_REMINDERS, data: {}, opts: { attempts: 1 } },
+  );
+  await maintenance.upsertJobScheduler(
+    MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,
+    { every: 60_000 },
+    { name: MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING, data: {}, opts: { attempts: 1 } },
   );
 }

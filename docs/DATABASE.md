@@ -20,6 +20,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261003000000_patients_doctors_clinics` | `roles.scope`, 9 permissions, `clinics`, `clinic_memberships`, `user_roles.clinic_id` FK + scope trigger, `effective_role_grants`, `patients`, `patient_guardianships`, `doctors`, `doctor_verifications`, `care_relationships`, schema `authz`, RLS policies |
 | `20261004000000_scheduling_appointments` | `availability_rules`, `availability_exceptions`, `appointments` (two EXCLUDE constraints), `appointment_intakes`, `outbox_events`, RLS and `authz` functions for scheduling, `appointments:manage` / `availability:manage` |
 | `20261005000000_payments_outbox_workers` | `payments`, `payment_events`, `payment_refunds`, append-only `ledger_entries`, outbox relay columns, `notification_deliveries`, `appointment_reminders`, `dead_letter_jobs`, system-purpose RLS, audit category `financial`, `payments:*` / `operations:manage` |
+| `20261006000000_consents_medical_documents` | `consents`, `medical_documents` (key/lifecycle/immutability guards), `authz.has_consent` / `is_patient_side` / `document_ref`, system purposes `documents` and `consents`, document notification templates, `consents:*` / `access_log:read` |
 
 ## Identity, RBAC and audit (M1)
 
@@ -374,3 +375,58 @@ Functions:
 - `authz.notification_recipients(patient)` returns contacts only, to the notification
   worker only.
 - The app role has no DELETE on payment tables.
+
+## Consent and medical documents (M5)
+
+```mermaid
+erDiagram
+  PATIENTS ||--o{ CONSENTS : grants
+  DOCTORS ||--o{ CONSENTS : receives
+  APPOINTMENTS ||--o{ CONSENTS : "appointment-scoped"
+  PATIENTS ||--o{ MEDICAL_DOCUMENTS : owns
+  CONSENTS ||--o{ MEDICAL_DOCUMENTS : "doctor upload basis"
+
+  CONSENTS {
+    uuid id PK
+    uuid patient_id FK
+    uuid grantee_user_id FK
+    uuid grantee_doctor_id FK
+    text granted_by_relationship "patient_self | guardian"
+    text kind "manual | appointment"
+    uuid appointment_id FK
+    text_array scopes "patient_profile | medical_documents | medical_documents_upload"
+    text_array document_types "null = all"
+    text purpose
+    text status "active | revoked | expired"
+    timestamptz expires_at "always set"
+  }
+  MEDICAL_DOCUMENTS {
+    uuid id PK
+    uuid patient_id FK
+    uuid uploaded_by_user_id FK
+    text uploaded_by_relationship
+    text document_type
+    text title
+    text declared_content_type
+    text detected_content_type "magic bytes"
+    text declared_sha256
+    text verified_sha256
+    text quarantine_key "quarantine/patients/{p}/documents/{d}/{random}"
+    text storage_key "records/patients/{p}/documents/{d}/{random}"
+    text status "pending_upload | quarantined | scanning | available | rejected | retired"
+    text rejection_reason
+  }
+```
+
+| Table | SELECT (RLS) | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `consents` | patient side; the grantee; `consents`/`documents` system | grantor = actor, manages the patient, status `active` | `consents` system only (revoke, expire) | none (revoked) |
+| `medical_documents` | patient side (all states); consented doctor: `available` and permitted type (`authz.has_consent`); uploader with upload consent; `documents` system | uploader = actor, `pending_upload`, patient manager or upload consent | `documents` system only | none (revoked) |
+
+The trigger `guard_medical_document_update` rejects, for every role:
+
+- changes to identity columns (patient, uploader, keys, declared type, size and checksum,
+  document type);
+- status transitions outside the lifecycle.
+
+CHECK constraints tie both object keys to the row's patient and document.

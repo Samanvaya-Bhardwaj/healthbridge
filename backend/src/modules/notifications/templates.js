@@ -95,6 +95,19 @@ const TEMPLATES = {
     text: `Hello ${v.recipientName},\n\nThis is a reminder of ${whoseInline(v)} upcoming appointment.\n\n${details(v)}`,
     sms: `HealthBridge reminder: ${whoseInline(v)} appointment with ${v.doctorName} on ${when(v)}. Ref ${v.reference}.`,
   }),
+  // M5: generic wording — never the document's name, type or content.
+  document_available: (v) => ({
+    subject: 'Your document is ready',
+    text:
+      `Hello ${v.recipientName},\n\nA document uploaded to ${whoseInline(v)} health record ` +
+      'has passed its safety check and is now available in the app.',
+  }),
+  document_rejected: (v) => ({
+    subject: 'A document could not be added',
+    text:
+      `Hello ${v.recipientName},\n\nA document uploaded to ${whoseInline(v)} health record ` +
+      'could not be accepted. Please open the app for details and try again.',
+  }),
   payment_refunded: (v) => ({
     subject: `Refund processed`,
     text:

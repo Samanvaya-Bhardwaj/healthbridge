@@ -9,6 +9,8 @@ import { clinicRoutes } from '../../modules/clinics/routes.js';
 import { schedulingRoutes } from '../../modules/scheduling/routes.js';
 import { paymentRoutes } from '../../modules/payments/routes.js';
 import { operationsRoutes } from '../../modules/operations/routes.js';
+import { consentRoutes } from '../../modules/consents/routes.js';
+import { documentRoutes } from '../../modules/documents/routes.js';
 
 /**
  * Versioned public API. Feature modules mount their routers here.
@@ -40,6 +42,8 @@ export function apiV1Router({ config, version, container }) {
   router.use(paymentRoutes(container));
   router.use(schedulingRoutes(container));
   router.use(operationsRoutes(container));
+  router.use(consentRoutes(container));
+  router.use(documentRoutes(container));
   router.use(doctorRoutes(container));
   router.use(clinicRoutes(container));
 

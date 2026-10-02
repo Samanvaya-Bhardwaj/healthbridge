@@ -51,6 +51,12 @@ x-backend-env: &backend-env
   NOTIFICATION_EMAIL_PROVIDER: ${NOTIFICATION_EMAIL_PROVIDER:-smtp}
   REMINDER_OFFSETS_MINUTES: ${REMINDER_OFFSETS_MINUTES:-1440,60}
   WORKER_METRICS_PORT: 9465
+  # Browser-facing endpoint for presigned document URLs (Nginx proxies the bucket path).
+  S3_PUBLIC_ENDPOINT: http://localhost:${HOST_PORT_WEB:-8080}
+  DOCUMENT_SCANNER: ${DOCUMENT_SCANNER:-fake}
+  CLAMAV_HOST: ${CLAMAV_HOST:-}
+  DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-10485760}
+  DOCUMENT_DOWNLOAD_URL_TTL_SECONDS: ${DOCUMENT_DOWNLOAD_URL_TTL_SECONDS:-60}
 
 services:
   postgres:
@@ -114,7 +120,8 @@ services:
     ports:
       - '127.0.0.1:${HOST_PORT_MINIO:-9000}:9000'
       - '127.0.0.1:${HOST_PORT_MINIO_CONSOLE:-9001}:9001'
-    networks: [private]
+    # storage: reachable by Nginx for presigned document requests only.
+    networks: [private, storage]
     healthcheck:
       test:
         - CMD
@@ -212,6 +219,15 @@ services:
     stop_grace_period: 35s
     restart: unless-stopped
 
+  # Optional real malware scanner (ADR-0021): `docker compose --profile scanner up -d` and
+  # set DOCUMENT_SCANNER=clamav, CLAMAV_HOST=clamav. Needs ~1.5 GB RAM and downloads
+  # signatures on start. Development defaults to the fake scanner (no protection).
+  clamav:
+    image: clamav/clamav:1.4
+    profiles: [scanner]
+    networks: [private]
+    restart: unless-stopped
+
   ai-service:
     build:
       context: ./ai-service
@@ -250,7 +266,7 @@ services:
       api: { condition: service_healthy }
     ports:
       - '127.0.0.1:${HOST_PORT_WEB:-8080}:8080'
-    networks: [edge]
+    networks: [edge, storage]
     restart: unless-stopped
 
 networks:
@@ -258,6 +274,8 @@ networks:
   edge:
   # Data and internal services. The web/Nginx container is not attached.
   private:
+  # Nginx ↔ MinIO only (presigned document uploads/downloads).
+  storage:
 
 volumes:
   postgres-data:

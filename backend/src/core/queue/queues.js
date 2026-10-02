@@ -5,7 +5,8 @@ import { Queue } from 'bullmq';
  *   notifications  outbox events that notify people
  *   payments       outbox events with financial effects (close/refund)
  *   appointments   appointment reminders
- *   maintenance    periodic sweeps (payment-hold expiry, reminder scheduling)
+ *   maintenance    periodic sweeps (payment-hold expiry, reminders, consent expiry)
+ *   documents      medical-document scanning and promotion (M5)
  * Redis is a delivery mechanism, never the source of truth: every job can be rebuilt
  * from PostgreSQL (outbox rows, reminder rows, holds).
  */
@@ -14,6 +15,7 @@ export const QUEUE_NAMES = Object.freeze({
   PAYMENTS: 'payments',
   APPOINTMENTS: 'appointments',
   MAINTENANCE: 'maintenance',
+  DOCUMENTS: 'documents',
 });
 export const ALL_QUEUES = Object.freeze(Object.values(QUEUE_NAMES));
 

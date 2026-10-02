@@ -64,6 +64,21 @@ Public registration only ever creates PATIENT accounts.
 
 ## Known gaps / planned
 
+- **Signed URLs cannot be revoked retroactively (M5).** Revoking consent stops every new
+  request and every new URL immediately. A presigned download URL issued *before* the
+  revocation remains usable until its short expiry: by default 60 s, at most 300 s
+  (`DOCUMENT_DOWNLOAD_URL_TTL_SECONDS`). Object storage cannot recall a signature it has
+  already issued. We therefore:
+  - keep TTLs short;
+  - never issue long-lived or permanent URLs;
+  - authorise before signing.
+
+  We do not claim retroactive invalidation.
+- The fake document scanner provides **no malware protection**. It is refused in staging
+  and production; ClamAV is the supported scanner.
+- Quarantine objects from abandoned upload intents need a bucket lifecycle rule in
+  production.
+
 - Payments: no reconciliation job yet. `getPaymentStatus` exists but is not used for
   automatic correction; the webhook stays the only authority.
 - Rescheduling a paid appointment refunds the old payment in full and asks for a new one
@@ -194,3 +209,48 @@ Each layer is tested on its own:
 - **Nginx CSP** allows only `checkout.razorpay.com` (script), `api.razorpay.com` (frame,
   connect), `lumberjack.razorpay.com` (connect) and `cdn.razorpay.com` (images). COOP is
   `same-origin-allow-popups` for bank and UPI pop-ups.
+
+## Consent and medical documents (M5, ADR-0021)
+
+| Actor | View documents | Download | Upload | Grant / revoke consent | Access log |
+|---|---|---|---|---|---|
+| Patient | ✅ all own (any state) | ✅ available | ✅ | ✅ | ✅ |
+| Managing guardian | ✅ dependent's | ✅ | ✅ | ✅ for the dependent | ✅ |
+| View-only guardian | ✅ dependent's | ✅ | ❌ | ❌ (404) | ✅ |
+| Treating doctor with active `medical_documents` consent | ✅ available documents of consented types only | ✅ (≤ 60 s URL) | only with `medical_documents_upload` | ❌ | ❌ |
+| Treating doctor without consent, or with expired, revoked or out-of-scope consent | ❌ 403 `consent_required` | ❌ | ❌ | ❌ | ❌ |
+| Doctor with no relationship, including a doctor at another clinic | ❌ 404 | ❌ | ❌ | ❌ | ❌ |
+| Clinic admin | ❌ 403 (no permission) | ❌ | ❌ | ❌ | ❌ |
+| Platform admin, support | ❌ 403 | ❌ | ❌ | ❌ | ❌ |
+| Another patient (guessed IDs) | ❌ 404, identical to a missing document | ❌ | ❌ | ❌ | ❌ |
+
+- **Request-time consent:**
+  - Gate 3 queries `consents` on every request.
+  - RLS independently requires `authz.has_consent()` for non-patient readers.
+  - Appointment-scoped consent ends when its appointment is cancelled, expired or a
+    no-show.
+- **No unscanned file is ever available:**
+  - `AVAILABLE` requires a scanner verdict, verified SHA-256 and a detected content type
+    (CHECK constraint);
+  - only the `documents` system context can change status;
+  - the transition trigger blocks shortcuts.
+- **Uploads:**
+  - The type allowlist (PDF, PNG, JPEG) is checked against the extension and magic bytes.
+  - Size is enforced three times: in the API, by the storage POST policy, and in the
+    worker.
+  - The client-declared SHA-256 is verified.
+  - Filenames are display-only and sanitised for `Content-Disposition`; keys are random and
+    server-generated.
+- **Storage:**
+  - The bucket is private.
+  - The browser gets only presigned requests, never credentials or permanent URLs.
+  - Nginx exposes only GET/HEAD/POST on the bucket path, over a network that MinIO shares
+    with Nginx alone.
+- **Audit events:**
+  - consents: `consent.granted`, `revoked`, `expired`;
+  - documents: `document.upload_intent_created`, `upload_completed`, `scan_started`,
+    `scan_failed`, `scan_rejected`, `promoted`, `viewed`, `list_viewed`,
+    `download_authorized`, `access_denied`, `retired`.
+  - Signed URLs, keys, contents and tokens are never recorded.
+- **Notifications** use generic wording only ("Your document is ready"), never the
+  document's name, type or contents.

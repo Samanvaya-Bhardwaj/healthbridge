@@ -21,8 +21,9 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M2** | Patients, dependents, doctors and verification, clinics, care relationships, RLS | ✅ Complete |
 | **M3** | Availability, slots, booking, appointment lifecycle, clinic schedule | ✅ Complete |
 | **M4** | Payments (fake + Razorpay), webhooks, ledger, outbox relay, workers, notifications, reminders | ✅ Complete |
-| M5 | Consent and records storage | Next |
-| M6–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
+| **M5** | Consent, medical documents (quarantine → scan → promotion), signed downloads, access log | ✅ Complete |
+| M6 | Document intelligence (OCR, extraction) | Next |
+| M7–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
 
 ## Architecture at a glance
 

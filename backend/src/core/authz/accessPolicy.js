@@ -1,5 +1,6 @@
 import { ForbiddenError, NotFoundError, UnauthorizedError } from '../http/errors.js';
 import { hasPermission } from './principal.js';
+import { domainMetrics } from '../metrics/domain.js';
 
 /**
  * Central authorisation service: the three-gate model (ADR-0006, ADR-0017).
@@ -25,7 +26,7 @@ import { hasPermission } from './principal.js';
  * @typedef {{ related: boolean, relationship?: string, reason?: string }} RelationshipResult
  * @typedef {(principal: import('./principal.js').Principal, resource: Resource, ctx: { permission: string, trx?: import('knex').Knex.Transaction }) => Promise<RelationshipResult> | RelationshipResult} RelationshipResolver
  * @typedef {{ consentId?: string | null, basis: string }} ConsentGrant
- * @typedef {(args: { principal: import('./principal.js').Principal, patientId: string, permission: string, relationship: string, purpose?: string, trx?: import('knex').Knex.Transaction }) => Promise<ConsentGrant | null>} ConsentResolver
+ * @typedef {(args: { principal: import('./principal.js').Principal, patientId: string, permission: string, relationship: string, resource: Resource, purpose?: string, trx?: import('knex').Knex.Transaction }) => Promise<ConsentGrant | null>} ConsentResolver
  * @typedef {{ allowed: boolean, gate?: 'permission' | 'relationship' | 'consent', reason?: string, relationship?: string, consentBasis?: string, consentId?: string | null }} Decision
  * @typedef {{ principal: import('./principal.js').Principal, permission: string, resource?: Resource, clinicId?: string, purpose?: string, req?: import('express').Request, trx?: import('knex').Knex.Transaction }} AccessRequest
  */
@@ -86,6 +87,8 @@ export function createAccessPolicy({
           patientId: resource.patientId,
           permission,
           relationship: relation.relationship,
+          // M5: lets consent scopes depend on the resource (e.g. document type).
+          resource,
           purpose,
           trx,
         });
@@ -154,6 +157,7 @@ export function createAccessPolicy({
     if (decision.allowed) return decision;
     if (decision.gate === 'relationship') throw new NotFoundError();
     if (decision.gate === 'consent') {
+      domainMetrics.consentDenied.inc();
       throw new ForbiddenError(
         'Patient consent is required to access this record.',
         'consent_required',

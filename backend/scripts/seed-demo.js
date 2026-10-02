@@ -306,6 +306,20 @@ try {
     }
   }
 
+  // ── M5: a synthetic consent (documents are added through the app) ──
+  const ashaConsents = await container.consentService.listForPatient(asha, ashaProfile.id);
+  if (!ashaConsents.some((c) => c.status === 'active' && c.doctor.id === meera.id)) {
+    await container.consentService.grant(asha, {
+      patientId: ashaProfile.id,
+      doctorId: meera.id,
+      kind: 'manual',
+      scopes: ['patient_profile', 'medical_documents'],
+      purpose: 'ongoing_care',
+      expiresInDays: 90,
+    });
+    log('asha granted dr.meera document access (90 days)');
+  }
+
   log('demo seed complete', { password: 'DEMO_USER_PASSWORD from .env' });
 } catch (err) {
   console.error(

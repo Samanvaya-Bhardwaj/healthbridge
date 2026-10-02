@@ -192,6 +192,25 @@ routes → controllers → application services → domain (pure rules) → repo
   ([ADR-0020](adr/0020-payments-webhook-authority-outbox-workers.md), which also has the
   flow diagrams).
 
+### Consent and medical documents (M5)
+
+- **Consent:** patients and managing guardians grant treating doctors explicit consents.
+  Each consent has scopes (profile, view documents, add documents), optional document
+  types, a purpose and an expiry, and is manual or tied to one appointment.
+  - AccessPolicy checks consent on **every request** (no cache), and RLS repeats the check.
+  - Revocation takes effect on the next request.
+- **Documents:** metadata lives in PostgreSQL and objects in S3/MinIO behind the
+  `DocumentStorage` abstraction.
+  - Uploads use presigned POSTs to a quarantine key.
+  - The `documents` worker validates size, checksum and magic bytes, scans with a
+    `DocumentScanner` (ClamAV; fake in dev and test), and promotes atomically to a
+    `records/` key.
+  - Downloads are presigned GETs issued after authorisation and expire after 60 s by
+    default.
+- **Access log:** a patient-facing view of the existing audit trail.
+- **Details:** [ADR-0021](adr/0021-consent-medical-documents-secure-access.md), with flow
+  diagrams.
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -212,9 +231,14 @@ routes → controllers → application services → domain (pure rules) → repo
     `notifications_{sent,failed}_total`, `reminders_sent_total`.
   - Latency histograms: payment provider, webhook processing, outbox relay batch, worker
     job, notification provider.
+- M5 counters: `document_upload_intents_total`, `document_upload_completed_total`,
+  `document_scan_{started,success,failed,rejected}_total`, `document_promoted_total`,
+  `document_downloads_total`, `document_access_denied_total`, `consent_granted_total`,
+  `consent_revoked_total`, `consent_denied_total`,
+  `document_worker_{failures,retries,dlq}_total`.
 
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M4 complete (payments, webhooks, ledger, outbox relay, workers, notifications, reminders); awaiting approval for M5.**
+Current status: **M5 complete (consent, medical documents with quarantine/scan/promotion, signed downloads, access log); awaiting approval for M6.**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

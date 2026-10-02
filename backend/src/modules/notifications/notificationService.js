@@ -24,6 +24,10 @@ export function templateForEvent(eventType, payload = {}) {
       return 'payment_failed';
     case 'payment.refunded':
       return 'payment_refunded';
+    case 'document.available':
+      return 'document_available';
+    case 'document.rejected':
+      return 'document_rejected';
     default:
       return null;
   }
@@ -173,9 +177,49 @@ export function createNotificationService({
    * Outbox consumer.
    * @param {{ eventId: string, eventType: string, aggregateId: string, payload: Record<string, any> }} event
    */
+  /** Document events: patient-side recipients, generic text, no appointment context. */
+  async function handleDocumentEvent({ eventId, template, payload }) {
+    const recipients = await withSystem(knex, 'notifications', async (trx) => {
+      const { rows } = await trx.raw('SELECT * FROM authz.notification_recipients(?)', [
+        payload.patientId,
+      ]);
+      return rows;
+    });
+    if (!recipients.length) return { outcome: 'no_recipients' };
+    const results = [];
+    for (const r of recipients) {
+      const content = renderTemplate(template, {
+        recipientName: r.display_name,
+        patientName: r.patient_name,
+        relationship: r.relationship,
+      });
+      results.push(
+        await deliver({
+          dedupeKey: `${eventId}-${template}-${r.user_id}-email`,
+          template,
+          channel: 'email',
+          recipientUserId: r.user_id,
+          appointmentId: null,
+          sourceEventId: eventId,
+          send: () =>
+            provider.sendEmail({
+              to: r.email,
+              subject: content.subject,
+              text: content.text,
+              template,
+            }),
+        }),
+      );
+    }
+    return { outcome: results.every((x) => x === 'duplicate') ? 'duplicate' : 'sent', template };
+  }
+
   async function handleEvent({ eventId, eventType, aggregateId, payload = {} }) {
     const template = templateForEvent(eventType, payload);
     if (!template) return { outcome: 'no_notification' };
+    if (eventType.startsWith('document.')) {
+      return handleDocumentEvent({ eventId, template, payload });
+    }
     const appointmentId = payload.appointmentId ?? aggregateId;
     const ctx = await withSystem(knex, 'notifications', (trx) => loadContext(trx, appointmentId));
     if (!ctx) return { outcome: 'appointment_not_found' };

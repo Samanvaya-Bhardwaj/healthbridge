@@ -106,3 +106,26 @@ export const paymentsApi = {
       }),
     ),
 };
+
+/**
+ * Medical records (M5). Metadata and short-lived signed URLs only; uploads go straight
+ * to object storage with a presigned POST and are scanned before they become available.
+ */
+export const recordsApi = {
+  list: (patientId) => data(apiRequest(`/patients/${patientId}/documents`)),
+  uploadIntent: (patientId, body) =>
+    data(apiRequest(`/patients/${patientId}/documents/upload-intent`, { method: 'POST', body })),
+  complete: (id) => data(apiRequest(`/documents/${id}/complete`, { method: 'POST', body: {} })),
+  download: (id) => data(apiRequest(`/documents/${id}/download`)),
+  retire: (id) => data(apiRequest(`/documents/${id}/retire`, { method: 'POST', body: {} })),
+};
+
+export const consentsApi = {
+  list: (patientId) => data(apiRequest(`/consents${qs({ patientId })}`)),
+  received: () => data(apiRequest('/consents/received')),
+  grant: (body) => data(apiRequest('/consents', { method: 'POST', body })),
+  revoke: (id, reasonCode) =>
+    data(apiRequest(`/consents/${id}/revoke`, { method: 'POST', body: { reasonCode } })),
+  accessLog: (patientId, cursor) =>
+    apiRequest(`/patients/${patientId}/access-log${qs({ cursor, limit: 30 })}`),
+};

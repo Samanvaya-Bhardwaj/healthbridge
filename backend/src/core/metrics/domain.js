@@ -53,6 +53,23 @@ export const domainMetrics = Object.freeze({
   ]),
   remindersSent: counter('reminders_sent_total', 'Appointment reminders delivered'),
 
+  // M5: consent and medical documents
+  documentUploadIntents: counter('document_upload_intents_total', 'Document upload intents'),
+  documentUploadCompleted: counter('document_upload_completed_total', 'Uploads completed'),
+  documentScanStarted: counter('document_scan_started_total', 'Document scans started'),
+  documentScanSuccess: counter('document_scan_success_total', 'Documents scanned clean'),
+  documentScanFailed: counter('document_scan_failed_total', 'Scanner failures (retried)'),
+  documentScanRejected: counter('document_scan_rejected_total', 'Documents rejected', ['reason']),
+  documentPromoted: counter('document_promoted_total', 'Documents promoted to available'),
+  documentDownloads: counter('document_downloads_total', 'Download URLs issued'),
+  documentAccessDenied: counter('document_access_denied_total', 'Document access denials'),
+  consentGranted: counter('consent_granted_total', 'Consents granted', ['kind']),
+  consentRevoked: counter('consent_revoked_total', 'Consents revoked or expired', ['cause']),
+  consentDenied: counter('consent_denied_total', 'Requests denied for lack of consent'),
+  documentWorkerFailures: counter('document_worker_failures_total', 'Document job failures'),
+  documentWorkerRetries: counter('document_worker_retries_total', 'Document job retries'),
+  documentWorkerDlq: counter('document_worker_dlq_total', 'Document jobs dead-lettered'),
+
   providerLatency: histogram('payment_provider_duration_seconds', 'Payment provider call latency', [
     'operation',
     'outcome',

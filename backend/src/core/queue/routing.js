@@ -1,6 +1,6 @@
 import { QUEUE_NAMES } from './queues.js';
 
-const { NOTIFICATIONS, PAYMENTS } = QUEUE_NAMES;
+const { NOTIFICATIONS, PAYMENTS, DOCUMENTS } = QUEUE_NAMES;
 
 /**
  * Outbox event type → consuming queues. An event with no consumer is marked dispatched.
@@ -16,6 +16,9 @@ export const EVENT_ROUTES = Object.freeze({
   'payment.failed': [NOTIFICATIONS],
   'payment.refund_requested': [PAYMENTS],
   'payment.refunded': [NOTIFICATIONS],
+  'document.uploaded': [DOCUMENTS],
+  'document.available': [NOTIFICATIONS],
+  'document.rejected': [NOTIFICATIONS],
 });
 
 export const routesFor = (eventType) => EVENT_ROUTES[eventType] ?? [];

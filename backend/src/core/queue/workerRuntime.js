@@ -47,6 +47,7 @@ export function createWorkerRuntime({ redis, prefix, knex, logger, processors })
             const attempts = job.opts.attempts ?? 1;
             const final = permanent || job.attemptsMade + 1 >= attempts;
             domainMetrics.jobsFailed.inc({ queue });
+            if (queue === 'documents') domainMetrics.documentWorkerFailures.inc();
             logger?.warn(
               {
                 queue,
@@ -75,11 +76,13 @@ export function createWorkerRuntime({ redis, prefix, knex, logger, processors })
                 ),
               );
               domainMetrics.jobsDeadLettered.inc({ queue });
+              if (queue === 'documents') domainMetrics.documentWorkerDlq.inc();
               if (permanent && !(err instanceof UnrecoverableError)) {
                 throw new UnrecoverableError(failureReason(err));
               }
             } else {
               domainMetrics.jobsRetried.inc({ queue });
+              if (queue === 'documents') domainMetrics.documentWorkerRetries.inc();
             }
             throw err;
           }
