@@ -15,8 +15,8 @@ export function RoleHome() {
       <p className="text-sm font-medium text-primary">{ROLE_LABELS[primaryRole(user.roles)]}</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text">Welcome, {firstName}</h1>
       <p className="mt-2 max-w-2xl text-text-muted">
-        Your workspace is ready. Clinical features arrive in upcoming releases; your account and
-        sessions are fully managed today.
+        Everything you can do on HealthBridge is below. In a medical emergency, call 112 or 108 for
+        an ambulance — do not wait for an online consultation.
       </p>
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sections.map((item) => (

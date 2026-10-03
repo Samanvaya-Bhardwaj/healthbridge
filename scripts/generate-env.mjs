@@ -139,6 +139,11 @@ const values = {
   // Consultations (ADR-0025): key-encryption key for clinical notes; mock video locally.
   CLINICAL_DATA_KEY: randomBytes(32).toString('base64'),
   VIDEO_PROVIDER: 'mock',
+
+  // Operator tools (ADR-0027), loopback only: read-only Bull Board in the worker, and
+  // Grafana for `docker compose --profile observability up -d`.
+  BULL_BOARD_PASSWORD: secret(18),
+  GRAFANA_ADMIN_PASSWORD: secret(18),
 };
 
 if (update && existsSync(target)) {

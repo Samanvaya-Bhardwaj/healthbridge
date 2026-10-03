@@ -93,6 +93,9 @@ export const domainMetrics = Object.freeze({
     'event',
   ]),
 
+  // M11: browser errors (PHI-safe: error class and kind only)
+  clientErrors: counter('client_errors_total', 'Errors reported by the web app', ['kind', 'name']),
+
   providerLatency: histogram('payment_provider_duration_seconds', 'Payment provider call latency', [
     'operation',
     'outcome',

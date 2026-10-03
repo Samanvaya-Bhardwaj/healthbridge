@@ -2,11 +2,10 @@ import { PERMISSIONS as P, ROLES } from '@healthbridge/shared';
 
 /**
  * Role-aware navigation. Each section declares the permission it needs; the server
- * enforces the same permissions on every API call, so this only shapes the UI.
- * `milestone` marks sections whose features are delivered later (placeholder pages);
- * sections without it have real pages wired in routes.jsx.
+ * enforces the same permissions on every API call, so this only shapes the UI. Every
+ * section with a path has a page wired in routes.jsx.
  *
- * @typedef {{ key: string, label: string, path: string, permission?: string, milestone?: string, description?: string }} NavItem
+ * @typedef {{ key: string, label: string, path: string, permission?: string, description?: string }} NavItem
  */
 
 /** @type {Record<string, NavItem>} */
@@ -88,7 +87,6 @@ export const SECTIONS = {
     label: 'Users',
     path: 'admin/users',
     permission: P.USERS_READ,
-    milestone: 'M11',
     description: 'Account lookup and administration.',
   },
   verification: {
@@ -110,8 +108,14 @@ export const SECTIONS = {
     label: 'Audit Log',
     path: 'admin/audit',
     permission: P.AUDIT_READ,
-    milestone: 'M11',
     description: 'Security and access audit trail.',
+  },
+  operations: {
+    key: 'operations',
+    label: 'Operations',
+    path: 'admin/operations',
+    permission: P.OPERATIONS_MANAGE,
+    description: 'Background jobs, queues and jobs that need attention.',
   },
   patientProfile: {
     key: 'patientProfile',
@@ -153,7 +157,15 @@ export const ROLE_NAVIGATION = {
     S.doctorProfile,
   ],
   [ROLES.CLINIC_ADMIN]: [S.dashboard, S.clinic, S.appointments, S.account],
-  [ROLES.PLATFORM_ADMIN]: [S.dashboard, S.verification, S.clinics, S.users, S.audit, S.account],
+  [ROLES.PLATFORM_ADMIN]: [
+    S.dashboard,
+    S.verification,
+    S.clinics,
+    S.users,
+    S.audit,
+    S.operations,
+    S.account,
+  ],
   [ROLES.SUPPORT]: [S.dashboard, S.users, S.appointments, S.account],
 };
 
@@ -181,6 +193,3 @@ export function navigationFor(user) {
   const items = ROLE_NAVIGATION[primaryRole(user.roles)] ?? [];
   return items.filter((item) => !item.permission || userHasPermission(user, item.permission));
 }
-
-/** Sections delivered in later milestones (placeholder pages). */
-export const UPCOMING_SECTIONS = Object.values(SECTIONS).filter((s) => s.path && s.milestone);

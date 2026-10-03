@@ -32,5 +32,6 @@ old one.
 | [0024](adr/0024-doctor-brief-patient-scoped-rag.md) | Doctor brief and record questions: consent + opt-in + scope token; hybrid RLS-scoped retrieval; citation/number/support/safety validation; exact insufficient-information fallback | Accepted |
 | [0025](adr/0025-consultations-prescribing.md) | Consultations: waiting room, video adapter, encrypted SOAP notes, outcome A/B/C by the doctor only, signed immutable prescriptions with integrity seal and PDF | Accepted |
 | [0026](adr/0026-followups-notifications.md) | Follow-ups: due sweep, durable reminders, deterministic escalation (warning signs → urgent + fixed guidance), bounded AI summary for the doctor, in-app inbox | Accepted |
+| [0027](adr/0027-admin-observability-account-recovery.md) | Admin UI (users, audit viewer, operations); read-only loopback Bull Board; Prometheus/Grafana profile and AI metrics; content-free browser error reports; password reset and email verification with fragment-delivered single-use tokens | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

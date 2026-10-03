@@ -88,6 +88,11 @@ export function LoginPage() {
           error={errors.password?.message}
           {...register('password')}
         />
+        <p className="-mt-2 text-right text-sm">
+          <Link to="/forgot-password" className="font-medium text-primary hover:text-primary-hover">
+            Forgot your password?
+          </Link>
+        </p>
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </Button>

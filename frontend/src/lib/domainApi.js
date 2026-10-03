@@ -59,6 +59,21 @@ export const adminApi = {
   appointClinicAdmin: (clinicId, userId) =>
     data(apiRequest(`/admin/clinics/${clinicId}/admins`, { method: 'POST', body: { userId } })),
   findUsers: (q) => data(apiRequest(`/admin/users${qs({ q, limit: 5 })}`)),
+  // M11: user administration, audit trail and operations (paged calls return { data, meta }).
+  users: (params = {}) => apiRequest(`/admin/users${qs({ limit: 25, ...params })}`),
+  user: (id) => data(apiRequest(`/admin/users/${id}`)),
+  setUserStatus: (id, body) =>
+    data(apiRequest(`/admin/users/${id}/status`, { method: 'PATCH', body })),
+  grantRole: (id, role) => data(apiRequest(`/admin/users/${id}/roles/${role}`, { method: 'PUT' })),
+  revokeRole: (id, role) =>
+    data(apiRequest(`/admin/users/${id}/roles/${role}`, { method: 'DELETE' })),
+  revokeSessions: (id) =>
+    data(apiRequest(`/admin/users/${id}/sessions/revoke`, { method: 'POST' })),
+  auditLogs: (params = {}) => apiRequest(`/admin/audit-logs${qs({ limit: 50, ...params })}`),
+  operationsSummary: () => data(apiRequest('/admin/operations/summary')),
+  deadLetters: (status) => data(apiRequest(`/admin/operations/dead-letters${qs({ status })}`)),
+  retryDeadLetter: (id) =>
+    data(apiRequest(`/admin/operations/dead-letters/${id}/retry`, { method: 'POST' })),
 };
 
 export const schedulingApi = {

@@ -463,3 +463,17 @@ Neither runtime role may DELETE AI rows. pgvector lives in the `extensions` sche
 
 The `timeline` purpose has read-only policies on `appointments`, `medical_documents`,
 `document_metadata` and `lab_results`.
+
+## Account recovery (M11)
+
+`account_tokens` has the columns `id`, `user_id`, `purpose` (`password_reset` |
+`email_verification`), `token_hash` (SHA-256 hex), `created_at`, `expires_at` and
+`used_at`.
+
+- **Lifetime:** `expires_at` must be after `created_at` and at most **48 h** later (the
+  app uses 30 min for resets and 24 h for verification).
+- **Consume-only:** a trigger lets the app set `used_at` once and change nothing else.
+  `DELETE`/`TRUNCATE` are revoked from `hb_app`.
+- **Replacement:** issuing a new token consumes the user's open tokens for the same
+  purpose. The partial index `(user_id, purpose) WHERE used_at IS NULL` supports this.
+- **Sessions:** `sessions.revoked_reason` also allows `password_reset`.

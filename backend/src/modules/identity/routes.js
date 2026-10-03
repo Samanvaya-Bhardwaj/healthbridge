@@ -3,9 +3,12 @@ import { z } from 'zod';
 import {
   PERMISSIONS,
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   registerSchema,
+  resetPasswordSchema,
   updateAccountSchema,
+  verifyEmailSchema,
 } from '@healthbridge/shared';
 import { validate } from '../../core/http/validate.js';
 import { rateLimit } from '../../core/http/rateLimit.js';
@@ -20,6 +23,9 @@ import { sha256Hex } from '../../core/auth/secrets.js';
 import { principalView } from '../../core/authz/principal.js';
 import { UnauthorizedError } from '../../core/http/errors.js';
 
+const RESET_REQUEST_MESSAGE =
+  'If an account uses this email, we have sent a link to reset the password. ' +
+  'The link works for 30 minutes.';
 const REGISTRATION_ACCEPTED_MESSAGE =
   'Thanks. If this email can be used for a new account, you can now sign in. ' +
   'If you already have an account, sign in or check your email.';
@@ -29,8 +35,16 @@ const REGISTRATION_ACCEPTED_MESSAGE =
  * @param {ReturnType<typeof import('../../container.js').createContainer>} container
  */
 export function identityRoutes(container) {
-  const { config, redis, authService, accountService, accessPolicy, authenticate, rateLimits } =
-    container;
+  const {
+    config,
+    redis,
+    authService,
+    accountService,
+    accountRecovery,
+    accessPolicy,
+    authenticate,
+    rateLimits,
+  } = container;
   const router = Router();
   const cookieSecure = config.auth.cookieSecure;
   const csrf = requireCsrf({ allowedOrigins: config.http.corsOrigins });
@@ -147,6 +161,52 @@ export function identityRoutes(container) {
     async (req, res) => {
       res.set('Cache-Control', 'no-store');
       res.json({ data: await accountService.getAccount(req.principal) });
+    },
+  );
+
+  // ── Account recovery (M11): single-use emailed links, no enumeration ──
+
+  router.post(
+    '/auth/password/forgot',
+    limiter('passwordResetIp'),
+    validate({ body: forgotPasswordSchema }),
+    limiter('passwordResetAccount', (req) => sha256Hex(req.valid.body.email)),
+    (req, res) => {
+      accountRecovery.requestPasswordReset(req.valid.body, req);
+      res.set('Cache-Control', 'no-store');
+      res.status(202).json({ data: { status: 'received', message: RESET_REQUEST_MESSAGE } });
+    },
+  );
+
+  router.post(
+    '/auth/password/reset',
+    limiter('accountTokenIp'),
+    validate({ body: resetPasswordSchema }),
+    async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      res.json({ data: await accountRecovery.resetPassword(req.valid.body, req) });
+    },
+  );
+
+  router.post(
+    '/auth/email/verify',
+    limiter('accountTokenIp'),
+    validate({ body: verifyEmailSchema }),
+    async (req, res) => {
+      res.set('Cache-Control', 'no-store');
+      res.json({ data: await accountRecovery.verifyEmail(req.valid.body, req) });
+    },
+  );
+
+  router.post(
+    '/users/me/email-verification',
+    authenticate(),
+    accessPolicy.requirePermission(PERMISSIONS.ACCOUNT_READ),
+    limiter('emailVerification', (req) => req.principal.userId),
+    async (req, res) => {
+      res
+        .status(202)
+        .json({ data: await accountRecovery.sendEmailVerification(req.principal.userId, req) });
     },
   );
 

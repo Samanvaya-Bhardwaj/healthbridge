@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import { Button } from '../components/ui/Button.jsx';
+import { reportClientError } from '../lib/errorReporting.js';
 
 /** Last-resort boundary: keeps a rendering failure from blanking the whole application. */
 export class ErrorBoundary extends Component {
@@ -10,7 +11,8 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // Error tracking (PHI-scrubbed) is wired in the observability milestone.
+    // Only the error class and route leave the browser (lib/errorReporting.js).
+    reportClientError('render_error', error);
     console.error('Unhandled UI error', error, info?.componentStack);
   }
 

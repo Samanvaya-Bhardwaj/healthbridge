@@ -14,6 +14,7 @@ export const REVOKE_REASONS = Object.freeze({
   USER_REVOKED: 'user_revoked',
   ADMIN_REVOKED: 'admin_revoked',
   PASSWORD_CHANGED: 'password_changed',
+  PASSWORD_RESET: 'password_reset',
   ACCOUNT_DISABLED: 'account_disabled',
   REFRESH_TOKEN_REUSE: 'refresh_token_reuse',
   EXPIRED: 'expired',

@@ -24,6 +24,10 @@ const SESSION_ENDPOINTS = new Set([
   '/auth/register',
   '/auth/refresh',
   '/auth/logout',
+  // Account recovery is anonymous by design (the emailed link is the credential).
+  '/auth/password/forgot',
+  '/auth/password/reset',
+  '/auth/email/verify',
 ]);
 const CSRF_ENDPOINTS = new Set(['/auth/refresh', '/auth/logout']);
 

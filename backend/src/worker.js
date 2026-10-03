@@ -10,6 +10,7 @@ import { createWorkerRuntime } from './core/queue/workerRuntime.js';
 import { failureReason } from './core/queue/deadLetters.js';
 import { createContainer } from './container.js';
 import { createAiClient } from './core/ai/client.js';
+import { createBullBoardApp } from './core/queue/bullBoard.js';
 import { createJobProcessors, registerSchedules } from './workers/handlers.js';
 
 const SHUTDOWN_GRACE_MS = 30_000;
@@ -89,6 +90,12 @@ async function main() {
   }).listen(config.workers.metricsPort, () =>
     logger.info({ port: config.workers.metricsPort }, 'worker metrics listening'),
   );
+  const { bullBoard } = config.workers;
+  const boardServer = bullBoard.enabled
+    ? createBullBoardApp({ queues, ...bullBoard, logger }).listen(bullBoard.port, () =>
+        logger.info({ port: bullBoard.port }, 'bull board listening (read-only)'),
+      )
+    : null;
   logger.info({ provider: container.paymentProvider.name }, 'worker started');
 
   let shuttingDown = false;
@@ -112,6 +119,7 @@ async function main() {
     await redis.del(heartbeatKey).catch(() => {});
     await Promise.allSettled([redis.quit(), knex.destroy()]);
     await new Promise((resolve) => metricsServer.close(resolve));
+    if (boardServer) await new Promise((resolve) => boardServer.close(resolve));
     logger.info('worker shutdown complete');
     process.exit(0);
   };

@@ -27,8 +27,8 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M8** | Doctor brief and patient-scoped RAG with citation validation and fallback | ✅ Complete |
 | **M9** | Consultation and prescribing: waiting room, video adapter, SOAP notes, outcome A/B/C, signed immutable prescriptions + PDF | ✅ Complete |
 | **M10** | Follow-ups and notifications: check-ins, reminders, rule-based escalation, AI summary for doctors, in-app inbox | ✅ Complete |
-| M11 | Admin, observability, hardening | Next |
-| M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
+| **M11** | Admin UI (users, audit log, operations), Bull Board, metrics and dashboards, password reset and email verification, Playwright e2e, OWASP review | ✅ Complete |
+| M12 | Production deployment: TLS, backups and restore drill, staging, CD | Next |
 
 ## Architecture at a glance
 

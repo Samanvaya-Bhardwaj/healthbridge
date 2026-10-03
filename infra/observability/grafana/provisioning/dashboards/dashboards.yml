@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: healthbridge
+    folder: HealthBridge
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

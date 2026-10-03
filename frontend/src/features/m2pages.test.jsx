@@ -50,7 +50,8 @@ describe('patient profile', () => {
       await screen.findByRole('heading', { name: 'Create your health profile' }),
     ).toBeInTheDocument();
     const ue = userEvent.setup();
-    await ue.type(screen.getByLabelText('Full name'), 'Asha Rao');
+    // The account name is offered as a starting point.
+    expect(screen.getByLabelText('Full name')).toHaveValue('Asha Rao');
     await ue.type(screen.getByLabelText('Date of birth'), '1990-05-14');
     await ue.click(screen.getByRole('button', { name: 'Create profile' }));
     await screen.findByText('Saved.');
@@ -64,7 +65,6 @@ describe('patient profile', () => {
     renderAt('/app/profile');
     const ue = userEvent.setup();
     await screen.findByRole('heading', { name: 'Create your health profile' });
-    await ue.type(screen.getByLabelText('Full name'), 'Asha Rao');
     await ue.type(screen.getByLabelText('Date of birth'), '1990-05-14');
     await ue.type(screen.getByLabelText('Name'), 'Ravi');
     await ue.click(screen.getByRole('button', { name: 'Create profile' }));

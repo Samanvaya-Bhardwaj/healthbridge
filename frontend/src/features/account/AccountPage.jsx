@@ -176,6 +176,33 @@ function ChangePasswordCard() {
   );
 }
 
+/** Email confirmation state; the confirmation link is sent by email (M11). */
+function EmailStatus() {
+  const account = useQuery({ queryKey: ['account'], queryFn: authApi.fetchAccount });
+  const resend = useMutation({ mutationFn: authApi.resendEmailVerification });
+  if (!account.data) return null;
+  if (account.data.emailVerifiedAt) {
+    return <p className="mt-1 text-xs text-success">Confirmed</p>;
+  }
+  return (
+    <div className="mt-1 space-y-1">
+      <p className="text-xs text-warning">Not confirmed yet</p>
+      {resend.data ? (
+        <p className="text-xs text-text-muted" role="status">
+          {resend.data.status === 'already_verified'
+            ? 'Your email is already confirmed.'
+            : 'We sent a confirmation link. It works for 24 hours.'}
+        </p>
+      ) : (
+        <Button variant="ghost" disabled={resend.isPending} onClick={() => resend.mutate()}>
+          Send confirmation email
+        </Button>
+      )}
+      {resend.isError && <p className="text-xs text-danger">{authErrorMessage(resend.error)}</p>}
+    </div>
+  );
+}
+
 export function AccountPage() {
   const { user } = useAuth();
   return (
@@ -194,6 +221,7 @@ export function AccountPage() {
           <div>
             <dt className="text-text-subtle">Email</dt>
             <dd className="mt-1 font-medium text-text">{user.email}</dd>
+            <EmailStatus />
           </div>
           <div>
             <dt className="text-text-subtle">Roles</dt>

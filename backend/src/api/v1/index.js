@@ -16,6 +16,7 @@ import { timelineRoutes } from '../../modules/timeline/routes.js';
 import { assistRoutes } from '../../modules/assist/routes.js';
 import { consultationRoutes } from '../../modules/consultations/routes.js';
 import { followUpRoutes } from '../../modules/followups/routes.js';
+import { telemetryRoutes } from '../../modules/telemetry/routes.js';
 
 /**
  * Versioned public API. Feature modules mount their routers here.
@@ -40,6 +41,7 @@ export function apiV1Router({ config, version, container }) {
     });
   });
 
+  router.use(telemetryRoutes(container));
   router.use(identityRoutes(container));
   router.use(adminRoutes(container));
   router.use(patientRoutes(container));

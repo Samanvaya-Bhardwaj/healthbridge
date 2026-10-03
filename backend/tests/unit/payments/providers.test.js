@@ -288,6 +288,8 @@ describe('payment and notification configuration', () => {
     LIVEKIT_URL: 'wss://video.example.test',
     LIVEKIT_API_KEY: 'test-key',
     LIVEKIT_API_SECRET: 'test-only-livekit-secret-0123456789abcdef',
+    // M11: emailed links must use the real https app URL.
+    PUBLIC_APP_URL: 'https://app.example.test',
   };
 
   it('defaults to the fake provider and simulation outside production', () => {

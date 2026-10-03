@@ -9,6 +9,7 @@ is added with the AI execution-record tables (ADR-0012).
 import logging
 
 from app.core.logging import log_event, request_id_ctx
+from app.core.metrics import LLM_CALLS, LLM_COST, LLM_LATENCY, LLM_TOKENS
 from app.llm.base import LLMError, LLMProvider, LLMRequest, LLMResponse, ModelTier, StopReason
 
 logger = logging.getLogger("healthbridge.ai.llm")
@@ -43,6 +44,9 @@ class InstrumentedLLMProvider(LLMProvider):
         try:
             response = await self._inner.generate(request)
         except LLMError as exc:
+            LLM_CALLS.labels(
+                request.workflow, self._inner.name, base["requestedModel"], "error"
+            ).inc()
             log_event(
                 logger,
                 logging.WARNING,
@@ -56,12 +60,20 @@ class InstrumentedLLMProvider(LLMProvider):
             )
             raise
 
+        status = "refused" if response.stop_reason is StopReason.REFUSAL else "ok"
+        LLM_CALLS.labels(request.workflow, self._inner.name, response.model, status).inc()
+        LLM_LATENCY.labels(request.workflow, self._inner.name).observe(response.latency_ms / 1000)
+        tokens = LLM_TOKENS.labels
+        tokens(request.workflow, response.model, "input").inc(response.usage.input_tokens)
+        tokens(request.workflow, response.model, "output").inc(response.usage.output_tokens)
+        if response.estimated_cost_usd:
+            LLM_COST.labels(request.workflow, response.model).inc(response.estimated_cost_usd)
         log_event(
             logger,
             logging.INFO,
             "llm call completed",
             **base,
-            status="refused" if response.stop_reason is StopReason.REFUSAL else "ok",
+            status=status,
             model=response.model,
             stopReason=response.stop_reason.value,
             latencyMs=response.latency_ms,

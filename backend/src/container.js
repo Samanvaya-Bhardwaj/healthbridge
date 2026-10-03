@@ -8,6 +8,7 @@ import { createUserRepository } from './modules/identity/repositories/userReposi
 import { createRoleRepository } from './modules/identity/repositories/roleRepository.js';
 import { createSessionRepository } from './modules/identity/repositories/sessionRepository.js';
 import { createAuthService } from './modules/identity/authService.js';
+import { createAccountRecoveryService } from './modules/identity/accountRecoveryService.js';
 import { createAccountService } from './modules/identity/accountService.js';
 import { createAdminUserService } from './modules/admin/service.js';
 import { createCareAccess } from './modules/care-access/relationships.js';
@@ -60,6 +61,10 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
   loginAccount: { points: 10, durationSeconds: 900 }, // per account (hashed email)
   refresh: { points: 60, durationSeconds: 60 }, // per IP
   passwordChange: { points: 5, durationSeconds: 900 }, // per user
+  passwordResetIp: { points: 10, durationSeconds: 3600 }, // per IP
+  passwordResetAccount: { points: 3, durationSeconds: 3600 }, // per account (hashed email)
+  accountTokenIp: { points: 30, durationSeconds: 900 }, // per IP: reset / verify submissions
+  emailVerification: { points: 5, durationSeconds: 3600 }, // per user
   careInvite: { points: 20, durationSeconds: 3600 }, // per doctor
 });
 
@@ -142,6 +147,17 @@ export function createContainer({
   const consents = createConsentRepository();
   const medicalDocuments = createDocumentRepository();
 
+  const accountRecovery = createAccountRecoveryService({
+    knex,
+    users,
+    sessions,
+    hasher,
+    audit,
+    mailer,
+    logger,
+    appUrl: config.http.publicAppUrl,
+    ...(now ? { now } : {}),
+  });
   const authService = createAuthService({
     knex,
     users,
@@ -152,6 +168,8 @@ export function createContainer({
     audit,
     mailer,
     logger,
+    // New accounts receive an email-verification link (sent after the response).
+    onRegistered: (userId, req) => accountRecovery.sendEmailVerification(userId, req),
     sessionLifetimes: config.auth.session,
     ...(now ? { now } : {}),
   });
@@ -350,6 +368,7 @@ export function createContainer({
     tokens,
     accessPolicy,
     authService,
+    accountRecovery,
     accountService,
     adminUserService,
     patientService,

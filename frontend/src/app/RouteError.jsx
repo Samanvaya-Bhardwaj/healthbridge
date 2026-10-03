@@ -1,10 +1,16 @@
+import { useEffect } from 'react';
 import { isRouteErrorResponse, Link, useRouteError } from 'react-router';
 import { ErrorFallback } from './ErrorBoundary.jsx';
+import { reportClientError } from '../lib/errorReporting.js';
 
 /** Route-level error element: renders inside the router so navigation keeps working. */
 export function RouteError() {
   const error = useRouteError();
-  if (isRouteErrorResponse(error) && error.status === 404) return <NotFound />;
+  const notFound = isRouteErrorResponse(error) && error.status === 404;
+  useEffect(() => {
+    if (!notFound) reportClientError('render_error', error);
+  }, [error, notFound]);
+  if (notFound) return <NotFound />;
   return <ErrorFallback onRetry={() => window.location.reload()} />;
 }
 

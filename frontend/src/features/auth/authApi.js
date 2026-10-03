@@ -58,3 +58,14 @@ export const revokeOtherSessions = () =>
   apiRequest('/auth/sessions/revoke-others', { method: 'POST' });
 export const changePassword = (input) =>
   apiRequest('/users/me/password', { method: 'POST', body: input });
+
+// Account recovery (M11): the emailed token is read from the URL fragment, never a query.
+export const requestPasswordReset = (email) =>
+  apiRequest('/auth/password/forgot', { method: 'POST', body: { email } });
+export const resetPassword = (input) =>
+  apiRequest('/auth/password/reset', { method: 'POST', body: input });
+export const verifyEmail = (token) =>
+  apiRequest('/auth/email/verify', { method: 'POST', body: { token } });
+export const resendEmailVerification = async () =>
+  (await apiRequest('/users/me/email-verification', { method: 'POST' })).data;
+export const fetchAccount = async () => (await apiRequest('/users/me')).data;

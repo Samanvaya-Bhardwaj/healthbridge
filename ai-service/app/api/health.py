@@ -3,8 +3,10 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
+
+from app.core.metrics import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
 
 router = APIRouter(tags=["health"])
 
@@ -41,3 +43,9 @@ async def ready(request: Request) -> JSONResponse:
         },
         status_code=200 if healthy else 503,
     )
+
+
+@router.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    """Prometheus scrape endpoint (private network only; metadata, no content)."""
+    return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)

@@ -1,0 +1,57 @@
+# Alert rules (M11). Routed to a pager through Alertmanager in production (M12); locally
+# they are visible on the Prometheus "Alerts" page.
+groups:
+  - name: healthbridge-availability
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"api|worker|ai-service"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: '{{ $labels.job }} is not answering metrics scrapes'
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_request_duration_seconds_count[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'More than 5% of API requests fail with 5xx'
+      - alert: ApiSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'API p95 latency above 1 s'
+
+  - name: healthbridge-background
+    rules:
+      - alert: OutboxRelayFailing
+        expr: increase(outbox_events_failed_total[10m]) > 10
+        labels: { severity: warning }
+        annotations:
+          summary: 'Outbox relay cannot reach the job queue (events wait in PostgreSQL)'
+      - alert: JobsDeadLettered
+        expr: increase(queue_jobs_dlq_total[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: 'Jobs exhausted their retries; review Admin → Operations'
+      - alert: PaymentWebhooksRejected
+        expr: increase(payment_webhooks_invalid_total[15m]) > 5
+        labels: { severity: warning }
+        annotations:
+          summary: 'Payment webhooks failing signature or schema checks'
+
+  - name: healthbridge-clients-and-ai
+    rules:
+      - alert: ClientErrorSpike
+        expr: increase(client_errors_total[10m]) > 20
+        labels: { severity: warning }
+        annotations:
+          summary: 'Many browser errors reported (error class only, no content)'
+      - alert: LlmCallsFailing
+        expr: increase(ai_llm_calls_total{status="error"}[15m]) > 5
+        labels: { severity: warning }
+        annotations:
+          summary: 'LLM provider errors; AI features fall back to the safe message'

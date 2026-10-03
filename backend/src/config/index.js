@@ -25,6 +25,8 @@ const envSchema = z
     API_PORT: port.default(4000),
     METRICS_PORT: port.default(9464),
     CORS_ORIGINS: csv.default([]),
+    // Base URL of the web app, used in emailed links (password reset, email verification).
+    PUBLIC_APP_URL: optional(z.url().refine((u) => !u.endsWith('/'), 'must not end with a slash')),
     TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
 
     DB_HOST: z.string().min(1),
@@ -116,6 +118,10 @@ const envSchema = z
 
     // ── Workers ──
     WORKER_METRICS_PORT: port.default(9465),
+    // Bull Board (ADR-0027): internal operator view; disabled unless a password is set.
+    BULL_BOARD_PORT: port.default(9466),
+    BULL_BOARD_USERNAME: z.string().min(3).max(64).default('ops'),
+    BULL_BOARD_PASSWORD: optional(z.string().min(16, 'must be at least 16 characters')),
     QUEUE_PREFIX: z
       .string()
       .regex(/^[a-z][a-z0-9-]{0,30}$/)
@@ -140,6 +146,17 @@ const envSchema = z
         code: 'custom',
         path: ['AUTH_COOKIE_SECURE'],
         message: 'secure cookies are required outside development/test',
+      });
+    }
+    // Emailed links must point at the real, TLS-protected app outside development.
+    if (
+      ['staging', 'production'].includes(env.APP_ENV) &&
+      !env.PUBLIC_APP_URL?.startsWith('https://')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PUBLIC_APP_URL'],
+        message: 'an https:// app URL is required outside development/test',
       });
     }
     // Payments: no fake provider in production; no live keys (real money) elsewhere.
@@ -315,6 +332,7 @@ export function loadConfig(env = process.env) {
       port: e.API_PORT,
       metricsPort: e.METRICS_PORT,
       corsOrigins: e.CORS_ORIGINS,
+      publicAppUrl: e.PUBLIC_APP_URL ?? e.CORS_ORIGINS[0] ?? 'http://localhost:8080',
       trustProxy: e.TRUST_PROXY,
     },
     db: {
@@ -357,6 +375,12 @@ export function loadConfig(env = process.env) {
     },
     workers: {
       metricsPort: e.WORKER_METRICS_PORT,
+      bullBoard: {
+        enabled: Boolean(e.BULL_BOARD_PASSWORD),
+        port: e.BULL_BOARD_PORT,
+        username: e.BULL_BOARD_USERNAME,
+        password: e.BULL_BOARD_PASSWORD,
+      },
       queuePrefix: e.QUEUE_PREFIX,
       maxAttempts: e.JOB_MAX_ATTEMPTS,
       backoffMs: e.JOB_BACKOFF_MS,

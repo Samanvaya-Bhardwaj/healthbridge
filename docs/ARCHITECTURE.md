@@ -273,6 +273,19 @@ routes → controllers → application services → domain (pure rules) → repo
 - **Inbox:** every notification also lands in a per-user in-app inbox
   ([ADR-0026](adr/0026-followups-notifications.md)).
 
+### Administration, observability and account recovery (M11)
+
+- **Admin UI:** user lookup and administration (reason codes, workflow-only roles), an
+  audit viewer with validated filters, and an operations page (outbox, queues, dead letters
+  with audited retry). None of it opens clinical records.
+- **Operator tools:** Bull Board runs inside the worker, read-only, on a loopback-only
+  port. Prometheus and Grafana come with the optional `observability` Compose profile.
+  The AI service now exposes metadata-only metrics.
+- **Browser errors:** reported with the error class and route template only.
+- **Account recovery:** password reset and email verification with single-use hashed
+  tokens delivered in link fragments. A reset revokes every session
+  ([ADR-0027](adr/0027-admin-observability-account-recovery.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -298,9 +311,18 @@ routes → controllers → application services → domain (pure rules) → repo
   `document_downloads_total`, `document_access_denied_total`, `consent_granted_total`,
   `consent_revoked_total`, `consent_denied_total`,
   `document_worker_{failures,retries,dlq}_total`.
+- M11:
+  - The AI service exposes `/metrics` on the private network:
+    `ai_http_request_duration_seconds`, `ai_llm_calls_total{workflow,provider,model,status}`,
+    `ai_llm_call_duration_seconds`, `ai_llm_tokens_total{direction}` and
+    `ai_llm_estimated_cost_usd_total`.
+  - The API counts `client_errors_total{kind,name}`.
+  - `docker compose --profile observability up -d` adds Prometheus (with the alert rules in
+    `infra/observability/alerts.yml`) and Grafana (provisioned "HealthBridge overview"
+    dashboard). Both listen on 127.0.0.1.
 
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M10 complete (follow-ups and notifications).**
+Current status: **M11 complete (administration, observability, account recovery, e2e, security review).**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

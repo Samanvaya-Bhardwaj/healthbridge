@@ -24,10 +24,12 @@ const COLUMNS = [
 export function createAuditRepository({ knex }) {
   /**
    * Keyset pagination, newest first.
-   * @param {{ actorUserId?: string, action?: string, outcome?: string, category?: string, requestId?: string, from?: Date, to?: Date, cursor?: string, limit: number }} filter
+   * @param {{ actorUserId?: string, patientId?: string, resourceType?: string, action?: string, outcome?: string, category?: string, requestId?: string, from?: Date, to?: Date, cursor?: string, limit: number }} filter
    */
   async function list({
     actorUserId,
+    patientId,
+    resourceType,
     action,
     outcome,
     category,
@@ -39,6 +41,8 @@ export function createAuditRepository({ knex }) {
   }) {
     const query = knex('audit.audit_logs').select(COLUMNS);
     if (actorUserId) query.where('actor_user_id', actorUserId);
+    if (patientId) query.where('patient_id', patientId);
+    if (resourceType) query.where('resource_type', resourceType);
     if (action) query.where('action', action);
     if (outcome) query.where('outcome', outcome);
     if (category) query.where('category', category);

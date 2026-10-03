@@ -1,6 +1,6 @@
 # Security model
 
-Status: M2 (identity, sessions, RBAC, audit, patient-scoped authorization, RLS). This document describes the controls that
+Status: M11 (all Phase 1 controls; see also the OWASP review in [SECURITY_REVIEW.md](SECURITY_REVIEW.md)). This document describes the controls that
 exist in the code today. Planned controls are labelled as such. It is not a compliance
 statement (see ADR-0008).
 
@@ -86,7 +86,7 @@ Public registration only ever creates PATIENT accounts.
 - SMS has no real provider yet (the fake records messages only).
 
 - MFA (TOTP) for staff roles: Phase 2.
-- Email verification and password reset: later milestone.
+- Email verification and password reset: delivered in M11 (see below).
 - Breached-password checks (k-anonymity).
 - Lock-event alerting.
 - Audit hash chaining and external immutable storage: Phase 2.
@@ -349,3 +349,34 @@ Each layer is tested on its own:
     medicines.
   - Inbox rows are visible only to their owner, only their read time can change, and
     they cannot be deleted.
+
+## Administration, observability and account recovery (M11, ADR-0027)
+
+- **Admin UI:**
+  - Account administration uses reason codes, never free text.
+  - Doctor and clinic roles can be granted only through their workflows.
+  - Every read and search is audited.
+  - Support can look accounts up but cannot change them, read the audit log or run
+    operations.
+- **Deny by default:** a test walks every API route and requires 401 for anonymous
+  callers, except the public allowlist in `routeSecurity.test.js`.
+- **Bull Board:**
+  - It is read-only and runs in the worker on a loopback-only port, never through Nginx.
+  - Basic auth is compared in constant time, and credentials are never logged.
+  - It is disabled without a 16-character or longer password.
+  - Job data is identifiers only.
+- **Metrics:** labels are low-cardinality enums. The AI metrics carry workflow, model,
+  status, latency, tokens and spend, never content. Prometheus and Grafana bind to
+  127.0.0.1, and Grafana requires an admin password (no anonymous access, no sign-up).
+- **Browser error reports:** they contain the error class, kind and route template (IDs
+  replaced). Messages and stacks are never sent because they can contain on-screen PHI.
+- **Password reset:**
+  - Tokens are single-use, 256-bit and stored hashed. They expire after 30 minutes and are
+    replaced by newer links.
+  - They are delivered in the link **fragment**, so they never reach servers or logs, and
+    the page strips them from the address bar.
+  - Requests are enumeration-safe in both content and timing.
+  - A reset revokes all sessions, lifts the lockout and sends a notice.
+  - **Residual:** email is the recovery factor until MFA (Phase 2).
+- **Email verification:** the link is sent at registration and on request, expires after
+  24 hours and is single-use.

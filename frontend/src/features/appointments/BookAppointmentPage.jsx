@@ -188,8 +188,7 @@ export function BookAppointmentPage() {
           )}
           {selected.feePaise > 0 && (
             <Alert tone="info" className="mt-4">
-              This time is held for 15 minutes while payment is completed. Online payment arrives in
-              an upcoming release.
+              This time is held for 15 minutes while you complete payment on the next step.
             </Alert>
           )}
           {submit.isError && (

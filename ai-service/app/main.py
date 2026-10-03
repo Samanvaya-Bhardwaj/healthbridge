@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import Database, DatabaseLike
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, log_event, request_id_ctx
+from app.core.metrics import HTTP_DURATION
 from app.embeddings import EmbeddingProvider, HashingEmbeddingProvider, VoyageEmbeddingProvider
 from app.llm.base import LLMProvider
 from app.llm.factory import build_llm_provider
@@ -89,7 +90,12 @@ def create_app(
         try:
             response = await call_next(request)
             response.headers["X-Request-Id"] = request_id
-            if not request.url.path.startswith("/health"):
+            route = request.scope.get("route")
+            # Route templates only (never raw paths, which may carry identifiers).
+            HTTP_DURATION.labels(
+                request.method, getattr(route, "path", "unmatched"), str(response.status_code)
+            ).observe(time.perf_counter() - started)
+            if not request.url.path.startswith(("/health", "/metrics")):
                 log_event(
                     logger,
                     logging.INFO,

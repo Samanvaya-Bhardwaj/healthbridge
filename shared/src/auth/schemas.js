@@ -57,3 +57,21 @@ export const changePasswordSchema = z
   .strict();
 
 export const updateAccountSchema = z.object({ fullName: fullNameSchema }).strict();
+
+/**
+ * Single-use account tokens (password reset, email verification): `<uuid>.<secret>`,
+ * delivered by email in a link fragment and never logged.
+ */
+export const ACCOUNT_TOKEN_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/;
+const accountTokenSchema = z
+  .string({ error: 'This link is incomplete.' })
+  .regex(ACCOUNT_TOKEN_PATTERN, 'This link is incomplete or has been altered.');
+
+export const forgotPasswordSchema = z.object({ email: emailSchema }).strict();
+
+export const resetPasswordSchema = z
+  .object({ token: accountTokenSchema, newPassword: newPasswordSchema })
+  .strict();
+
+export const verifyEmailSchema = z.object({ token: accountTokenSchema }).strict();

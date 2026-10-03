@@ -17,6 +17,7 @@ const STATUS_TONES = {
   unverified: 'neutral',
   rejected: 'danger',
   suspended: 'danger',
+  disabled: 'danger',
   ended: 'neutral',
   // Appointments and payments (M3/M4)
   confirmed: 'success',

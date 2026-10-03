@@ -119,6 +119,27 @@ export function createUserRepository({ knex }) {
         .update({ password_hash: passwordHash, password_changed_at: knex.fn.now() });
     },
 
+    /** After a password reset: the email link proves ownership; the lockout is lifted. */
+    async completePasswordReset(id, passwordHash, trx) {
+      await db(trx)('users')
+        .where({ id })
+        .update({
+          password_hash: passwordHash,
+          password_changed_at: knex.fn.now(),
+          failed_login_attempts: 0,
+          locked_until: null,
+          email_verified_at: knex.raw('COALESCE(email_verified_at, now())'),
+        });
+    },
+
+    async markEmailVerified(id, trx) {
+      const count = await db(trx)('users')
+        .where({ id })
+        .whereNull('email_verified_at')
+        .update({ email_verified_at: knex.fn.now() });
+      return count > 0;
+    },
+
     async updateProfile(id, { fullName }, trx) {
       await db(trx)('users').where({ id }).update({ full_name: fullName });
     },

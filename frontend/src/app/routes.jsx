@@ -2,12 +2,16 @@ import { PERMISSIONS } from '@healthbridge/shared';
 import { PublicLayout } from './layouts/PublicLayout.jsx';
 import { AppLayout } from './layouts/AppLayout.jsx';
 import { RouteError, NotFound } from './RouteError.jsx';
-import { SECTIONS, UPCOMING_SECTIONS } from './navigation.js';
+import { SECTIONS } from './navigation.js';
 import { HomePage } from '../features/home/HomePage.jsx';
 import { RoleHome } from '../features/home/RoleHome.jsx';
-import { UpcomingSection } from '../features/home/UpcomingSection.jsx';
 import { LoginPage } from '../features/auth/LoginPage.jsx';
 import { RegisterPage } from '../features/auth/RegisterPage.jsx';
+import {
+  ForgotPasswordPage,
+  ResetPasswordPage,
+  VerifyEmailPage,
+} from '../features/auth/AccountRecoveryPages.jsx';
 import { RequireAuth, RequirePermission } from '../features/auth/guards.jsx';
 import { AccountPage } from '../features/account/AccountPage.jsx';
 import { ProfilePage } from '../features/patients/ProfilePage.jsx';
@@ -16,6 +20,9 @@ import { DoctorProfilePage } from '../features/doctors/DoctorProfilePage.jsx';
 import { DoctorPatientsPage } from '../features/doctors/DoctorPatientsPage.jsx';
 import { VerificationQueuePage } from '../features/admin/VerificationQueuePage.jsx';
 import { ClinicsAdminPage } from '../features/admin/ClinicsAdminPage.jsx';
+import { UsersAdminPage } from '../features/admin/UsersAdminPage.jsx';
+import { AuditLogPage } from '../features/admin/AuditLogPage.jsx';
+import { OperationsPage } from '../features/admin/OperationsPage.jsx';
 import { ClinicPage } from '../features/clinics/ClinicPage.jsx';
 import { AppointmentsPage } from '../features/appointments/AppointmentsPage.jsx';
 import { BookAppointmentPage } from '../features/appointments/BookAppointmentPage.jsx';
@@ -52,6 +59,9 @@ const PAGES = [
   [SECTIONS.medicalRecords, <DoctorRecordsPage key="medical-records" />],
   [SECTIONS.followUps, <FollowUpsPage key="follow-ups" />],
   [SECTIONS.notifications, <InboxPage key="notifications" />],
+  [SECTIONS.users, <UsersAdminPage key="users" />],
+  [SECTIONS.audit, <AuditLogPage key="audit" />],
+  [SECTIONS.operations, <OperationsPage key="operations" />],
 ];
 
 /**
@@ -66,6 +76,9 @@ export const routes = [
       { index: true, element: <HomePage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
+      { path: 'forgot-password', element: <ForgotPasswordPage /> },
+      { path: 'reset-password', element: <ResetPasswordPage /> },
+      { path: 'verify-email', element: <VerifyEmailPage /> },
     ],
   },
   {
@@ -101,10 +114,6 @@ export const routes = [
           ...PAGES.map(([section, element]) => ({
             path: section.path,
             element: guarded(section.permission, element),
-          })),
-          ...UPCOMING_SECTIONS.map((section) => ({
-            path: section.path,
-            element: guarded(section.permission, <UpcomingSection section={section} />),
           })),
           { path: '*', element: <NotFound /> },
         ],

@@ -34,7 +34,15 @@ const auditQuery = z
   .object({
     ...paginationQuery,
     actorUserId: z.uuid().optional(),
-    action: z.string().max(80).optional(),
+    patientId: z.uuid().optional(),
+    resourceType: z
+      .string()
+      .regex(/^[a-z_]{1,40}$/)
+      .optional(),
+    action: z
+      .string()
+      .regex(/^[a-z_.]{1,80}$/)
+      .optional(),
     outcome: z.enum(['success', 'failure', 'denied']).optional(),
     category: z
       .enum([

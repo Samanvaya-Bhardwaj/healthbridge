@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { PatientProfileForm } from './PatientProfileForm.jsx';
+import { useAuth } from '../auth/authContext.js';
 
 const RELATIONSHIP_OPTIONS = GUARDIAN_RELATIONSHIP_TYPES.map((v) => ({
   value: v,
@@ -122,6 +123,7 @@ function Dependents() {
 }
 
 export function ProfilePage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const profile = useQuery({
     queryKey: ['patients', 'me'],
@@ -156,7 +158,11 @@ export function ProfilePage() {
                 {create.message.text}
               </Alert>
             )}
-            <PatientProfileForm submitLabel="Create profile" onSubmit={create.submit} />
+            <PatientProfileForm
+              submitLabel="Create profile"
+              initial={{ fullName: user.fullName }}
+              onSubmit={create.submit}
+            />
           </>
         )}
         {profile.data && (

@@ -35,6 +35,9 @@ To use Claude instead of the offline fake LLM, set `LLM_PROVIDER=claude` and
 | MinIO | API `:${HOST_PORT_MINIO}`, console `:${HOST_PORT_MINIO_CONSOLE}` | bucket `healthbridge-documents`, versioned |
 | Mailpit | UI `:${HOST_PORT_MAILPIT_UI}`, SMTP `:${HOST_PORT_SMTP}` | captures all outgoing email (worker notifications) |
 | Worker | not published (`:9465` inside the network) | outbox relay, BullMQ workers, hold and reminder sweeps; `npm run worker -w backend` on the host |
+| Bull Board | `http://localhost:${BULL_BOARD_HOST_PORT:-3010}` | read-only queue view in the worker; user `ops` (or `BULL_BOARD_USERNAME`), password `BULL_BOARD_PASSWORD`; off when unset |
+| Prometheus | `http://localhost:${HOST_PORT_PROMETHEUS:-9090}` | `--profile observability`; targets: api, worker, ai-service; alert rules |
+| Grafana | `http://localhost:${HOST_PORT_GRAFANA:-3001}` | `--profile observability`; `admin` / `GRAFANA_ADMIN_PASSWORD`; "HealthBridge overview" dashboard |
 
 All published ports bind to `127.0.0.1`.
 
@@ -82,6 +85,8 @@ npm run test -w backend              # unit
 npm run test:integration -w backend  # needs postgres, redis, minio + migrations; stop the worker first:
                                      #   docker compose stop worker   (tests refuse to run alongside one)
 npm run test -w frontend
+npm run test:e2e                     # Playwright browser journeys against the running stack
+                                     #   (first time: npm run install:browsers -w e2e; needs seed:demo)
 cd ai-service && uv run ruff check . && uv run ruff format --check . && uv run pytest
 # or, without local Python:
 docker build --target dev -t healthbridge-ai:dev ai-service && docker run --rm healthbridge-ai:dev
@@ -147,3 +152,14 @@ webhook secret. Live keys are refused outside production. Webhooks need a public
   "Extracted values".
 - AI service database tests run on the compose network:
   `docker run --rm --network healthbridge_private -e AI_DB_TESTS=1 -e DB_HOST=postgres … healthbridge-ai:dev pytest`.
+
+## Account recovery in development
+
+- **Emails:** password-reset and email-confirmation emails go to Mailpit
+  (`http://localhost:${HOST_PORT_MAILPIT_UI}`). Links point at `PUBLIC_APP_URL`, which
+  defaults to the first `CORS_ORIGINS` entry.
+- **Token location:** the token is in the link fragment (`#token=…`), so it never appears
+  in Nginx or API logs.
+- **Rate limits:** the end-to-end suite registers accounts and requests reset links, which
+  are rate-limited per IP. Its global setup clears the local stack's `rl:auth-*` counters
+  before each run. It never does this when `E2E_BASE_URL` points elsewhere.

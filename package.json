@@ -10,7 +10,8 @@
   "workspaces": [
     "shared",
     "backend",
-    "frontend"
+    "frontend",
+    "e2e"
   ],
   "scripts": {
     "env:init": "node scripts/generate-env.mjs",
@@ -18,7 +19,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "test:e2e": "npm run test:e2e -w e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

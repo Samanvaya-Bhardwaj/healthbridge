@@ -42,6 +42,7 @@ export function createAuthService({
   audit,
   mailer,
   logger,
+  onRegistered,
   sessionLifetimes,
   now = () => new Date(),
 }) {
@@ -92,6 +93,15 @@ export function createAuthService({
     } catch (err) {
       if (err.code !== PG_UNIQUE_VIOLATION) throw err;
       created = false; // concurrent registration with the same email
+    }
+
+    if (created && onRegistered) {
+      // After the response path, like the existing-account notice: timing stays equal.
+      setImmediate(() => {
+        Promise.resolve(onRegistered(userId, req)).catch((err) =>
+          logger.error({ err: { name: err.name } }, 'post-registration step failed'),
+        );
+      });
     }
 
     if (!created) {

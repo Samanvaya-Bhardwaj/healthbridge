@@ -103,3 +103,19 @@ def test_scope_must_match_purpose_and_patient() -> None:
     with TestClient(app) as client:
         assert summarize(client, purpose="doctor_brief").status_code == 403
         assert summarize(client, scope_patient=OTHER).status_code == 403
+
+
+def test_metrics_record_metadata_only() -> None:
+    app, _, _ = app_with()
+    with TestClient(app) as client:
+        assert summarize(client).status_code == 200
+        response = client.get("/metrics")
+    assert response.status_code == 200
+    body = response.text
+    assert "ai_llm_calls_total{" in body
+    assert "ai_llm_tokens_total{" in body
+    assert 'workflow="follow_up_summary"' in body
+    assert 'route="/v1/followups/summary"' in body
+    # No identifiers or patient content in metric labels.
+    for secret in (PATIENT, FOLLOW_UP, DOCTOR, "cough", "breathing"):
+        assert secret not in body

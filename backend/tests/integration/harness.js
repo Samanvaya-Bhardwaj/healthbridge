@@ -36,6 +36,10 @@ const NO_LIMITS = {
   loginAccount: GENEROUS,
   refresh: GENEROUS,
   passwordChange: GENEROUS,
+  passwordResetIp: GENEROUS,
+  passwordResetAccount: GENEROUS,
+  accountTokenIp: GENEROUS,
+  emailVerification: GENEROUS,
 };
 
 /** Redis settings for test-owned BullMQ queues (same server, isolated key prefix). */

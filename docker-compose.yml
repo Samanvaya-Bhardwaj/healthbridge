@@ -36,6 +36,7 @@ x-backend-env: &backend-env
   API_PORT: 4000
   METRICS_PORT: 9464
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+  PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
   TRUST_PROXY: 1
   AI_SERVICE_URL: http://ai-service:8000
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?}
@@ -203,11 +204,18 @@ services:
     restart: unless-stopped
 
   # Background workers (ADR-0020): outbox relay, notifications, payments, reminders,
-  # payment-hold expiry. Same image as the API; no published ports.
+  # payment-hold expiry. Same image as the API. Only the read-only Bull Board is
+  # published, on the loopback interface (never through Nginx; ADR-0027).
   worker:
     image: healthbridge-backend:local
     command: ['node', 'src/worker.js']
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      # Worker only: the API never needs the board credentials.
+      BULL_BOARD_USERNAME: ${BULL_BOARD_USERNAME:-ops}
+      BULL_BOARD_PASSWORD: ${BULL_BOARD_PASSWORD:-}
+    ports:
+      - '127.0.0.1:${BULL_BOARD_HOST_PORT:-3010}:9466'
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -268,6 +276,49 @@ services:
     networks: [private]
     restart: unless-stopped
 
+  # Optional observability stack (ADR-0027): `docker compose --profile observability up -d`.
+  # Loopback-only ports; Grafana refuses to start without GRAFANA_ADMIN_PASSWORD.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '127.0.0.1:${HOST_PORT_PROMETHEUS:-9090}:9090'
+    networks: [private]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    profiles: [observability]
+    entrypoint:
+      - sh
+      - -c
+      - '[ -n "$$GF_SECURITY_ADMIN_PASSWORD" ] || { echo "GRAFANA_ADMIN_PASSWORD is required" >&2; exit 1; }; exec /run.sh'
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_DISABLE_GRAVATAR: 'true'
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus]
+    ports:
+      - '127.0.0.1:${HOST_PORT_GRAFANA:-3001}:3000'
+    networks: [private]
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -292,3 +343,5 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  prometheus-data:
+  grafana-data:

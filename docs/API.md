@@ -312,3 +312,20 @@ service token and `X-Patient-Scope`.
 | POST | `/notifications/read-all` | owner | |
 
 Internal (AI service): `POST /v1/followups/summary` (scope purpose `follow_up_summary`).
+
+## Endpoints (M11)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/auth/password/forgot` | public | `{ email }`. Always answers `202` with the same body, and the work happens after the response. Limits: 10/h per IP, 3/h per account |
+| POST | `/auth/password/reset` | public (emailed token) | `{ token, newPassword }`. Revokes **all** sessions and lifts the lockout. `400 invalid_token` (unknown, used, expired, replaced or altered), `400 validation_failed` (policy) |
+| POST | `/auth/email/verify` | public (emailed token) | `{ token }` returns `{ status: 'verified' }`. `400 invalid_token` |
+| POST | `/users/me/email-verification` | `account:read` | Sends a new link: `{ status: 'sent' \| 'already_verified' }` (202) |
+| GET | `/admin/audit-logs` | `audit:read` | Filters are now `patientId` and `resourceType` (plus the M1 filters). `action` must match `^[a-z_.]+$` |
+| POST | `/telemetry/client-errors` | public | `{ kind, name, path, release? }`. Strict schema, so messages, stacks and query strings are rejected. `204` |
+
+- **Tokens:** `<uuid>.<43-char base64url secret>`, delivered only inside the emailed link's
+  fragment (`/reset-password#token=…`, `/verify-email#token=…`).
+- **Internal (AI service):** `GET /metrics` (private network; Prometheus text format).
+- **Worker:** Bull Board is on `:9466`, published to `127.0.0.1:${BULL_BOARD_HOST_PORT}`. It
+  is read-only, uses HTTP Basic auth, and is disabled without `BULL_BOARD_PASSWORD`.

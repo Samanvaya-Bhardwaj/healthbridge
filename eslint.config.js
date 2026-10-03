@@ -9,7 +9,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ['backend/**/*.js', 'shared/**/*.js', 'scripts/**/*.{js,mjs}', '*.js'],
+    files: ['backend/**/*.js', 'shared/**/*.js', 'scripts/**/*.{js,mjs}', 'e2e/**/*.js', '*.js'],
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'module',
