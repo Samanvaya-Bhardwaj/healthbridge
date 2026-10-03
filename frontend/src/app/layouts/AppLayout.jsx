@@ -4,6 +4,7 @@ import { ROLE_LABELS } from '@healthbridge/shared';
 import { useAuth } from '../../features/auth/authContext.js';
 import { DemoBanner } from '../../features/system/DemoBanner.jsx';
 import { navigationFor, primaryRole } from '../navigation.js';
+import { NotificationBell } from '../../features/notifications/Inbox.jsx';
 
 const linkClass = ({ isActive }) =>
   `flex min-h-11 items-center rounded-lg px-3 text-sm font-medium transition-colors ${
@@ -44,6 +45,7 @@ export function AppLayout() {
             HealthBridge
           </Link>
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-text">{user.fullName}</p>
               <p className="text-xs text-text-subtle">{ROLE_LABELS[role]}</p>

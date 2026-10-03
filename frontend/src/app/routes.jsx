@@ -25,6 +25,8 @@ import { PrivacyPage } from '../features/records/PrivacyPage.jsx';
 import { TimelinePage } from '../features/records/TimelinePage.jsx';
 import { BriefPage } from '../features/records/AiAssist.jsx';
 import { ConsultationPage } from '../features/consultations/ConsultationPage.jsx';
+import { FollowUpsPage } from '../features/followups/FollowUpsPage.jsx';
+import { InboxPage } from '../features/notifications/Inbox.jsx';
 import {
   DoctorRecordsPage,
   DoctorPatientRecordsPage,
@@ -48,6 +50,8 @@ const PAGES = [
   [SECTIONS.privacy, <PrivacyPage key="privacy" />],
   [SECTIONS.timeline, <TimelinePage key="timeline" />],
   [SECTIONS.medicalRecords, <DoctorRecordsPage key="medical-records" />],
+  [SECTIONS.followUps, <FollowUpsPage key="follow-ups" />],
+  [SECTIONS.notifications, <InboxPage key="notifications" />],
 ];
 
 /**

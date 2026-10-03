@@ -1,6 +1,6 @@
 import { QUEUE_NAMES } from './queues.js';
 
-const { NOTIFICATIONS, PAYMENTS, DOCUMENTS, TIMELINE } = QUEUE_NAMES;
+const { NOTIFICATIONS, PAYMENTS, DOCUMENTS, TIMELINE, FOLLOWUPS } = QUEUE_NAMES;
 
 /**
  * Outbox event type → consuming queues. An event with no consumer is marked dispatched.
@@ -31,8 +31,15 @@ export const EVENT_ROUTES = Object.freeze({
   // M9: outcome → patient notice (B, C) + timeline; signed prescription → PDF render,
   // notice and timeline. `appointment.in_consultation` updates the appointment's status.
   'appointment.in_consultation': [TIMELINE],
-  'consultation.completed': [NOTIFICATIONS, TIMELINE],
+  'consultation.completed': [NOTIFICATIONS, TIMELINE, FOLLOWUPS],
   'prescription.signed': [DOCUMENTS, NOTIFICATIONS, TIMELINE],
+  // M10: follow-ups. Reminders and escalations are outbox events (durable), written by
+  // the due sweep and the patient's response; AI summaries run on the followups queue.
+  'follow_up.created': [TIMELINE],
+  'follow_up.reminder_due': [NOTIFICATIONS],
+  'follow_up.responded': [NOTIFICATIONS, FOLLOWUPS, TIMELINE],
+  'follow_up.no_response': [NOTIFICATIONS, TIMELINE],
+  'follow_up.closed': [TIMELINE],
 });
 
 export const routesFor = (eventType) => EVENT_ROUTES[eventType] ?? [];

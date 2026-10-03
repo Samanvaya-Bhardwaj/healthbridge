@@ -331,3 +331,21 @@ Each layer is tested on its own:
 - **Prescribing rules:** narcotic and psychotropic substances are blocked in online
   consultations (a configurable list, not a compliance claim).
 - **Notices:** generic wording only, with no medicines, notes or diagnoses.
+
+## Follow-ups and the inbox (M10, ADR-0026)
+
+- **Escalation:**
+  - Escalation is **rule-based**: any warning sign means `urgent`, with fixed
+    emergency guidance shown to the patient immediately and an urgent notice to the
+    doctor. "Worse" means review.
+  - AI never decides escalation, never contacts patients, and its summary is visible
+    only to the doctor, labelled as AI.
+- **Answers:**
+  - The patient side can only answer an open check-in, enforced by RLS plus a trigger.
+  - Answers are append-only, and notes are envelope-encrypted.
+  - The audit log stores counts only.
+- **Inbox:**
+  - Notices (email and inbox) are generic: no symptoms, warning signs, notes or
+    medicines.
+  - Inbox rows are visible only to their owner, only their read time can change, and
+    they cannot be deleted.

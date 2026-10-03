@@ -20,6 +20,7 @@ from app.agents.prompts import (
     ANSWER_SYSTEM,
     BRIEF_SCHEMA,
     BRIEF_SYSTEM,
+    FOLLOWUP_SYSTEM,
     sources_message,
 )
 from app.llm.base import LLMError, LLMMessage, LLMProvider, LLMRequest, ModelTier, StopReason
@@ -164,6 +165,50 @@ def build_brief_agent(llm: LLMProvider):
             else ("failed" if state.get("error_kind") else "insufficient_information")
         )
         return {"sections": sections, "removed": removed, "status": status}
+
+    graph = StateGraph(AssistState)
+    graph.add_node("generate", node_generate)
+    graph.add_node("validate", node_validate)
+    graph.add_edge(START, "generate")
+    graph.add_edge("generate", "validate")
+    graph.add_edge("validate", END)
+    return graph.compile(checkpointer=InMemorySaver()), totals
+
+
+def build_followup_agent(llm: LLMProvider):
+    """Bounded follow-up agent (ADR-0026): generate -> validate. No tools, no decisions:
+    it restates the check-in facts with citations; escalation is rule-based elsewhere."""
+    totals = RunTotals()
+
+    async def node_generate(state: AssistState) -> AssistState:
+        if not state["sources"]:
+            return {"raw": {}}
+        try:
+            res = await _call(
+                llm,
+                totals,
+                state,
+                "follow_up_summary",
+                FOLLOWUP_SYSTEM,
+                ANSWER_SCHEMA,
+                sources_message(state["sources"]),
+            )
+        except LLMError as exc:
+            return {"raw": {}, "error_kind": exc.kind.value}
+        if res.stop_reason is not StopReason.END or not isinstance(res.json_output, dict):
+            return {"raw": {}, "error_kind": "refused"}
+        return {"raw": res.json_output}
+
+    async def node_validate(state: AssistState) -> AssistState:
+        kept, removed = validate_sentences(
+            state.get("raw", {}).get("sentences") or [], state["sources"]
+        )
+        status = (
+            "ready"
+            if kept
+            else ("failed" if state.get("error_kind") else "insufficient_information")
+        )
+        return {"sentences": kept, "removed": removed, "status": status}
 
     graph = StateGraph(AssistState)
     graph.add_node("generate", node_generate)

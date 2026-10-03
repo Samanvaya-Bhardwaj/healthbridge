@@ -200,6 +200,41 @@ export function createTimelineProjector({ knex, logger }) {
     return true;
   }
 
+  const FOLLOW_UP_TITLES = {
+    scheduled: 'Follow-up check-in scheduled',
+    awaiting_response: 'Follow-up check-in due',
+    responded: 'Follow-up check-in answered',
+    needs_attention: 'Follow-up check-in: doctor review needed',
+    urgent: 'Follow-up check-in: urgent review',
+    closed: 'Follow-up closed',
+    cancelled: 'Follow-up cancelled',
+  };
+
+  /** M10: follow-up state only (never the patient's answers or note). */
+  async function projectFollowUp(trx, id) {
+    const f = await trx('follow_ups as f')
+      .join('doctors as d', 'd.id', 'f.doctor_id')
+      .where('f.id', id)
+      .first('f.*', 'd.professional_name');
+    if (!f) return false;
+    await upsert(trx, {
+      patient_id: f.patient_id,
+      event_type: 'follow_up',
+      source_type: 'follow_up',
+      source_id: f.id,
+      occurred_at: `${f.due_on}T12:00:00Z`,
+      date_precision: 'day',
+      title: FOLLOW_UP_TITLES[f.status],
+      status: f.status,
+      provenance: f.responded_at ? 'patient_reported' : 'doctor_reported',
+      actor_label: f.professional_name,
+      detail: { followUpId: f.id, dueOn: f.due_on, origin: f.origin },
+      doctor_user_id: f.doctor_user_id,
+      hidden: f.status === 'cancelled',
+    });
+    return true;
+  }
+
   /** Projects the source of one outbox event. */
   async function handleEvent({ eventType, aggregateType, aggregateId, payload = {} }) {
     return withSystem(knex, 'timeline', async (trx) => {
@@ -214,6 +249,8 @@ export function createTimelineProjector({ knex, logger }) {
         return { projected: await projectDocument(trx, aggregateId) };
       if (aggregateType === 'consultation')
         return { projected: await projectConsultation(trx, aggregateId) };
+      if (aggregateType === 'follow_up')
+        return { projected: await projectFollowUp(trx, aggregateId) };
       if (aggregateType === 'prescription') {
         const projected = await projectPrescription(trx, aggregateId);
         // A correction supersedes the previous version.
@@ -233,12 +270,14 @@ export function createTimelineProjector({ knex, logger }) {
       const labResults = await trx('lab_results').where({ patient_id: patientId }).pluck('id');
       const consultations = await trx('consultations').where({ patient_id: patientId }).pluck('id');
       const prescriptions = await trx('prescriptions').where({ patient_id: patientId }).pluck('id');
+      const followUps = await trx('follow_ups').where({ patient_id: patientId }).pluck('id');
       let n = 0;
       for (const id of appts) n += (await projectAppointment(trx, id)) ? 1 : 0;
       for (const id of documents) n += (await projectDocument(trx, id)) ? 1 : 0;
       for (const id of labResults) n += (await projectLabResult(trx, id)) ? 1 : 0;
       for (const id of consultations) n += (await projectConsultation(trx, id)) ? 1 : 0;
       for (const id of prescriptions) n += (await projectPrescription(trx, id)) ? 1 : 0;
+      for (const id of followUps) n += (await projectFollowUp(trx, id)) ? 1 : 0;
       return { projected: n };
     });
   }

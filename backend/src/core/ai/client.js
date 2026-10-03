@@ -97,6 +97,15 @@ export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchIm
           documentIds: input.documentIds,
         },
       }),
+    /** Bounded follow-up agent: cited summary of one check-in for the doctor (stored in `ai`). */
+    summarizeFollowUp: (input, { requestId } = {}) =>
+      request('/v1/followups/summary', {
+        method: 'POST',
+        body: input,
+        requestId,
+        timeout: 90_000,
+        scope: { patientId: input.patientId, purpose: 'follow_up_summary' },
+      }),
     /** Document agent run for one authorised document (content sent, never stored here). */
     analyzeDocument: (input, { requestId } = {}) =>
       request('/v1/documents/analyze', {

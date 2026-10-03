@@ -132,6 +132,29 @@ const TEMPLATES = {
       'or go to the nearest emergency department immediately. Do not wait for a reply in the app.',
     sms: 'HealthBridge URGENT: your doctor advised emergency care. Call 112 or 108, or go to the nearest emergency department now.',
   }),
+  // M10: follow-ups — generic wording; never symptoms, warning signs or the patient's note.
+  follow_up_due: (v) => ({
+    subject: `Follow-up check-in from ${v.doctorName}`,
+    text:
+      `Hello ${v.recipientName},\n\n${v.doctorName} would like to know how ` +
+      `${v.relationship === 'guardian' ? v.patientName : 'you'} ${v.relationship === 'guardian' ? 'is' : 'are'} doing. ` +
+      'Please answer the short check-in in the HealthBridge app.\n\n' +
+      'If you have severe symptoms, do not wait: call 112 or go to the nearest emergency department.',
+    sms: `HealthBridge: ${v.doctorName} sent a follow-up check-in. Please answer it in the app.`,
+  }),
+  follow_up_attention: (v) => ({
+    subject: `A follow-up check-in needs your review`,
+    text:
+      `Hello ${v.recipientName},\n\nThe follow-up check-in for ${v.patientName} needs your ` +
+      'attention. Open HealthBridge to review it.',
+  }),
+  follow_up_urgent: (v) => ({
+    subject: `Urgent: follow-up check-in for ${v.patientName}`,
+    text:
+      `Hello ${v.recipientName},\n\n${v.patientName} reported a warning sign in a follow-up ` +
+      'check-in and was shown emergency guidance. Please review it in HealthBridge now.',
+    sms: `HealthBridge URGENT: ${v.patientName} reported a warning sign in a follow-up check-in. Please review now.`,
+  }),
   payment_refunded: (v) => ({
     subject: `Refund processed`,
     text:
@@ -176,3 +199,15 @@ export const SMS_TEMPLATES = Object.freeze(
     )
     .map(([name]) => name),
 );
+
+/**
+ * Inbox entry for a rendered template: the subject and the first paragraph after the
+ * greeting (templates are generic, so the inbox carries no clinical content either).
+ * @returns {{ title: string, body: string }}
+ */
+export function renderInbox(template, vars) {
+  const { subject, text } = renderTemplate(template, vars);
+  const paragraphs = text.split('\n\n');
+  const body = (paragraphs[0].startsWith('Hello ') ? paragraphs[1] : paragraphs[0]) ?? '';
+  return { title: subject.slice(0, 160), body: body.replace(/\s+/g, ' ').trim().slice(0, 600) };
+}

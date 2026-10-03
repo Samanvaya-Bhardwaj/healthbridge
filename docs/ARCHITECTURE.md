@@ -261,6 +261,18 @@ routes → controllers → application services → domain (pure rules) → repo
   fixed guidance); it completes the appointment and feeds the timeline and generic
   notifications ([ADR-0025](adr/0025-consultations-prescribing.md)).
 
+### Follow-ups and notifications (M10)
+
+- **Follow-ups:** come from outcome A's date or are scheduled by the doctor.
+- **Sweep:** a maintenance job opens due check-ins and writes durable reminder and
+  no-response events through the outbox.
+- **Escalation:** the patient's answer is escalated by deterministic shared rules:
+  warning signs mean urgent, with fixed 112 guidance.
+- **AI summary:** the bounded follow-up agent (AI service, no tools) writes a cited
+  summary for the doctor only.
+- **Inbox:** every notification also lands in a per-user in-app inbox
+  ([ADR-0026](adr/0026-followups-notifications.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -290,5 +302,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M9 complete (consultations and prescribing).**
+Current status: **M10 complete (follow-ups and notifications).**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

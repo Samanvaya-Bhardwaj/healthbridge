@@ -18,6 +18,7 @@ export const QUEUE_NAMES = Object.freeze({
   MAINTENANCE: 'maintenance',
   DOCUMENTS: 'documents',
   TIMELINE: 'timeline',
+  FOLLOWUPS: 'followups',
 });
 export const ALL_QUEUES = Object.freeze(Object.values(QUEUE_NAMES));
 

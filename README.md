@@ -26,8 +26,9 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M7** | Medical timeline with provenance, consent-scoped visibility, JSON export | ✅ Complete |
 | **M8** | Doctor brief and patient-scoped RAG with citation validation and fallback | ✅ Complete |
 | **M9** | Consultation and prescribing: waiting room, video adapter, SOAP notes, outcome A/B/C, signed immutable prescriptions + PDF | ✅ Complete |
-| M10 | Follow-ups and notifications | Next |
-| M11–M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
+| **M10** | Follow-ups and notifications: check-ins, reminders, rule-based escalation, AI summary for doctors, in-app inbox | ✅ Complete |
+| M11 | Admin, observability, hardening | Next |
+| M12 | See [roadmap](docs/ARCHITECTURE_PROPOSAL.md#16-implementation-order) | Planned |
 
 ## Architecture at a glance
 

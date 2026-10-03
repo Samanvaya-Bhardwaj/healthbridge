@@ -21,6 +21,7 @@ export const MAINTENANCE_JOBS = Object.freeze({
   SCHEDULE_REMINDERS: 'schedule-reminders',
   RECORDS_HOUSEKEEPING: 'records-housekeeping',
   TIMELINE_BACKFILL: 'timeline-backfill',
+  FOLLOW_UP_SWEEP: 'follow-up-sweep',
 });
 
 /**
@@ -42,6 +43,7 @@ export function createJobProcessors(container, queues) {
     intelligenceService,
     timelineProjector,
     prescriptionService,
+    followUpService,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -108,6 +110,12 @@ export function createJobProcessors(container, queues) {
       schemas: { '*': outboxJob },
       handle: (job) => timelineProjector.handleEvent(job.data),
     },
+    // M10: follow-ups from consultation outcomes; AI summaries of check-ins (opt-in).
+    [QUEUE_NAMES.FOLLOWUPS]: {
+      concurrency: 2,
+      schemas: { '*': outboxJob },
+      handle: (job) => followUpService.handleEvent(job.data),
+    },
     [QUEUE_NAMES.MAINTENANCE]: {
       concurrency: 1,
       schemas: {
@@ -115,10 +123,12 @@ export function createJobProcessors(container, queues) {
         [MAINTENANCE_JOBS.SCHEDULE_REMINDERS]: maintenanceJob,
         [MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING]: maintenanceJob,
         [MAINTENANCE_JOBS.TIMELINE_BACKFILL]: maintenanceJob,
+        [MAINTENANCE_JOBS.FOLLOW_UP_SWEEP]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
         if (job.name === MAINTENANCE_JOBS.TIMELINE_BACKFILL) return timelineProjector.backfill();
+        if (job.name === MAINTENANCE_JOBS.FOLLOW_UP_SWEEP) return followUpService.sweep();
         if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
           return {
             consents: await consentService.expireDue(),
@@ -159,6 +169,11 @@ export async function registerSchedules(queues, workers) {
     MAINTENANCE_JOBS.TIMELINE_BACKFILL,
     {},
     { jobId: 'timeline-backfill-v1', attempts: 3 },
+  );
+  await maintenance.upsertJobScheduler(
+    MAINTENANCE_JOBS.FOLLOW_UP_SWEEP,
+    { every: workers.reminderSweepIntervalMs },
+    { name: MAINTENANCE_JOBS.FOLLOW_UP_SWEEP, data: {}, opts: { attempts: 1 } },
   );
   await maintenance.upsertJobScheduler(
     MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,

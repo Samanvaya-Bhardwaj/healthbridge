@@ -20,6 +20,7 @@ export const SYSTEM_PURPOSES = Object.freeze([
   'consents',
   'timeline',
   'prescriptions',
+  'followups',
 ]);
 
 /**

@@ -49,6 +49,8 @@ import { createEnvelope } from './core/crypto/envelope.js';
 import { createVideoProvider } from './modules/consultations/videoProvider.js';
 import { createConsultationService } from './modules/consultations/service.js';
 import { createPrescriptionService } from './modules/consultations/prescriptions.js';
+import { createFollowUpService } from './modules/followups/service.js';
+import { createInboxService } from './modules/notifications/inbox.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -261,6 +263,16 @@ export function createContainer({
     video: videoProvider,
     ...(now ? { now } : {}),
   });
+  const followUpService = createFollowUpService({
+    knex,
+    accessPolicy,
+    audit,
+    envelope,
+    aiClient,
+    logger,
+    ...(now ? { now } : {}),
+  });
+  const inboxService = createInboxService({ knex, accessPolicy, ...(now ? { now } : {}) });
   const prescriptionService = createPrescriptionService({
     knex,
     config,
@@ -366,6 +378,8 @@ export function createContainer({
     assistService,
     consultationService,
     prescriptionService,
+    followUpService,
+    inboxService,
     videoProvider,
     aiClient,
     authenticate,

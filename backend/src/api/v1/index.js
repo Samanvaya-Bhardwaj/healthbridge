@@ -15,6 +15,7 @@ import { intelligenceRoutes } from '../../modules/intelligence/routes.js';
 import { timelineRoutes } from '../../modules/timeline/routes.js';
 import { assistRoutes } from '../../modules/assist/routes.js';
 import { consultationRoutes } from '../../modules/consultations/routes.js';
+import { followUpRoutes } from '../../modules/followups/routes.js';
 
 /**
  * Versioned public API. Feature modules mount their routers here.
@@ -52,6 +53,8 @@ export function apiV1Router({ config, version, container }) {
   router.use(timelineRoutes(container));
   router.use(assistRoutes(container));
   router.use(consultationRoutes(container));
+  // Before doctorRoutes: /doctors/me/follow-ups must not match /doctors/:id.
+  router.use(followUpRoutes(container));
   router.use(doctorRoutes(container));
   router.use(clinicRoutes(container));
 

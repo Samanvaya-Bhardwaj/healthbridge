@@ -200,3 +200,23 @@ export const consultationApi = {
       apiRequest(`/appointments/${appointmentId}/consultation/outcome`, { method: 'POST', body }),
     ),
 };
+
+/** Follow-ups (M10): check-ins from the treating doctor; escalation is rule-based. */
+export const followUpApi = {
+  forDoctor: (status) => data(apiRequest(`/doctors/me/follow-ups${qs({ status })}`)),
+  forPatient: (patientId) => data(apiRequest(`/patients/${patientId}/follow-ups`)),
+  get: (id) => data(apiRequest(`/follow-ups/${id}`)),
+  schedule: (patientId, body) =>
+    data(apiRequest(`/patients/${patientId}/follow-ups`, { method: 'POST', body })),
+  respond: (id, body) => data(apiRequest(`/follow-ups/${id}/responses`, { method: 'POST', body })),
+  close: (id, note) =>
+    data(apiRequest(`/follow-ups/${id}/close`, { method: 'POST', body: { note } })),
+};
+
+/** In-app notifications (M10): own inbox only. */
+export const inboxApi = {
+  list: (params = {}) => apiRequest(`/notifications${qs(params)}`),
+  unreadCount: () => data(apiRequest('/notifications/unread-count')),
+  read: (id) => data(apiRequest(`/notifications/${id}/read`, { method: 'POST' })),
+  readAll: () => data(apiRequest('/notifications/read-all', { method: 'POST' })),
+};

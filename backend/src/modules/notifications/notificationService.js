@@ -1,7 +1,7 @@
 import { withSystem } from '../../core/db/actorContext.js';
 import { newId } from '../../core/db/ids.js';
 import { domainMetrics, timed } from '../../core/metrics/domain.js';
-import { SMS_TEMPLATES, renderTemplate } from './templates.js';
+import { SMS_TEMPLATES, renderInbox, renderTemplate } from './templates.js';
 
 /**
  * Which template an outbox event produces, decided from the event payload (the state at
@@ -35,13 +35,40 @@ export function templateForEvent(eventType, payload = {}) {
       if (payload.outcome === 'physical_visit_required') return 'in_person_visit_requested';
       if (payload.outcome === 'emergency_escalation') return 'emergency_guidance';
       return null;
+    // M10: follow-ups (generic wording; never symptoms or the patient's note).
+    case 'follow_up.reminder_due':
+      return 'follow_up_due';
+    case 'follow_up.responded':
+      if (payload.level === 'urgent') return 'follow_up_urgent';
+      return payload.level === 'attention' ? 'follow_up_attention' : null;
+    case 'follow_up.no_response':
+      return 'follow_up_attention';
     default:
       return null;
   }
 }
 
+const URGENT_TEMPLATES = new Set(['emergency_guidance', 'follow_up_urgent']);
+
+/** Where an inbox entry leads in the app (paths only; never identifiers of other kinds). */
+export function inboxLink(template, { appointmentId } = {}) {
+  if (template.startsWith('document_')) return '/app/records';
+  if (template.startsWith('follow_up_')) return '/app/follow-ups';
+  if (
+    appointmentId &&
+    ['prescription_available', 'in_person_visit_requested', 'emergency_guidance'].includes(template)
+  ) {
+    return `/app/appointments/${appointmentId}/consultation`;
+  }
+  if (appointmentId && template === 'payment_required') {
+    return `/app/appointments/${appointmentId}/pay`;
+  }
+  return '/app/appointments';
+}
+
 /**
- * Notification consumers (ADR-0020). Workers pass identifiers; this service loads the
+ * Notification consumers (ADR-0020, ADR-0026). Every templated message also lands in the
+ * recipient's in-app inbox (generic wording, idempotent by dedupe key). Workers pass identifiers; this service loads the
  * minimum it needs (appointment schedule, doctor/clinic names, recipient contacts) in a
  * `notifications` system transaction. Every delivery has a dedupe key: a redelivered job
  * finds the delivery already `sent` and does nothing. The delivery row is locked while
@@ -137,14 +164,42 @@ export function createNotificationService({
     return outcome.status;
   }
 
+  /** In-app inbox entry; a redelivered job finds it already present. */
+  async function addToInbox({ userId, template, vars, link, dedupeKey }) {
+    const { title, body } = renderInbox(template, vars);
+    await withSystem(knex, 'notifications', (trx) =>
+      trx('inbox_notifications')
+        .insert({
+          id: newId(),
+          user_id: userId,
+          template,
+          title,
+          body,
+          link,
+          priority: URGENT_TEMPLATES.has(template) ? 'urgent' : 'normal',
+          dedupe_key: dedupeKey,
+        })
+        .onConflict('dedupe_key')
+        .ignore(),
+    );
+  }
+
   async function sendToRecipients(ctx, template, vars, keyPrefix, sourceEventId) {
     const results = [];
     for (const recipient of ctx.recipients) {
-      const content = renderTemplate(template, {
+      const renderVars = {
         ...ctx.base,
         ...vars,
         recipientName: recipient.display_name,
         relationship: recipient.relationship,
+      };
+      const content = renderTemplate(template, renderVars);
+      await addToInbox({
+        userId: recipient.user_id,
+        template,
+        vars: renderVars,
+        link: inboxLink(template, { appointmentId: ctx.appointment.id }),
+        dedupeKey: `${keyPrefix}-${recipient.user_id}-inbox`,
       });
       results.push(
         await deliver({
@@ -195,10 +250,95 @@ export function createNotificationService({
     if (!recipients.length) return { outcome: 'no_recipients' };
     const results = [];
     for (const r of recipients) {
-      const content = renderTemplate(template, {
+      const renderVars = {
         recipientName: r.display_name,
         patientName: r.patient_name,
         relationship: r.relationship,
+      };
+      const content = renderTemplate(template, renderVars);
+      await addToInbox({
+        userId: r.user_id,
+        template,
+        vars: renderVars,
+        link: inboxLink(template),
+        dedupeKey: `${eventId}-${template}-${r.user_id}-inbox`,
+      });
+      results.push(
+        await deliver({
+          dedupeKey: `${eventId}-${template}-${r.user_id}-email`,
+          template,
+          channel: 'email',
+          recipientUserId: r.user_id,
+          appointmentId: null,
+          sourceEventId: eventId,
+          send: () =>
+            provider.sendEmail({
+              to: r.email,
+              subject: content.subject,
+              text: content.text,
+              template,
+            }),
+        }),
+      );
+    }
+    return { outcome: results.every((x) => x === 'duplicate') ? 'duplicate' : 'sent', template };
+  }
+
+  /**
+   * Follow-up events: check-in reminders go to the patient side (only while the check-in
+   * is still open); attention and urgent notices go to the follow-up's doctor.
+   */
+  async function handleFollowUpEvent({ eventId, template, payload }) {
+    const prepared = await withSystem(knex, 'notifications', async (trx) => {
+      const f = await trx('follow_ups as f')
+        .join('doctors as d', 'd.id', 'f.doctor_id')
+        .where('f.id', payload.followUpId)
+        .first('f.*', 'd.professional_name as doctor_name');
+      if (!f) return { done: 'follow_up_not_found' };
+      if (template === 'follow_up_due' && f.status !== 'awaiting_response') {
+        return { done: `skipped_${f.status}` };
+      }
+      const { rows: patientSide } = await trx.raw(
+        'SELECT * FROM authz.notification_recipients(?)',
+        [f.patient_id],
+      );
+      const patientName = patientSide[0]?.patient_name ?? 'your patient';
+      if (template === 'follow_up_due') {
+        return {
+          f,
+          recipients: patientSide.map((r) => ({
+            ...r,
+            vars: {
+              recipientName: r.display_name,
+              patientName: r.patient_name,
+              relationship: r.relationship,
+              doctorName: f.doctor_name,
+            },
+          })),
+        };
+      }
+      const { rows: doctor } = await trx.raw('SELECT * FROM authz.doctor_recipient(?)', [
+        f.doctor_id,
+      ]);
+      return {
+        f,
+        recipients: doctor.map((r) => ({
+          ...r,
+          vars: { recipientName: r.display_name, patientName, doctorName: f.doctor_name },
+        })),
+      };
+    });
+    if (prepared.done) return { outcome: prepared.done };
+    if (!prepared.recipients.length) return { outcome: 'no_recipients' };
+    const results = [];
+    for (const r of prepared.recipients) {
+      const content = renderTemplate(template, r.vars);
+      await addToInbox({
+        userId: r.user_id,
+        template,
+        vars: r.vars,
+        link: inboxLink(template),
+        dedupeKey: `${eventId}-${template}-${r.user_id}-inbox`,
       });
       results.push(
         await deliver({
@@ -226,6 +366,9 @@ export function createNotificationService({
     if (!template) return { outcome: 'no_notification' };
     if (eventType.startsWith('document.')) {
       return handleDocumentEvent({ eventId, template, payload });
+    }
+    if (eventType.startsWith('follow_up.')) {
+      return handleFollowUpEvent({ eventId, template, payload });
     }
     const appointmentId = payload.appointmentId ?? aggregateId;
     const ctx = await withSystem(knex, 'notifications', (trx) => loadContext(trx, appointmentId));

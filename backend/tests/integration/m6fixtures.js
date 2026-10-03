@@ -134,5 +134,32 @@ export function stubAiClient(getHarness) {
       });
       return { briefId, status: sections.length ? 'ready' : 'insufficient_information' };
     },
+    async summarizeFollowUp(input) {
+      calls.push(input);
+      const h = getHarness();
+      const runId = randomUUID();
+      await h.ownerKnex('ai.ai_runs').insert({
+        id: runId,
+        workflow: 'follow_up_summary',
+        patient_id: input.patientId,
+        status: 'ok',
+        provider: 'fake',
+      });
+      const sentences = input.facts.map((f, i) => ({
+        text: f.text,
+        citations: [{ label: `F${i + 1}`, type: 'follow_up_response', id: f.id, documentId: null }],
+      }));
+      await h.ownerKnex('ai.follow_up_summaries').insert({
+        id: randomUUID(),
+        follow_up_id: input.followUpId,
+        patient_id: input.patientId,
+        doctor_user_id: input.doctorUserId,
+        run_id: runId,
+        status: sentences.length ? 'ready' : 'insufficient_information',
+        sentences: JSON.stringify(sentences),
+        prompt_version: 'test',
+      });
+      return { status: sentences.length ? 'ready' : 'insufficient_information', sentences };
+    },
   };
 }

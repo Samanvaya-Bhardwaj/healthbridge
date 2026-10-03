@@ -137,6 +137,20 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
       const testPrescriptions = trx('prescriptions')
         .select('id')
         .whereIn('patient_id', testPatients.clone());
+      // M10 rows.
+      const testFollowUps = trx('follow_ups')
+        .select('id')
+        .whereIn('patient_id', testPatients.clone());
+      await trx('outbox_events').whereIn('aggregate_id', testFollowUps.clone()).del();
+      await trx('ai.follow_up_summaries').whereIn('patient_id', testPatients.clone()).del();
+      await trx('follow_up_responses').whereIn('patient_id', testPatients.clone()).del();
+      await trx.raw('ALTER TABLE follow_ups DISABLE TRIGGER follow_ups_guard');
+      await trx('follow_ups')
+        .whereIn('patient_id', testPatients.clone())
+        .orWhereIn('doctor_user_id', testUsers.clone())
+        .del();
+      await trx.raw('ALTER TABLE follow_ups ENABLE TRIGGER follow_ups_guard');
+      await trx('inbox_notifications').whereIn('user_id', testUsers.clone()).del();
       await trx('outbox_events')
         .whereIn('aggregate_id', testConsultations.clone())
         .orWhereIn('aggregate_id', testPrescriptions.clone())

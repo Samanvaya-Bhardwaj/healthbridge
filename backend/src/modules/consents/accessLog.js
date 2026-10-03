@@ -41,6 +41,10 @@ const ACTIONS = [
   'prescription.corrected',
   'prescription.list_viewed',
   'prescription.downloaded',
+  'follow_up.scheduled',
+  'follow_up.responded',
+  'follow_up.response_viewed',
+  'follow_up.closed',
   'patients:read',
 ];
 const SELF_REASONS = new Set(['patient_self', 'guardian_dependent']);
@@ -77,6 +81,10 @@ const DESCRIBE = {
   'prescription.corrected': (a) => `${a} corrected a prescription`,
   'prescription.list_viewed': (a) => `${a} viewed the list of prescriptions`,
   'prescription.downloaded': (a) => `${a} downloaded a prescription`,
+  'follow_up.scheduled': (a) => `${a} scheduled a follow-up check-in`,
+  'follow_up.responded': (a) => `${a} answered a follow-up check-in`,
+  'follow_up.response_viewed': (a) => `${a} reviewed a follow-up check-in`,
+  'follow_up.closed': (a) => `${a} closed a follow-up`,
   'patients:read': (a) => `${a} viewed the profile`,
 };
 const REJECTION_LABELS = {

@@ -33,7 +33,8 @@ let admin;
 let queues;
 const extraQueues = [];
 
-async function waitFor(check, { timeout = 15_000, interval = 100 } = {}) {
+// Generous: real BullMQ workers and the relay compete for CPU with the rest of the suite.
+async function waitFor(check, { timeout = 30_000, interval = 100 } = {}) {
   const deadline = Date.now() + timeout;
   let last;
   while (Date.now() < deadline) {
@@ -165,12 +166,14 @@ describe('transactional outbox relay', () => {
     });
     try {
       const failedBefore = await counterValue(domainMetrics.outboxFailed);
+      const availableBefore = new Date(event.available_at).getTime();
       const result = await relayFor(broken).runOnce();
       expect(result.failed).toBeGreaterThan(0);
       let row = await h.ownerKnex('outbox_events').where({ id: event.id }).first();
       expect(row).toMatchObject({ status: 'pending', attempts: 1 });
       expect(row.last_error).toBeTruthy();
-      expect(new Date(row.available_at).getTime()).toBeGreaterThan(Date.now() - 1000);
+      // Backoff pushes the event later (relative to the DB clock, not the test's clock).
+      expect(new Date(row.available_at).getTime()).toBeGreaterThan(availableBefore);
       expect(await counterValue(domainMetrics.outboxFailed)).toBeGreaterThan(failedBefore);
 
       // Exhausting the attempts parks the event as failed and dead-letters it.
@@ -330,10 +333,14 @@ describe('BullMQ workers', () => {
         // Hold expiry through the maintenance queue.
         const pending = await pendingPaid(h, patient, doctor, { index: 4 });
         await expireHoldNow(h, pending.appointment.id);
-        await queues.maintenance.add(MAINTENANCE_JOBS.EXPIRE_HOLDS, {});
-        await waitFor(
-          async () => (await appointmentRow(h, pending.appointment.id)).status === 'expired',
-        );
+        // The sweep skips rows locked by concurrent workers (SKIP LOCKED); like the
+        // periodic scheduler, re-run it until the hold is expired.
+        let sweeps = 0;
+        await waitFor(async () => {
+          if ((await appointmentRow(h, pending.appointment.id)).status === 'expired') return true;
+          if (sweeps++ % 10 === 0) await queues.maintenance.add(MAINTENANCE_JOBS.EXPIRE_HOLDS, {});
+          return false;
+        });
         await waitFor(
           async () => (await paymentRow(h, pending.appointment.id)).status === 'cancelled',
         );

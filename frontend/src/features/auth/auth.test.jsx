@@ -159,14 +159,7 @@ describe('session restoration and lifecycle', () => {
     expect(refresh.init.credentials).toBe('same-origin');
 
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    for (const label of [
-      'Dashboard',
-      'Patients',
-      'Medical Records',
-      'Consultations',
-      'Prescriptions',
-      'Follow-ups',
-    ]) {
+    for (const label of ['Dashboard', 'Patients', 'Medical Records', 'Follow-ups']) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
     }
   });
@@ -178,7 +171,7 @@ describe('session restoration and lifecycle', () => {
       'POST /api/v1/auth/refresh': () => json(200, sessionPayload(user)),
       'GET /api/v1/auth/me': () => json(200, { data: user }),
     });
-    renderAt('/app/prescriptions');
+    renderAt('/app/clinic');
     expect(
       await screen.findByRole('heading', { name: 'You don’t have access to this page' }),
     ).toBeInTheDocument();

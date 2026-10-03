@@ -31,6 +31,7 @@ const PATIENT_WRITE_PERMISSIONS = new Set([
   PERMISSIONS.APPOINTMENTS_MANAGE,
   PERMISSIONS.PAYMENTS_CREATE,
   PERMISSIONS.CONSENTS_MANAGE,
+  PERMISSIONS.FOLLOWUPS_RESPOND,
 ]);
 
 /**
@@ -39,7 +40,12 @@ const PATIENT_WRITE_PERMISSIONS = new Set([
  * treating doctor to read the patient PROFILE (names on schedules). Everything in the
  * medical record requires an explicit consent; this basis never extends to it.
  */
-export const CARE_RELATIONSHIP_CONSENT_PERMISSIONS = new Set([PERMISSIONS.PATIENTS_READ]);
+export const CARE_RELATIONSHIP_CONSENT_PERMISSIONS = new Set([
+  PERMISSIONS.PATIENTS_READ,
+  // M10: scheduling a check-in for an active patient is part of the care relationship;
+  // it grants no access to the record.
+  PERMISSIONS.FOLLOWUPS_MANAGE,
+]);
 
 /** Permission → the consent scope that must cover it (ADR-0021). */
 export const CONSENT_SCOPE_FOR_PERMISSION = Object.freeze({

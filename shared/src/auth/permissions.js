@@ -64,6 +64,11 @@ export const PERMISSIONS = Object.freeze({
   // Consultations (M9)
   CONSULTATIONS_CONDUCT: 'consultations:conduct',
 
+  // Follow-ups and notifications (M10)
+  FOLLOWUPS_MANAGE: 'followups:manage',
+  FOLLOWUPS_RESPOND: 'followups:respond',
+  NOTIFICATIONS_READ: 'notifications:read',
+
   // Administration
   USERS_READ: 'users:read',
   USERS_UPDATE: 'users:update',
@@ -108,6 +113,9 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'records:export': 'Export own or managed dependents’ health timeline',
   'ai_assist:use': 'Use AI briefs and record questions for consented patients',
   'consultations:conduct': 'Start own consultations, write clinical notes and record outcomes',
+  'followups:manage': 'Schedule, review and close follow-ups for own patients',
+  'followups:respond': 'Answer follow-up check-ins for self or managed dependents',
+  'notifications:read': 'Read own in-app notifications',
   'users:read': 'Read user accounts (administration/support)',
   'users:update': 'Change user account status',
   'admin:users': 'Grant and revoke user roles',
@@ -130,6 +138,8 @@ export const ACCOUNT_LEVEL_PERMISSIONS = Object.freeze([
   P.ACCOUNT_UPDATE,
   P.SESSIONS_READ,
   P.SESSIONS_REVOKE,
+  // M10: everyone has an inbox.
+  P.NOTIFICATIONS_READ,
 ]);
 const OWN_ACCOUNT = ACCOUNT_LEVEL_PERMISSIONS;
 
@@ -153,6 +163,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.CONSENTS_READ,
     P.ACCESS_LOG_READ,
     P.RECORDS_EXPORT,
+    P.FOLLOWUPS_RESPOND,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
@@ -181,6 +192,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.PRESCRIPTIONS_READ,
     P.PRESCRIPTIONS_SIGN,
     P.CONSULTATIONS_CONDUCT,
+    P.FOLLOWUPS_MANAGE,
   ]),
   // Clinic-scoped: these permissions apply only within the clinic of the grant.
   [ROLES.CLINIC_ADMIN]: Object.freeze([

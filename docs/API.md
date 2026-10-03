@@ -295,3 +295,20 @@ service token and `X-Patient-Scope`.
 | POST | `/prescriptions/:id/pdf-url` | `prescriptions:read` | 60-second URL plus `sha256`. `409 pdf_not_ready` |
 | GET | `/patients/:patientId/prescriptions` | `prescriptions:read` (+ consent covering `prescription`) | Signed and superseded versions |
 | POST | `/appointments/:id/consultation/outcome` | `consultations:conduct` | One of `{ outcome: online_managed, followUpOn? }`, `{ outcome: physical_visit_required, visitNote? }` or `{ outcome: emergency_escalation, confirm: true }` |
+
+## Endpoints (M10)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/patients/:patientId/follow-ups` | `followups:manage` (treating doctor) | `{ dueOn, appointmentId? }` (201). `400 due_in_past` |
+| GET | `/doctors/me/follow-ups?status=` | `followups:manage` | Own follow-ups, urgent first (`open`, a status, or all) |
+| GET | `/patients/:patientId/follow-ups` | patient side | The patient's check-ins |
+| GET | `/follow-ups/:id` | the doctor / patient side | The doctor also gets the answer (with decrypted note) and the AI summary |
+| POST | `/follow-ups/:id/responses` | `followups:respond` (patient or managing guardian) | `{ overall, redFlags[], note? }` (201) returns the updated follow-up plus `emergencyGuidance` when urgent. `409 follow_up_not_open` |
+| POST | `/follow-ups/:id/close` | the doctor | `{ note? }`. A scheduled follow-up becomes `cancelled`, an open one `closed` |
+| GET | `/notifications?cursor&unread&limit` | `notifications:read` | `{ data, meta: { unreadCount, nextCursor } }` |
+| GET | `/notifications/unread-count` | `notifications:read` | |
+| POST | `/notifications/:id/read` | owner | |
+| POST | `/notifications/read-all` | owner | |
+
+Internal (AI service): `POST /v1/followups/summary` (scope purpose `follow_up_summary`).

@@ -30,3 +30,4 @@ export * from './domain/scheduling.js';
 export * from './domain/payments.js';
 export * from './domain/records.js';
 export * from './domain/consultations.js';
+export * from './domain/followups.js';

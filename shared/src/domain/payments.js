@@ -57,6 +57,10 @@ export const NOTIFICATION_TEMPLATES = Object.freeze([
   'prescription_available',
   'in_person_visit_requested',
   'emergency_guidance',
+  // M10: follow-ups (generic wording; never symptoms or the patient's note)
+  'follow_up_due',
+  'follow_up_attention',
+  'follow_up_urgent',
 ]);
 
 export const manualRefundSchema = z

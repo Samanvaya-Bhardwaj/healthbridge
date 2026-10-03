@@ -25,6 +25,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261008000000_medical_timeline` | `medical_events` projection (provenance, date precision, hidden), RLS (patient side / consent by document type / own appointments), `timeline` system purpose and read policies on sources, `records:export` |
 | `20261009000000_doctor_brief_rag` | `ai.doctor_briefs` (AI-scoped RLS; app: the appointment doctor while consent lasts), `brief_feedback` (own rows, consent), `ai_assist:use` |
 | `20261010000000_consultations_prescribing` | `consultations` (outcome immutable), `consultation_presence`, `clinical_notes` (encrypted, versioned, immutable when signed), `prescriptions` + `prescription_items` (hash + seal, frozen when signed, one-time PDF fields); `prescriptions` system purpose; timeline event types `consultation` / `prescription`; `consultations:conduct` |
+| `20261011000000_followups_notifications` | `follow_ups` (guarded transitions), `follow_up_responses` (append-only, encrypted note), `ai.follow_up_summaries`, `inbox_notifications` (owner may only mark read), `authz.doctor_recipient`; `followups` system purpose; `follow_up` timeline events; `followups:manage`, `followups:respond`, `notifications:read` |
 
 ## Identity, RBAC and audit (M1)
 

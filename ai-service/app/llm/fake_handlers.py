@@ -148,6 +148,16 @@ def brief(request: LLMRequest) -> dict[str, Any]:
     return {"sections": sections}
 
 
+def follow_up_summary(request: LLMRequest) -> dict[str, Any]:
+    """Restates each check-in fact as one cited sentence."""
+    sentences = []
+    for label, text in _sources(request):
+        first = text.splitlines()[0].strip() if text else ""
+        if first:
+            sentences.append({"text": first, "citations": [label]})
+    return {"sentences": sentences[:8]}
+
+
 Handler = Callable[[LLMRequest], Any]
 
 DEFAULT_HANDLERS: dict[str, Handler] = {
@@ -155,4 +165,5 @@ DEFAULT_HANDLERS: dict[str, Handler] = {
     "document_extraction": extract,
     "record_question": answer,
     "doctor_brief": brief,
+    "follow_up_summary": follow_up_summary,
 }

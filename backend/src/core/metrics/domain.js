@@ -88,6 +88,7 @@ export const domainMetrics = Object.freeze({
     'event',
     'mode',
   ]),
+  followUps: counter('follow_ups_total', 'Follow-ups created and check-in outcomes', ['event']),
   prescriptions: counter('prescriptions_total', 'Prescriptions signed, corrected, rendered', [
     'event',
   ]),
