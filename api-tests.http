@@ -1,0 +1,906 @@
+###############################################################################
+# HealthBridge API: every endpoint, ready to send (synthetic demo data only)
+#
+# Use with the VS Code "REST Client" extension (humao.rest-client):
+#   1. `npm start` (stack running, demo data loaded)
+#   2. open this file and click "Send Request" above each request, top to bottom
+#      within a section: later requests reuse tokens and IDs captured earlier.
+# The base URL and demo password come from the .env next to this file.
+# ⚠ marks requests that change demo state (disable, revoke, end, suspend, cancel).
+#   `npm run reset` then `npm start` restores the original demo data at any time.
+# A full guide is in RUNNING.md; behaviour and permissions are in docs/API.md.
+###############################################################################
+
+@host = http://localhost:{{$dotenv HOST_PORT_WEB}}
+@base = {{host}}/api/v1
+@password = {{$dotenv DEMO_USER_PASSWORD}}
+@domain = demo.healthbridge.local
+
+###############################################################################
+# 0. Public
+###############################################################################
+
+### API metadata (version, demo mode)
+GET {{base}}/meta
+
+### Public doctor directory (verified doctors)
+# @name directory
+GET {{base}}/doctors?q=Meera&limit=5
+
+### Public doctor profile
+GET {{base}}/doctors/{{directory.response.body.$.data[0].id}}
+
+### Public availability of a doctor (next 7 days, online)
+GET {{base}}/doctors/{{directory.response.body.$.data[0].id}}/slots?from={{$datetime 'YYYY-MM-DD'}}&to={{$datetime 'YYYY-MM-DD' 7 d}}&mode=online
+
+### Browser error report (content-free: error class + route template only)
+POST {{base}}/telemetry/client-errors
+Content-Type: application/json
+
+{ "kind": "render_error", "name": "TypeError", "path": "/app/records" }
+
+###############################################################################
+# 1. Sign in as each demo role (run these first)
+###############################################################################
+
+# @name loginAsha
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "patient.asha@{{domain}}", "password": "{{password}}" }
+
+###
+# @name loginVikram
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "patient.vikram@{{domain}}", "password": "{{password}}" }
+
+###
+# @name loginMeera
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "dr.meera@{{domain}}", "password": "{{password}}" }
+
+###
+# @name loginApplicant
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "dr.applicant@{{domain}}", "password": "{{password}}" }
+
+###
+# @name loginClinicAdmin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "clinic.admin@{{domain}}", "password": "{{password}}" }
+
+###
+# @name loginAdmin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "platform.admin@{{domain}}", "password": "{{password}}" }
+
+###
+# @name loginSupport
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "support@{{domain}}", "password": "{{password}}" }
+
+@asha = {{loginAsha.response.body.$.data.accessToken}}
+@vikram = {{loginVikram.response.body.$.data.accessToken}}
+@meera = {{loginMeera.response.body.$.data.accessToken}}
+@applicant = {{loginApplicant.response.body.$.data.accessToken}}
+@clinicAdmin = {{loginClinicAdmin.response.body.$.data.accessToken}}
+@admin = {{loginAdmin.response.body.$.data.accessToken}}
+@support = {{loginSupport.response.body.$.data.accessToken}}
+
+###############################################################################
+# 2. Account and sessions (any signed-in user; examples use Asha)
+###############################################################################
+
+### Who am I (roles, permissions)
+GET {{base}}/auth/me
+Authorization: Bearer {{asha}}
+
+### Account details (incl. email confirmation)
+GET {{base}}/users/me
+Authorization: Bearer {{asha}}
+
+### Update display name
+PATCH {{base}}/users/me
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "fullName": "Asha Rao (Demo Patient)" }
+
+### Active sessions
+# @name sessions
+GET {{base}}/auth/sessions
+Authorization: Bearer {{asha}}
+
+### ⚠ Revoke one session (the first listed may be the one this file uses: sign in again)
+DELETE {{base}}/auth/sessions/{{sessions.response.body.$.data[0].id}}
+Authorization: Bearer {{asha}}
+
+### ⚠ Sign out all other sessions
+POST {{base}}/auth/sessions/revoke-others
+Authorization: Bearer {{asha}}
+
+### Resend email confirmation link (arrives in Mailpit)
+POST {{base}}/users/me/email-verification
+Authorization: Bearer {{asha}}
+
+### Change password: expect 400 "Current password is incorrect" (keeps the demo intact)
+POST {{base}}/users/me/password
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "currentPassword": "not-the-password", "newPassword": "a new long passphrase 2026" }
+
+### Register (always the same 202 answer; a new account can then sign in)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "email": "test.{{$randomInt 1000 99999}}@test.healthbridge.local", "password": "orchid lantern river 2026", "fullName": "Test Patient", "acceptTerms": true }
+
+### Forgot password (same 202 answer for every email; the link is emailed to Mailpit)
+POST {{base}}/auth/password/forgot
+Content-Type: application/json
+
+{ "email": "patient.vikram@{{domain}}" }
+
+### Reset password with the token from the email link (#token=…)
+POST {{base}}/auth/password/reset
+Content-Type: application/json
+
+{ "token": "PASTE-TOKEN-FROM-EMAIL", "newPassword": "a brand new passphrase 2026" }
+
+### Confirm email with the token from the email link (#token=…)
+POST {{base}}/auth/email/verify
+Content-Type: application/json
+
+{ "token": "PASTE-TOKEN-FROM-EMAIL" }
+
+### Refresh and logout use the httpOnly refresh cookie + CSRF header, which the browser
+### app handles; test them in the UI (sign in, reload, "Sign out").
+# POST {{base}}/auth/refresh
+# POST {{base}}/auth/logout
+
+###############################################################################
+# 3. Patient profile and dependents (Asha)
+###############################################################################
+
+# @name ashaProfile
+GET {{base}}/patients/me
+Authorization: Bearer {{asha}}
+
+@ashaId = {{ashaProfile.response.body.$.data.id}}
+
+### Update own profile
+PATCH {{base}}/patients/me
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "city": "Pune" }
+
+### Create profile (only for a new account without one; Asha gets 409)
+POST {{base}}/patients/me
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "fullName": "Asha Rao", "dateOfBirth": "1990-04-12" }
+
+### Profile by id (self, guardian or consented doctor)
+GET {{base}}/patients/{{ashaId}}
+Authorization: Bearer {{asha}}
+
+### Update profile by id
+PATCH {{base}}/patients/{{ashaId}}
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "state": "Maharashtra" }
+
+### Dependents I manage
+GET {{base}}/patients/me/dependents
+Authorization: Bearer {{asha}}
+
+### Add a dependent
+# @name dependent
+POST {{base}}/patients/me/dependents
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "fullName": "Riya Rao", "dateOfBirth": "2016-06-01", "relationshipType": "parent" }
+
+### Guardians of a patient
+# @name guardians
+GET {{base}}/patients/{{dependent.response.body.$.data.id}}/guardians
+Authorization: Bearer {{asha}}
+
+### ⚠ End a guardianship
+POST {{base}}/guardianships/{{guardians.response.body.$.data[0].id}}/end
+Authorization: Bearer {{asha}}
+
+### Access denied: Vikram cannot read Asha (expect 404)
+GET {{base}}/patients/{{ashaId}}
+Authorization: Bearer {{vikram}}
+
+###############################################################################
+# 4. Doctors: own profile, verification, directory
+###############################################################################
+
+# @name meeraDoctor
+GET {{base}}/doctors/me
+Authorization: Bearer {{meera}}
+
+@meeraDoctorId = {{meeraDoctor.response.body.$.data.id}}
+
+### Update own professional profile
+PATCH {{base}}/doctors/me
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "bio": "Synthetic demo profile. Family physician focused on long-term care." }
+
+### Create a doctor profile (any account; Meera gets 409)
+POST {{base}}/doctors/me
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "professionalName": "Dr. Test", "registrationNumber": "DEMO-XX-00001", "registrationCouncil": "Demo Medical Council (synthetic)", "registrationYear": 2015, "primarySpecialization": "General Medicine", "qualifications": [{ "degree": "MBBS", "institution": "Demo Medical College", "year": 2014 }], "yearsOfExperience": 10, "languages": ["English"] }
+
+### Submit for verification (applicant)
+POST {{base}}/doctors/me/verification
+Authorization: Bearer {{applicant}}
+
+### Verification history (applicant)
+GET {{base}}/doctors/me/verification
+Authorization: Bearer {{applicant}}
+
+### My clinics
+GET {{base}}/doctors/me/clinics
+Authorization: Bearer {{meera}}
+
+### My patients (care relationships)
+GET {{base}}/doctors/me/patients?status=active
+Authorization: Bearer {{meera}}
+
+###############################################################################
+# 5. Care relationships (my trusted doctors)
+###############################################################################
+
+### Asha's care team
+GET {{base}}/care-relationships?patientId={{ashaId}}
+Authorization: Bearer {{asha}}
+
+### Vikram requests Dr. Meera (409 relationship_exists in the fresh demo: Vikram's request
+### is already pending; use the id from GET /doctors/me/patients?status=pending instead)
+# @name vikramProfile
+GET {{base}}/patients/me
+Authorization: Bearer {{vikram}}
+
+###
+# @name careRequest
+POST {{base}}/care-relationships
+Authorization: Bearer {{vikram}}
+Content-Type: application/json
+
+{ "patientId": "{{vikramProfile.response.body.$.data.id}}", "doctorId": "{{meeraDoctorId}}" }
+
+### Doctor invites a patient by email
+POST {{base}}/care-relationships/invitations
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "email": "patient.vikram@{{domain}}" }
+
+### Doctor acts on a relationship: accept | decline | withdraw | pause | resume | end
+POST {{base}}/care-relationships/{{careRequest.response.body.$.data.id}}/accept
+Authorization: Bearer {{meera}}
+
+###############################################################################
+# 6. Availability, slots and appointments
+###############################################################################
+
+### Doctor's availability rules
+GET {{base}}/doctors/me/availability
+Authorization: Bearer {{meera}}
+
+### Add an availability rule (Saturdays, online, 15-minute slots)
+# @name rule
+POST {{base}}/doctors/me/availability
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "mode": "online", "weekday": 6, "startTime": "09:00", "endTime": "11:00", "slotMinutes": 15, "validFrom": "{{$datetime 'YYYY-MM-DD'}}" }
+
+### ⚠ Archive a rule
+DELETE {{base}}/doctors/me/availability/{{rule.response.body.$.data.id}}
+Authorization: Bearer {{meera}}
+
+### Time off
+GET {{base}}/doctors/me/time-off
+Authorization: Bearer {{meera}}
+
+###
+# @name timeOff
+POST {{base}}/doctors/me/time-off
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "startsAt": "{{$datetime iso8601 30 d}}", "endsAt": "{{$datetime iso8601 31 d}}", "reasonCode": "leave" }
+
+###
+DELETE {{base}}/doctors/me/time-off/{{timeOff.response.body.$.data.id}}
+Authorization: Bearer {{meera}}
+
+### Slots for Dr. Meera (14 days, online)
+# @name slots
+GET {{base}}/doctors/{{meeraDoctorId}}/slots?from={{$datetime 'YYYY-MM-DD'}}&to={{$datetime 'YYYY-MM-DD' 14 d}}&mode=online
+Authorization: Bearer {{asha}}
+
+### Book the first online slot (online visits are free in the demo)
+# @name booking
+POST {{base}}/appointments
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+Idempotency-Key: demo-{{$guid}}
+
+{ "patientId": "{{ashaId}}", "doctorId": "{{meeraDoctorId}}", "startsAt": "{{slots.response.body.$.data[0].startsAt}}", "mode": "online", "reason": "Synthetic: routine review" }
+
+
+### My appointments (upcoming | past)
+GET {{base}}/appointments?scope=upcoming
+Authorization: Bearer {{asha}}
+
+### One appointment
+GET {{base}}/appointments/{{booking.response.body.$.data.id}}
+Authorization: Bearer {{asha}}
+
+### Doctor's schedule (ISO date-times)
+GET {{base}}/doctors/me/appointments?from={{$datetime iso8601}}&to={{$datetime iso8601 14 d}}
+Authorization: Bearer {{meera}}
+
+### Reschedule to the second slot: returns a NEW appointment (the old one is cancelled
+### with reason "rescheduled"); later sections use the new one.
+# @name rescheduled
+POST {{base}}/appointments/{{booking.response.body.$.data.id}}/reschedule
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "startsAt": "{{slots.response.body.$.data[1].startsAt}}" }
+
+@appointmentId = {{rescheduled.response.body.$.data.id}}
+
+### Doctor / clinic actions (time-dependent: allowed around the appointment time; 409 otherwise)
+POST {{base}}/appointments/{{appointmentId}}/check-in
+Authorization: Bearer {{meera}}
+
+###
+POST {{base}}/appointments/{{appointmentId}}/complete
+Authorization: Bearer {{meera}}
+
+###
+POST {{base}}/appointments/{{appointmentId}}/no-show
+Authorization: Bearer {{meera}}
+
+### A separate booking to cancel (keeps {{appointmentId}} for the next sections)
+# @name toCancel
+POST {{base}}/appointments
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+Idempotency-Key: demo-{{$guid}}
+
+{ "patientId": "{{ashaId}}", "doctorId": "{{meeraDoctorId}}", "startsAt": "{{slots.response.body.$.data[2].startsAt}}", "mode": "online", "reason": "Synthetic: to be cancelled" }
+
+### ⚠ Cancel: patient_request | doctor_unavailable | clinic_closed | rescheduled | duplicate | other
+POST {{base}}/appointments/{{toCancel.response.body.$.data.id}}/cancel
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "reasonCode": "patient_request" }
+
+###############################################################################
+# 7. Payments (paid in-clinic visit, ₹500, fake provider: no real money)
+###############################################################################
+
+### In-clinic slots (paid)
+# @name clinicSlots
+GET {{base}}/doctors/{{meeraDoctorId}}/slots?from={{$datetime 'YYYY-MM-DD'}}&to={{$datetime 'YYYY-MM-DD' 14 d}}&mode=in_clinic
+Authorization: Bearer {{asha}}
+
+### Book it (held for 15 minutes as pending_payment)
+# @name paidBooking
+POST {{base}}/appointments
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+Idempotency-Key: demo-{{$guid}}
+
+{ "patientId": "{{ashaId}}", "doctorId": "{{meeraDoctorId}}", "startsAt": "{{clinicSlots.response.body.$.data[0].startsAt}}", "mode": "in_clinic", "clinicId": "{{clinicSlots.response.body.$.data[0].clinicId}}", "reason": "Synthetic: in-clinic check-up" }
+
+@paidId = {{paidBooking.response.body.$.data.id}}
+
+### Start checkout
+POST {{base}}/appointments/{{paidId}}/payment
+Authorization: Bearer {{asha}}
+Idempotency-Key: demo-{{$guid}}
+
+### Simulate the provider's signed webhook (success | failure); dev/demo only
+POST {{base}}/appointments/{{paidId}}/payment/simulate
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "outcome": "success" }
+
+### Payment status (confirmed only by the webhook)
+GET {{base}}/appointments/{{paidId}}/payment
+Authorization: Bearer {{asha}}
+
+### Manual refund (doctor/clinic): goodwill | duplicate_payment | other
+POST {{base}}/appointments/{{paidId}}/refunds
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+Idempotency-Key: demo-{{$guid}}
+
+{ "reasonCode": "goodwill" }
+
+### Provider webhook endpoint (server-to-server, HMAC-signed): unsigned → 400
+POST {{base}}/webhooks/payments/fake
+Content-Type: application/json
+
+{ "event": "payment.captured" }
+
+###############################################################################
+# 8. Consent and access log
+###############################################################################
+
+### Consents I granted (patient)
+GET {{base}}/consents?patientId={{ashaId}}
+Authorization: Bearer {{asha}}
+
+### Consents I received (doctor)
+GET {{base}}/consents/received
+Authorization: Bearer {{meera}}
+
+### Grant Dr. Meera 30 days of document access (409 consent_exists in the fresh demo:
+### revoke the existing one from GET /consents first)
+# @name consent
+POST {{base}}/consents
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "patientId": "{{ashaId}}", "doctorId": "{{meeraDoctorId}}", "kind": "manual", "scopes": ["patient_profile", "medical_documents"], "purpose": "ongoing_care", "expiresInDays": 30 }
+
+### ⚠ Revoke it (the very next doctor request is denied)
+POST {{base}}/consents/{{consent.response.body.$.data.id}}/revoke
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "reasonCode": "no_longer_needed" }
+
+### Who accessed my records
+GET {{base}}/patients/{{ashaId}}/access-log
+Authorization: Bearer {{asha}}
+
+###############################################################################
+# 9. Medical documents
+###############################################################################
+
+### Ask for an upload slot (the browser then POSTs the file to the returned presigned URL;
+### easiest to test the file upload itself in the UI: Health Records → Upload)
+# @name uploadIntent
+POST {{base}}/patients/{{ashaId}}/documents/upload-intent
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "documentType": "lab_report", "title": "Synthetic CBC", "filename": "cbc.pdf", "contentType": "application/pdf", "sizeBytes": 1024, "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }
+
+### Tell the API the upload finished (quarantine → scan → promotion)
+POST {{base}}/documents/{{uploadIntent.response.body.$.data.document.id}}/complete
+Authorization: Bearer {{asha}}
+
+### Documents
+# @name docs
+GET {{base}}/patients/{{ashaId}}/documents
+Authorization: Bearer {{asha}}
+
+@docId = {{docs.response.body.$.data[0].id}}
+
+### One document
+GET {{base}}/documents/{{docId}}
+Authorization: Bearer {{asha}}
+
+### Short-lived download URL (60 s)
+GET {{base}}/documents/{{docId}}/download
+Authorization: Bearer {{asha}}
+
+### ⚠ Retire a document (kept, hidden; never destroyed)
+POST {{base}}/documents/{{docId}}/retire
+Authorization: Bearer {{asha}}
+
+###############################################################################
+# 10. Document intelligence, lab values and timeline
+###############################################################################
+
+### AI processing opt-in (per patient)
+GET {{base}}/patients/{{ashaId}}/ai-processing
+Authorization: Bearer {{asha}}
+
+###
+PUT {{base}}/patients/{{ashaId}}/ai-processing
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "enabled": true }
+
+### AI extraction of a document (grounded, cited)
+# @name extraction
+GET {{base}}/documents/{{docId}}/extraction
+Authorization: Bearer {{meera}}
+
+### Doctor verifies proposed lab values (patients get 403)
+POST {{base}}/documents/{{docId}}/lab-results/verify
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "fieldKeys": ["{{extraction.response.body.$.data.labResults[0].key}}"] }
+
+### Verified lab values
+GET {{base}}/patients/{{ashaId}}/lab-results
+Authorization: Bearer {{asha}}
+
+### Medical timeline
+GET {{base}}/patients/{{ashaId}}/timeline
+Authorization: Bearer {{asha}}
+
+### Timeline export (JSON)
+GET {{base}}/patients/{{ashaId}}/timeline/export
+Authorization: Bearer {{asha}}
+
+###############################################################################
+# 11. Doctor AI assistance (consent + patient opt-in required)
+###############################################################################
+
+### Ask a question about the patient's records (cited answer or the exact fallback)
+POST {{base}}/patients/{{ashaId}}/record-questions
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "question": "What was the most recent haemoglobin value?" }
+
+### Pre-consultation brief (needs an active consent and the patient's AI opt-in)
+# @name brief
+POST {{base}}/appointments/{{appointmentId}}/brief
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "refresh": false }
+
+### Feedback on a brief: helpful | not_helpful
+POST {{base}}/briefs/{{brief.response.body.$.data.id}}/feedback
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "rating": "helpful" }
+
+###############################################################################
+# 12. Consultation and prescribing (online appointment, within its time window)
+###############################################################################
+
+### Consultation view (both parties)
+GET {{base}}/appointments/{{appointmentId}}/consultation
+Authorization: Bearer {{meera}}
+
+### Status (waiting room, live state)
+GET {{base}}/appointments/{{appointmentId}}/consultation/status
+Authorization: Bearer {{asha}}
+
+### Patient enters the waiting room (opens 15 min before the start)
+POST {{base}}/appointments/{{appointmentId}}/waiting-room
+Authorization: Bearer {{asha}}
+
+### Doctor starts (from 10 min before the start)
+POST {{base}}/appointments/{{appointmentId}}/consultation/start
+Authorization: Bearer {{meera}}
+
+### Video join token (mock provider by default; LiveKit with `npm start -- --video`)
+POST {{base}}/appointments/{{appointmentId}}/consultation/join
+Authorization: Bearer {{asha}}
+
+### Save SOAP note draft
+PUT {{base}}/appointments/{{appointmentId}}/consultation/note
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "subjective": "Synthetic: sore throat for two days.", "objective": "", "assessment": "Likely viral pharyngitis.", "plan": "Fluids, rest, review in 3 days." }
+
+### Sign the note (immutable afterwards)
+# @name signedNote
+POST {{base}}/appointments/{{appointmentId}}/consultation/note/sign
+Authorization: Bearer {{meera}}
+
+### Correct a signed note (new version, reason required)
+POST {{base}}/clinical-notes/{{signedNote.response.body.$.data.id}}/corrections
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "note": { "subjective": "Synthetic: sore throat for three days.", "plan": "Fluids, rest, review in 3 days." }, "reason": "Duration corrected after patient clarification." }
+
+### Prescription draft
+# @name rx
+PUT {{base}}/appointments/{{appointmentId}}/consultation/prescription
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "items": [{ "drugName": "Paracetamol", "strength": "500 mg", "form": "tablet", "dose": "1 tablet", "frequency": "every 6 hours if needed", "route": "oral", "duration": "3 days" }], "advice": "Warm fluids. Return if breathing becomes difficult." }
+
+### Sign the prescription (sealed; PDF rendered by the worker)
+POST {{base}}/prescriptions/{{rx.response.body.$.data.id}}/sign
+Authorization: Bearer {{meera}}
+
+### Prescription
+GET {{base}}/prescriptions/{{rx.response.body.$.data.id}}
+Authorization: Bearer {{asha}}
+
+### PDF download URL
+POST {{base}}/prescriptions/{{rx.response.body.$.data.id}}/pdf-url
+Authorization: Bearer {{asha}}
+
+### Correct a signed prescription (new version)
+POST {{base}}/prescriptions/{{rx.response.body.$.data.id}}/corrections
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "items": [{ "drugName": "Paracetamol", "strength": "500 mg", "form": "tablet", "dose": "1 tablet", "frequency": "every 8 hours if needed", "route": "oral", "duration": "3 days" }], "reason": "Frequency corrected." }
+
+### Patient's prescriptions
+GET {{base}}/patients/{{ashaId}}/prescriptions
+Authorization: Bearer {{asha}}
+
+### Outcome (doctor only): online_managed | physical_visit_required | emergency_escalation
+POST {{base}}/appointments/{{appointmentId}}/consultation/outcome
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "outcome": "online_managed", "followUpOn": "{{$datetime 'YYYY-MM-DD' 3 d}}" }
+
+###############################################################################
+# 13. Follow-ups
+###############################################################################
+
+### Doctor schedules a check-in
+# @name followUp
+POST {{base}}/patients/{{ashaId}}/follow-ups
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "dueOn": "{{$datetime 'YYYY-MM-DD'}}" }
+
+### Patient's follow-ups
+GET {{base}}/patients/{{ashaId}}/follow-ups
+Authorization: Bearer {{asha}}
+
+### Doctor's follow-ups (urgent first): open | <status> | omit for all
+GET {{base}}/doctors/me/follow-ups?status=open
+Authorization: Bearer {{meera}}
+
+### One follow-up (doctor also sees the answer and AI summary)
+GET {{base}}/follow-ups/{{followUp.response.body.$.data.id}}
+Authorization: Bearer {{meera}}
+
+### Patient answers (any warning sign → urgent + emergency guidance). The check-in opens
+### on its due date (the worker's sweep runs every minute).
+POST {{base}}/follow-ups/{{followUp.response.body.$.data.id}}/responses
+Authorization: Bearer {{asha}}
+Content-Type: application/json
+
+{ "overall": "better", "redFlags": [], "note": "Synthetic: feeling much better." }
+
+### Doctor closes it
+POST {{base}}/follow-ups/{{followUp.response.body.$.data.id}}/close
+Authorization: Bearer {{meera}}
+Content-Type: application/json
+
+{ "note": "" }
+
+###############################################################################
+# 14. In-app notifications
+###############################################################################
+
+# @name inbox
+GET {{base}}/notifications?limit=20
+Authorization: Bearer {{asha}}
+
+###
+GET {{base}}/notifications/unread-count
+Authorization: Bearer {{asha}}
+
+###
+POST {{base}}/notifications/{{inbox.response.body.$.data[0].id}}/read
+Authorization: Bearer {{asha}}
+
+###
+POST {{base}}/notifications/read-all
+Authorization: Bearer {{asha}}
+
+###############################################################################
+# 15. Clinics (clinic admin)
+###############################################################################
+
+# @name clinicAdminMe
+GET {{base}}/auth/me
+Authorization: Bearer {{clinicAdmin}}
+
+@clinicId = {{clinicAdminMe.response.body.$.data.clinicRoles[0].clinicId}}
+
+### Clinic details
+GET {{base}}/clinics/{{clinicId}}
+Authorization: Bearer {{clinicAdmin}}
+
+### Members
+# @name members
+GET {{base}}/clinics/{{clinicId}}/members
+Authorization: Bearer {{clinicAdmin}}
+
+### Clinic schedule
+GET {{base}}/clinics/{{clinicId}}/appointments?from={{$datetime iso8601}}&to={{$datetime iso8601 7 d}}
+Authorization: Bearer {{clinicAdmin}}
+
+### Invite a doctor to the clinic
+# @name clinicInvite
+POST {{base}}/clinics/{{clinicId}}/doctors
+Authorization: Bearer {{clinicAdmin}}
+Content-Type: application/json
+
+{ "doctorId": "{{meeraDoctorId}}" }
+
+### Doctor accepts / declines a clinic invitation (409 if already a member)
+POST {{base}}/clinic-memberships/{{clinicInvite.response.body.$.data.id}}/accept
+Authorization: Bearer {{meera}}
+
+###
+POST {{base}}/clinic-memberships/{{clinicInvite.response.body.$.data.id}}/decline
+Authorization: Bearer {{meera}}
+
+### ⚠ End a membership (members[0] may be Dr. Meera: in-clinic slots disappear)
+POST {{base}}/clinics/{{clinicId}}/members/{{members.response.body.$.data[0].id}}/end
+Authorization: Bearer {{clinicAdmin}}
+
+###############################################################################
+# 16. Platform administration (platform admin; support has lookup only)
+###############################################################################
+
+### Users (search, filter)
+# @name users
+GET {{base}}/admin/users?q=asha&limit=10
+Authorization: Bearer {{admin}}
+
+@userId = {{users.response.body.$.data[0].id}}
+
+### One user
+GET {{base}}/admin/users/{{userId}}
+Authorization: Bearer {{admin}}
+
+### ⚠ Disable / reinstate (reason codes only; disabling signs the user out)
+PATCH {{base}}/admin/users/{{userId}}/status
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "status": "disabled", "reasonCode": "security_concern" }
+
+###
+PATCH {{base}}/admin/users/{{userId}}/status
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "status": "active", "reasonCode": "reinstated" }
+
+### Grant / remove a directly grantable role (DOCTOR/CLINIC_ADMIN are refused: workflow-only)
+PUT {{base}}/admin/users/{{userId}}/roles/SUPPORT
+Authorization: Bearer {{admin}}
+
+###
+DELETE {{base}}/admin/users/{{userId}}/roles/SUPPORT
+Authorization: Bearer {{admin}}
+
+### ⚠ Sign the user out everywhere (that user must sign in again)
+POST {{base}}/admin/users/{{userId}}/sessions/revoke
+Authorization: Bearer {{admin}}
+
+### Support can look up users (200) but not change them (403)
+GET {{base}}/admin/users?q=asha
+Authorization: Bearer {{support}}
+
+###
+PATCH {{base}}/admin/users/{{userId}}/status
+Authorization: Bearer {{support}}
+Content-Type: application/json
+
+{ "status": "disabled", "reasonCode": "other" }
+
+### Audit log (filters: category, outcome, action, actorUserId, patientId, resourceType,
+### requestId, from, to; cursor pagination)
+GET {{base}}/admin/audit-logs?limit=20&category=data_access
+Authorization: Bearer {{admin}}
+
+### Doctor verification queue
+# @name cases
+GET {{base}}/admin/doctor-verifications
+Authorization: Bearer {{admin}}
+
+@caseId = {{cases.response.body.$.data[0].id}}
+
+###
+GET {{base}}/admin/doctor-verifications/{{caseId}}
+Authorization: Bearer {{admin}}
+
+###
+POST {{base}}/admin/doctor-verifications/{{caseId}}/start-review
+Authorization: Bearer {{admin}}
+
+### Decide: verified (credentials_confirmed) | rejected (registration_not_found, …)
+POST {{base}}/admin/doctor-verifications/{{caseId}}/decision
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "decision": "verified", "reasonCode": "credentials_confirmed" }
+
+### ⚠ Suspend a doctor (uses Dr. Rahul so the Dr. Meera examples keep working)
+# @name rahul
+GET {{base}}/doctors?q=Rahul&limit=1
+
+###
+POST {{base}}/admin/doctors/{{rahul.response.body.$.data[0].id}}/suspend
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "reasonCode": "registration_lapsed", "notes": "Synthetic test of suspension." }
+
+### Clinics
+# @name adminClinics
+GET {{base}}/admin/clinics
+Authorization: Bearer {{admin}}
+
+###
+POST {{base}}/admin/clinics
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "name": "Synthetic Care Clinic {{$randomInt 100 999}}", "city": "Pune" }
+
+###
+PATCH {{base}}/admin/clinics/{{adminClinics.response.body.$.data[0].id}}/status
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "status": "active" }
+
+### Appoint a clinic administrator
+POST {{base}}/admin/clinics/{{adminClinics.response.body.$.data[0].id}}/admins
+Authorization: Bearer {{admin}}
+Content-Type: application/json
+
+{ "userId": "{{userId}}" }
+
+### Operations: outbox, queues, dead letters
+GET {{base}}/admin/operations/summary
+Authorization: Bearer {{admin}}
+
+###
+# @name deadLetters
+GET {{base}}/admin/operations/dead-letters?status=open
+Authorization: Bearer {{admin}}
+
+###
+POST {{base}}/admin/operations/dead-letters/{{deadLetters.response.body.$.data[0].id}}/retry
+Authorization: Bearer {{admin}}
+
+### Administrators never get clinical records (expect 403/404)
+GET {{base}}/patients/{{ashaId}}/timeline
+Authorization: Bearer {{admin}}

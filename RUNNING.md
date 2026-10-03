@@ -101,6 +101,10 @@ Every demo account uses the password shown by `npm start` (`DEMO_USER_PASSWORD` 
    window).
 4. The doctor clicks **Start consultation**, then both click **Join video**.
 
+**Testing the API directly:** open [`api-tests.http`](api-tests.http) in VS Code with the
+*REST Client* extension. It covers every endpoint, signs in as each demo role and chains
+tokens and IDs. It reads the port and demo password from your `.env`.
+
 **Password reset:** **Sign in** → **Forgot your password?** The email arrives in Mailpit.
 
 **Using Claude instead of the offline fake model:**
