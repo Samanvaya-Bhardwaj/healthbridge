@@ -178,6 +178,7 @@ ElastiCache, S3, Secrets Manager and an ALB.
 | Symptom | Fix |
 |---|---|
 | "Docker is installed but not running" | Start Docker Desktop and run `npm start` again |
+| "HealthBridge data already exists…" or "password authentication failed" | All copies of the project share one set of Docker data. A new `.env` has new passwords that the old data rejects. Either `npm run reset` then `npm start` (fresh synthetic data), or copy the original `.env` into this folder |
 | A port is already in use | Nothing to do: `.env` moves to the next free port, and the summary prints the URL in use |
 | A service is not healthy | Run `npm run logs`. Then `npm start` again (it is safe to repeat), or `npm run reset && npm start` for a clean slate |
 | "Too many attempts" during repeated manual testing | This is the rate limiting working. Wait, or `npm run reset` |

@@ -52,8 +52,29 @@ if (run('docker', ['info'], { quiet: true }).status !== 0) {
   fail('Docker is installed but not running. Start Docker Desktop and try again.');
 }
 
+if (/onedrive|dropbox|google drive|icloud/i.test(root)) {
+  console.warn(
+    '\n\x1b[33m! This folder is synced by a cloud drive. Syncing node_modules and Docker bind\n' +
+      '  mounts is slow and can corrupt files. Prefer e.g. C:\\dev\\healthbridge (ADR-0014).\x1b[0m',
+  );
+}
+
 // 2. Environment: create on first run, otherwise only add newly introduced variables.
-step(existsSync(join(root, '.env')) ? 'Checking .env' : 'Creating .env with fresh local secrets');
+// All checkouts share one Compose project ("healthbridge") and therefore one set of data
+// volumes. A NEW .env would carry new database passwords that the existing data does not
+// accept, so stop with clear choices instead of failing later in the migration step.
+const freshEnv = !existsSync(join(root, '.env'));
+const existingData =
+  run('docker', ['volume', 'inspect', 'healthbridge_postgres-data'], { quiet: true }).status === 0;
+if (freshEnv && existingData) {
+  fail(
+    'HealthBridge data already exists in Docker (from another copy of the project or an\n' +
+      '  earlier .env), and its passwords are not in this folder. Choose one:\n' +
+      '    • start fresh (deletes the local synthetic demo data):  npm run reset  then  npm start\n' +
+      '    • keep that data: copy the .env from the other copy into this folder, then  npm start',
+  );
+}
+step(freshEnv ? 'Creating .env with fresh local secrets' : 'Checking .env');
 const gen = run(process.execPath, [
   'scripts/generate-env.mjs',
   ...(existsSync(join(root, '.env')) ? ['--update'] : []),
@@ -103,7 +124,17 @@ const up = run(
   { env: composeEnv },
 );
 if (up.status !== 0) {
-  fail('Some services did not become healthy. See `npm run logs` and docs/RUNNING.md.');
+  const migrateLog = run('docker', ['logs', '--tail', '5', 'healthbridge-migrate-1'], {
+    quiet: true,
+  });
+  if (/password authentication failed/.test(`${migrateLog.stdout}${migrateLog.stderr}`)) {
+    fail(
+      'The database rejected the passwords in this .env: the existing data was created with\n' +
+        '  a different .env (another copy of the project, or a regenerated .env). Either copy\n' +
+        '  the original .env back, or start fresh with  npm run reset  then  npm start.',
+    );
+  }
+  fail('Some services did not become healthy. See `npm run logs` and RUNNING.md.');
 }
 
 // 4. Synthetic demo data (idempotent; only when DEMO_MODE=true).
