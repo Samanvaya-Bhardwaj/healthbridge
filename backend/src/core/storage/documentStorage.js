@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -104,6 +105,24 @@ export function createDocumentStorage(storage) {
         chunks.push(chunk);
       }
       return Buffer.concat(chunks);
+    },
+
+    /**
+     * Server-generated object (e.g. a signed prescription PDF). Callers write a key once:
+     * the content is deterministic, so a retried write stores identical bytes.
+     */
+    async putObject(key, body, { contentType, sha256 }) {
+      await send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+          ContentLength: body.length,
+          ChecksumSHA256: Buffer.from(sha256, 'hex').toString('base64'),
+          CacheControl: 'no-store',
+        }),
+      );
     },
 
     /** Promotion copy (quarantine → records). Idempotent: same source, same target. */

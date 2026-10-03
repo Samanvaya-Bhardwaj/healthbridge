@@ -9,6 +9,7 @@ import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { formatDateTime } from '../appointments/format.js';
 import { DocumentList } from './DocumentList.jsx';
 import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
+import { PatientPrescriptions } from '../consultations/Prescriptions.jsx';
 import { Timeline } from './Timeline.jsx';
 import { AskRecords } from './AiAssist.jsx';
 import { useDownload } from './useDownload.js';
@@ -106,6 +107,12 @@ export function DoctorPatientRecordsPage() {
         <Card>
           <h2 className="mb-2 text-sm font-semibold text-text">Verified lab values</h2>
           <LabResults patientId={patientId} />
+        </Card>
+      )}
+      {documents.isSuccess && (
+        <Card>
+          <h2 className="mb-2 text-sm font-semibold text-text">Prescriptions</h2>
+          <PatientPrescriptions patientId={patientId} />
         </Card>
       )}
       {documents.isSuccess && (

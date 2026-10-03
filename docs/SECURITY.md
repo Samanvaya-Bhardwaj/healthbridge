@@ -301,3 +301,33 @@ Each layer is tested on its own:
 - **Privacy:** question text is never stored, logged or audited; only counts and a hash
   are kept. Briefs are visible to their doctor only while consent lasts.
 - **Rate limit:** 60 AI calls per doctor per hour.
+
+## Consultations and prescribing (M9, ADR-0025)
+
+- **Who writes:**
+  - Only the consulting doctor starts a consultation, writes and signs notes and
+    prescriptions, and records the outcome (`consultations:conduct`,
+    `prescriptions:sign`).
+  - The system never decides an outcome. Emergency escalation is doctor-confirmed and
+    flagged in the audit log, and the patient sees fixed guidance (112 / 108).
+- **Immutability:**
+  - Signed notes and prescriptions cannot be updated or deleted; database triggers
+    back the application rules.
+  - Corrections are new signed versions with a reason.
+  - `DELETE` is revoked from the application role.
+- **Integrity:**
+  - Prescriptions carry a SHA-256 of their canonical content and an HMAC seal.
+  - The PDF renderer verifies both and refuses tampered content.
+  - The PDF hash is recorded, and the PDF is rendered once.
+- **Confidentiality:**
+  - SOAP notes are envelope-encrypted (AES-256-GCM, a per-note data key, a key ID for
+    rotation, and associated data bound to the note and patient).
+  - `CLINICAL_DATA_KEY` is mandatory in staging and production.
+  - Other doctors see signed prescriptions only with a consent covering the
+    `prescription` type. They never see notes.
+  - Admins and support see neither.
+- **Video:** short-lived, per-participant tokens with opaque identities; random room
+  names; no media through the backend.
+- **Prescribing rules:** narcotic and psychotropic substances are blocked in online
+  consultations (a configurable list, not a compliance claim).
+- **Notices:** generic wording only, with no medicines, notes or diagnoses.

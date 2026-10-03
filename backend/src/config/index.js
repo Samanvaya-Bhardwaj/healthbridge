@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, randomBytes } from 'node:crypto';
+import { createPrivateKey, createPublicKey, hkdfSync, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 const port = z.coerce.number().int().min(1).max(65535);
@@ -68,6 +68,22 @@ const envSchema = z
 
     AI_SERVICE_URL: z.url(),
     INTERNAL_SERVICE_SECRET: z.string().min(32, 'must be at least 32 characters'),
+
+    // ── Consultations (ADR-0025) ──
+    VIDEO_PROVIDER: z.enum(['mock', 'livekit']).default('mock'),
+    LIVEKIT_URL: optional(z.url()),
+    LIVEKIT_API_KEY: optional(z.string().min(3)),
+    LIVEKIT_API_SECRET: optional(z.string().min(32, 'must be at least 32 characters')),
+    VIDEO_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
+    // AES-256 key (base64, 32 bytes) that wraps per-record data keys of clinical notes.
+    // Required outside development/test; there a key is derived from INTERNAL_SERVICE_SECRET.
+    CLINICAL_DATA_KEY: optional(z.base64()),
+    CLINICAL_DATA_KEY_ID: z
+      .string()
+      .regex(/^[a-z0-9_-]{1,32}$/)
+      .default('k1'),
+    // Previous keys during rotation: "keyId:base64,keyId:base64".
+    CLINICAL_DATA_PREVIOUS_KEYS: csv.default([]),
 
     // ── Authentication (ADR-0015) ──
     // Ed25519 private key, PKCS#8 PEM, base64-encoded onto one line.
@@ -177,6 +193,30 @@ const envSchema = z
     if (env.NOTIFICATION_EMAIL_PROVIDER === 'smtp' && !env.SMTP_HOST) {
       ctx.addIssue({ code: 'custom', path: ['SMTP_HOST'], message: 'required for smtp' });
     }
+    if (['staging', 'production'].includes(env.APP_ENV) && !env.CLINICAL_DATA_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CLINICAL_DATA_KEY'],
+        message: 'a dedicated clinical data key is required outside development/test',
+      });
+    }
+    if (env.CLINICAL_DATA_KEY && Buffer.from(env.CLINICAL_DATA_KEY, 'base64').length !== 32) {
+      ctx.addIssue({ code: 'custom', path: ['CLINICAL_DATA_KEY'], message: 'must be 32 bytes' });
+    }
+    if (env.APP_ENV === 'production' && env.VIDEO_PROVIDER === 'mock') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['VIDEO_PROVIDER'],
+        message: 'the mock video provider cannot be used when APP_ENV=production',
+      });
+    }
+    if (env.VIDEO_PROVIDER === 'livekit') {
+      for (const name of ['LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET']) {
+        if (!env[name]) {
+          ctx.addIssue({ code: 'custom', path: [name], message: 'required for livekit' });
+        }
+      }
+    }
     if (env.SESSION_IDLE_TTL_MINUTES > env.SESSION_ABSOLUTE_TTL_HOURS * 60) {
       ctx.addIssue({
         code: 'custom',
@@ -204,6 +244,35 @@ export class ConfigError extends Error {
 }
 
 const decodePem = (base64) => Buffer.from(base64, 'base64').toString('utf8');
+
+function loadClinicalKeys(env) {
+  const current = env.CLINICAL_DATA_KEY
+    ? Buffer.from(env.CLINICAL_DATA_KEY, 'base64')
+    : Buffer.from(
+        hkdfSync(
+          'sha256',
+          env.INTERNAL_SERVICE_SECRET,
+          'healthbridge',
+          'clinical-data-dev-key',
+          32,
+        ),
+      );
+  const keys = new Map([[env.CLINICAL_DATA_KEY_ID, current]]);
+  for (const entry of env.CLINICAL_DATA_PREVIOUS_KEYS) {
+    const [id, value] = entry.split(':');
+    const key = Buffer.from(value ?? '', 'base64');
+    if (!/^[a-z0-9_-]{1,32}$/.test(id ?? '') || key.length !== 32 || keys.has(id)) {
+      throw new ConfigError([
+        {
+          path: ['CLINICAL_DATA_PREVIOUS_KEYS'],
+          message: 'entries must be keyId:base64(32 bytes)',
+        },
+      ]);
+    }
+    keys.set(id, key);
+  }
+  return { currentKeyId: env.CLINICAL_DATA_KEY_ID, keys };
+}
 
 function loadSigningKeys(env) {
   try {
@@ -297,6 +366,15 @@ export function loadConfig(env = process.env) {
       reminderSweepIntervalMs: e.REMINDER_SWEEP_INTERVAL_MS,
     },
     aiService: { url: e.AI_SERVICE_URL, internalSecret: e.INTERNAL_SERVICE_SECRET },
+    video: {
+      provider: e.VIDEO_PROVIDER,
+      tokenTtlSeconds: e.VIDEO_TOKEN_TTL_SECONDS,
+      livekit: { url: e.LIVEKIT_URL, apiKey: e.LIVEKIT_API_KEY, apiSecret: e.LIVEKIT_API_SECRET },
+      // The mock provider signs its room tokens with a key derived from the internal secret.
+      mockSecret: e.INTERNAL_SERVICE_SECRET,
+    },
+    // Map of Buffers (not frozen by deepFreeze).
+    clinicalData: loadClinicalKeys(e),
     auth: {
       // KeyObjects are not frozen (deepFreeze skips non-plain objects).
       signingKeys: keys,

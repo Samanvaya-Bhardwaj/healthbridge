@@ -28,6 +28,13 @@ export function templateForEvent(eventType, payload = {}) {
       return 'document_available';
     case 'document.rejected':
       return 'document_rejected';
+    // M9: generic wording; never medicines, notes or diagnoses.
+    case 'prescription.signed':
+      return 'prescription_available';
+    case 'consultation.completed':
+      if (payload.outcome === 'physical_visit_required') return 'in_person_visit_requested';
+      if (payload.outcome === 'emergency_escalation') return 'emergency_guidance';
+      return null;
     default:
       return null;
   }

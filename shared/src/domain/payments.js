@@ -53,6 +53,10 @@ export const NOTIFICATION_TEMPLATES = Object.freeze([
   // M5: generic wording only (never document names or contents)
   'document_available',
   'document_rejected',
+  // M9: generic wording only (never medicines, notes or diagnoses)
+  'prescription_available',
+  'in_person_visit_requested',
+  'emergency_guidance',
 ]);
 
 export const manualRefundSchema = z

@@ -13,6 +13,7 @@ const outboxJob = z.looseObject({
 });
 const reminderJob = z.object({ reminderId: uuid }).strict();
 const documentJob = outboxJob.refine((j) => uuid.safeParse(j.payload?.documentId).success);
+const prescriptionJob = outboxJob.refine((j) => uuid.safeParse(j.payload?.prescriptionId).success);
 const maintenanceJob = z.looseObject({});
 
 export const MAINTENANCE_JOBS = Object.freeze({
@@ -40,6 +41,7 @@ export function createJobProcessors(container, queues) {
     consentService,
     intelligenceService,
     timelineProjector,
+    prescriptionService,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -87,8 +89,13 @@ export function createJobProcessors(container, queues) {
         'document.uploaded': documentJob,
         'document.available': documentJob,
         'document.analysis_requested': documentJob,
+        'prescription.signed': prescriptionJob,
       },
       handle(job) {
+        // M9: signed prescription → immutable PDF (rendered once, integrity-checked).
+        if (job.name === 'prescription.signed') {
+          return prescriptionService.renderPdf(job.data.payload.prescriptionId);
+        }
         const { documentId } = job.data.payload;
         if (job.name === 'document.uploaded') return documentPipeline.scanAndPromote(documentId);
         // M6: AI analysis (opt-in, idempotent; AI-service errors are retried).

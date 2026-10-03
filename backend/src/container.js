@@ -45,6 +45,10 @@ import { createIntelligenceService } from './modules/intelligence/service.js';
 import { createTimelineProjector } from './modules/timeline/projector.js';
 import { createTimelineService } from './modules/timeline/service.js';
 import { createAssistService } from './modules/assist/service.js';
+import { createEnvelope } from './core/crypto/envelope.js';
+import { createVideoProvider } from './modules/consultations/videoProvider.js';
+import { createConsultationService } from './modules/consultations/service.js';
+import { createPrescriptionService } from './modules/consultations/prescriptions.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -76,6 +80,7 @@ export const DEFAULT_RATE_LIMITS = Object.freeze({
  *   documentStorage?: ReturnType<typeof import('./core/storage/documentStorage.js').createDocumentStorage>,
  *   documentScanner?: import('./modules/documents/scanning/documentScanner.js').DocumentScanner,
  *   aiClient?: ReturnType<typeof import('./core/ai/client.js').createAiClient>,
+ *   videoProvider?: import('./modules/consultations/videoProvider.js').VideoProvider,
  *   options?: { fakeAutoSettleRefunds?: boolean },
  * }} deps
  */
@@ -94,6 +99,7 @@ export function createContainer({
   documentStorage = createDocumentStorage(config.storage),
   documentScanner = createDocumentScanner(config.documents),
   aiClient,
+  videoProvider = createVideoProvider(config.video),
   options = {},
 }) {
   const audit = createAuditService({ knex, logger });
@@ -246,6 +252,24 @@ export function createContainer({
   const timelineProjector = createTimelineProjector({ knex, logger });
   const timelineService = createTimelineService({ knex, accessPolicy, audit });
   const assistService = createAssistService({ knex, aiClient, accessPolicy, audit });
+  const envelope = createEnvelope(config.clinicalData);
+  const consultationService = createConsultationService({
+    knex,
+    accessPolicy,
+    audit,
+    envelope,
+    video: videoProvider,
+    ...(now ? { now } : {}),
+  });
+  const prescriptionService = createPrescriptionService({
+    knex,
+    config,
+    accessPolicy,
+    audit,
+    storage: documentStorage,
+    logger,
+    ...(now ? { now } : {}),
+  });
   const intelligenceService = createIntelligenceService({
     knex,
     config,
@@ -340,6 +364,9 @@ export function createContainer({
     timelineProjector,
     timelineService,
     assistService,
+    consultationService,
+    prescriptionService,
+    videoProvider,
     aiClient,
     authenticate,
   };

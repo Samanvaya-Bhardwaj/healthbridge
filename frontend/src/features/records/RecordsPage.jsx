@@ -15,6 +15,7 @@ import { PatientSelect } from './PatientSelect.jsx';
 import { DocumentList } from './DocumentList.jsx';
 import { useDownload } from './useDownload.js';
 import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
+import { PatientPrescriptions } from '../consultations/Prescriptions.jsx';
 import { intelligenceApi } from '../../lib/domainApi.js';
 import {
   ACCEPT,
@@ -224,6 +225,10 @@ export function RecordsPage() {
       <Card>
         <h2 className="mb-2 text-sm font-semibold text-text">Verified lab values</h2>
         <LabResults patientId={patientId} />
+      </Card>
+      <Card>
+        <h2 className="mb-2 text-sm font-semibold text-text">Prescriptions</h2>
+        <PatientPrescriptions patientId={patientId} />
       </Card>
     </div>
   );

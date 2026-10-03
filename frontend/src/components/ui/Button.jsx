@@ -6,6 +6,7 @@ const variants = {
   primary: 'bg-primary text-primary-contrast hover:bg-primary-hover',
   secondary: 'border border-border bg-surface-raised text-text hover:bg-surface-muted',
   ghost: 'text-text-muted hover:bg-surface-muted hover:text-text',
+  danger: 'bg-danger text-white hover:opacity-90',
 };
 
 /**

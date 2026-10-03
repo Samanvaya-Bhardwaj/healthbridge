@@ -30,5 +30,6 @@ old one.
 | [0022](adr/0022-document-intelligence.md) | Opt-in AI document analysis via scoped hand-off; LangGraph document agent without tools; grounded proposals and chunks in RLS-scoped `ai` tables; backend-validated metadata; doctor-verified lab values | Accepted |
 | [0023](adr/0023-medical-timeline-projection.md) | Medical timeline as an idempotent, rebuildable projection with provenance on every event; consent-scoped RLS; JSON export | Accepted |
 | [0024](adr/0024-doctor-brief-patient-scoped-rag.md) | Doctor brief and record questions: consent + opt-in + scope token; hybrid RLS-scoped retrieval; citation/number/support/safety validation; exact insufficient-information fallback | Accepted |
+| [0025](adr/0025-consultations-prescribing.md) | Consultations: waiting room, video adapter, encrypted SOAP notes, outcome A/B/C by the doctor only, signed immutable prescriptions with integrity seal and PDF | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

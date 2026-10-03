@@ -135,6 +135,10 @@ const values = {
   PAYMENT_WEBHOOK_SECRET: secret(32),
   // Mailpit locally (see SMTP_HOST); tests use an in-memory provider.
   NOTIFICATION_EMAIL_PROVIDER: 'smtp',
+
+  // Consultations (ADR-0025): key-encryption key for clinical notes; mock video locally.
+  CLINICAL_DATA_KEY: randomBytes(32).toString('base64'),
+  VIDEO_PROVIDER: 'mock',
 };
 
 if (update && existsSync(target)) {

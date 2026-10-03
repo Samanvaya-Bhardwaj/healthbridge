@@ -166,3 +166,37 @@ export const assistApi = {
   feedback: (briefId, rating) =>
     data(apiRequest(`/briefs/${briefId}/feedback`, { method: 'POST', body: { rating } })),
 };
+
+/** Consultations and prescribing (M9). Clinical decisions are always the doctor's. */
+export const consultationApi = {
+  view: (appointmentId) => data(apiRequest(`/appointments/${appointmentId}/consultation`)),
+  status: (appointmentId) => data(apiRequest(`/appointments/${appointmentId}/consultation/status`)),
+  arrive: (appointmentId) =>
+    data(apiRequest(`/appointments/${appointmentId}/waiting-room`, { method: 'POST' })),
+  start: (appointmentId) =>
+    data(apiRequest(`/appointments/${appointmentId}/consultation/start`, { method: 'POST' })),
+  join: (appointmentId) =>
+    data(apiRequest(`/appointments/${appointmentId}/consultation/join`, { method: 'POST' })),
+  saveNote: (appointmentId, body) =>
+    data(apiRequest(`/appointments/${appointmentId}/consultation/note`, { method: 'PUT', body })),
+  signNote: (appointmentId) =>
+    data(apiRequest(`/appointments/${appointmentId}/consultation/note/sign`, { method: 'POST' })),
+  correctNote: (noteId, body) =>
+    data(apiRequest(`/clinical-notes/${noteId}/corrections`, { method: 'POST', body })),
+  saveDraft: (appointmentId, body) =>
+    data(
+      apiRequest(`/appointments/${appointmentId}/consultation/prescription`, {
+        method: 'PUT',
+        body,
+      }),
+    ),
+  signPrescription: (id) => data(apiRequest(`/prescriptions/${id}/sign`, { method: 'POST' })),
+  correctPrescription: (id, body) =>
+    data(apiRequest(`/prescriptions/${id}/corrections`, { method: 'POST', body })),
+  pdfUrl: (id) => data(apiRequest(`/prescriptions/${id}/pdf-url`, { method: 'POST' })),
+  forPatient: (patientId) => data(apiRequest(`/patients/${patientId}/prescriptions`)),
+  outcome: (appointmentId, body) =>
+    data(
+      apiRequest(`/appointments/${appointmentId}/consultation/outcome`, { method: 'POST', body }),
+    ),
+};

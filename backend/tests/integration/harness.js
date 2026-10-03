@@ -129,6 +129,35 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
         .select('id')
         .whereIn('patient_id', testPatients.clone());
       await trx('medical_events').whereIn('patient_id', testPatients.clone()).del();
+      // M9 rows: clinical records are never deleted at runtime (triggers); the owner
+      // disables the guards inside this transaction only to clean test data.
+      const testConsultations = trx('consultations')
+        .select('id')
+        .whereIn('patient_id', testPatients.clone());
+      const testPrescriptions = trx('prescriptions')
+        .select('id')
+        .whereIn('patient_id', testPatients.clone());
+      await trx('outbox_events')
+        .whereIn('aggregate_id', testConsultations.clone())
+        .orWhereIn('aggregate_id', testPrescriptions.clone())
+        .del();
+      await trx.raw('ALTER TABLE prescription_items DISABLE TRIGGER prescription_items_frozen');
+      await trx('prescription_items').whereIn('patient_id', testPatients.clone()).del();
+      await trx.raw('ALTER TABLE prescription_items ENABLE TRIGGER prescription_items_frozen');
+      for (const [table, trigger] of [
+        ['prescriptions', 'prescriptions_immutable'],
+        ['clinical_notes', 'clinical_notes_immutable'],
+      ]) {
+        await trx.raw(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`);
+        // Unlink correction chains first (the self-reference is ON DELETE RESTRICT).
+        await trx(table)
+          .whereIn('patient_id', testPatients.clone())
+          .update({ supersedes_id: null, correction_reason: null });
+        await trx(table).whereIn('patient_id', testPatients.clone()).del();
+        await trx.raw(`ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`);
+      }
+      await trx('consultation_presence').whereIn('patient_id', testPatients.clone()).del();
+      await trx('consultations').whereIn('patient_id', testPatients.clone()).del();
       await trx('brief_feedback').whereIn('patient_id', testPatients.clone()).del();
       await trx('ai.doctor_briefs').whereIn('patient_id', testPatients.clone()).del();
       // M6 rows (AI artifacts are append-only for runtime roles; the owner cleans tests).

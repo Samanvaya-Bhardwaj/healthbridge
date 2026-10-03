@@ -108,6 +108,30 @@ const TEMPLATES = {
       `Hello ${v.recipientName},\n\nA document uploaded to ${whoseInline(v)} health record ` +
       'could not be accepted. Please open the app for details and try again.',
   }),
+  // M9: generic wording — never medicines, note content or diagnoses.
+  prescription_available: (v) => ({
+    subject: `New prescription from ${v.doctorName}`,
+    text:
+      `Hello ${v.recipientName},\n\n${v.doctorName} has issued a prescription for ` +
+      `${whoseInline(v)} consultation. Open the HealthBridge app to view or download it.\n\n${details(v)}`,
+    sms: `HealthBridge: ${v.doctorName} issued a prescription. View it in the app. Ref ${v.reference}.`,
+  }),
+  in_person_visit_requested: (v) => ({
+    subject: `${v.doctorName} has asked for an in-person visit`,
+    text:
+      `Hello ${v.recipientName},\n\nAfter ${whoseInline(v)} online consultation, ${v.doctorName} ` +
+      'would like to examine the patient in person. Please book an in-clinic visit in the app.' +
+      `\n\n${details(v)}`,
+    sms: `HealthBridge: ${v.doctorName} asked for an in-person visit. Please book in the app. Ref ${v.reference}.`,
+  }),
+  emergency_guidance: (v) => ({
+    subject: 'Urgent: your doctor advised emergency care',
+    text:
+      `Hello ${v.recipientName},\n\nDuring ${whoseInline(v)} consultation, ${v.doctorName} ` +
+      'advised emergency care.\n\nCall 112 (India emergency number) or 108 for an ambulance, ' +
+      'or go to the nearest emergency department immediately. Do not wait for a reply in the app.',
+    sms: 'HealthBridge URGENT: your doctor advised emergency care. Call 112 or 108, or go to the nearest emergency department now.',
+  }),
   payment_refunded: (v) => ({
     subject: `Refund processed`,
     text:

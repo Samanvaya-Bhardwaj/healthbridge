@@ -61,6 +61,9 @@ export const PERMISSIONS = Object.freeze({
   // AI assistance (M8)
   AI_ASSIST_USE: 'ai_assist:use',
 
+  // Consultations (M9)
+  CONSULTATIONS_CONDUCT: 'consultations:conduct',
+
   // Administration
   USERS_READ: 'users:read',
   USERS_UPDATE: 'users:update',
@@ -104,6 +107,7 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'lab_results:verify': 'Verify AI-extracted lab values into the record',
   'records:export': 'Export own or managed dependents’ health timeline',
   'ai_assist:use': 'Use AI briefs and record questions for consented patients',
+  'consultations:conduct': 'Start own consultations, write clinical notes and record outcomes',
   'users:read': 'Read user accounts (administration/support)',
   'users:update': 'Change user account status',
   'admin:users': 'Grant and revoke user roles',
@@ -176,6 +180,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
     P.PRESCRIPTIONS_SIGN,
+    P.CONSULTATIONS_CONDUCT,
   ]),
   // Clinic-scoped: these permissions apply only within the clinic of the grant.
   [ROLES.CLINIC_ADMIN]: Object.freeze([

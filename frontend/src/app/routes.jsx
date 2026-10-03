@@ -24,6 +24,7 @@ import { RecordsPage } from '../features/records/RecordsPage.jsx';
 import { PrivacyPage } from '../features/records/PrivacyPage.jsx';
 import { TimelinePage } from '../features/records/TimelinePage.jsx';
 import { BriefPage } from '../features/records/AiAssist.jsx';
+import { ConsultationPage } from '../features/consultations/ConsultationPage.jsx';
 import {
   DoctorRecordsPage,
   DoctorPatientRecordsPage,
@@ -76,6 +77,10 @@ export const routes = [
           {
             path: 'appointments/book',
             element: guarded(PERMISSIONS.APPOINTMENTS_MANAGE, <BookAppointmentPage />),
+          },
+          {
+            path: 'appointments/:id/consultation',
+            element: guarded(PERMISSIONS.APPOINTMENTS_READ, <ConsultationPage />),
           },
           {
             path: 'appointments/:id/brief',

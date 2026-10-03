@@ -246,6 +246,21 @@ routes → controllers → application services → domain (pure rules) → repo
   If none remain, the answer is the exact insufficient-information fallback
   ([ADR-0024](adr/0024-doctor-brief-patient-scoped-rag.md)).
 
+### Consultations and prescribing (M9)
+
+- **Lifecycle:** the waiting room opens 15 minutes before an online appointment; the
+  doctor starts the consultation; video goes through a provider adapter (mock or
+  LiveKit tokens).
+- **Notes:** SOAP notes are envelope-encrypted (AES-256-GCM) and versioned by signed
+  corrections.
+- **Prescriptions:**
+  - signed with a content hash and an integrity seal;
+  - immutable (database triggers);
+  - rendered once to a deterministic PDF by the `documents` worker.
+- **Outcome:** recorded once by the doctor (A online / B in-person / C emergency with
+  fixed guidance); it completes the appointment and feeds the timeline and generic
+  notifications ([ADR-0025](adr/0025-consultations-prescribing.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -275,5 +290,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M8 complete (doctor brief and patient-scoped RAG).**
+Current status: **M9 complete (consultations and prescribing).**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

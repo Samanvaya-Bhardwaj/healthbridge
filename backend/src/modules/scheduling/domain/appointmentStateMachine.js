@@ -7,9 +7,11 @@ import { ConflictError, ForbiddenError } from '../../../core/http/errors.js';
  *   PENDING_PAYMENT ──expire (hold elapsed)──► EXPIRED
  *   PENDING_PAYMENT | CONFIRMED ──cancel──► CANCELLED
  *   CONFIRMED ──check_in (in clinic)──► CHECKED_IN
- *   CONFIRMED | CHECKED_IN | IN_CONSULTATION ──complete──► COMPLETED
+ *   CONFIRMED | CHECKED_IN ──complete──► COMPLETED (visit without a recorded consultation)
+ *   IN_CONSULTATION ──finish_consultation (doctor records the outcome)──► COMPLETED
  *   CONFIRMED ──no_show──► NO_SHOW
- *   (IN_CONSULTATION is entered by the consultation module, M9)
+ *   CONFIRMED (online) | CHECKED_IN (in clinic) ──start_consultation──► IN_CONSULTATION
+ *   (both consultation actions are used only by the consultation module, M9)
  *
  * Parties: 'patient' (patient or managing guardian), 'doctor', 'clinic' (clinic
  * administrator of the appointment's clinic), 'system' (verified payment webhooks and
@@ -24,6 +26,8 @@ import { ConflictError, ForbiddenError } from '../../../core/http/errors.js';
 
 const NO_SHOW_GRACE_MINUTES = 15;
 const CHECK_IN_EARLY_MINUTES = 60;
+export const CONSULTATION_EARLY_MINUTES = 10;
+export const CONSULTATION_LATE_MINUTES = 60;
 
 const RULES = {
   cancel: {
@@ -52,11 +56,28 @@ const RULES = {
     whenMessage: 'Check-in is possible for in-clinic visits from one hour before the start.',
   },
   complete: {
-    from: ['confirmed', 'checked_in', 'in_consultation'],
+    from: ['confirmed', 'checked_in'],
     parties: ['doctor'],
     to: 'completed',
     when: (a, now) => now >= a.starts_at,
     whenMessage: 'An appointment can be completed only after it starts.',
+  },
+  start_consultation: {
+    from: ['confirmed', 'checked_in'],
+    parties: ['doctor'],
+    to: 'in_consultation',
+    when: (a, now) =>
+      (a.mode === 'online' ? a.status === 'confirmed' : a.status === 'checked_in') &&
+      now >= new Date(a.starts_at.getTime() - CONSULTATION_EARLY_MINUTES * 60_000) &&
+      now < new Date(a.ends_at.getTime() + CONSULTATION_LATE_MINUTES * 60_000),
+    whenMessage: `A consultation can start from ${CONSULTATION_EARLY_MINUTES} minutes before the appointment (in-clinic visits after check-in) until ${CONSULTATION_LATE_MINUTES} minutes after it ends.`,
+  },
+  // Only through the consultation module, together with the outcome (ADR-0025).
+  finish_consultation: {
+    from: ['in_consultation'],
+    parties: ['doctor'],
+    to: 'completed',
+    when: () => true,
   },
   confirm_payment: {
     from: ['pending_payment'],

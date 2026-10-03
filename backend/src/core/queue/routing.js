@@ -28,6 +28,11 @@ export const EVENT_ROUTES = Object.freeze({
   'lab_result.verified': [TIMELINE],
   'document.analysis_requested': [DOCUMENTS],
   'document.rejected': [NOTIFICATIONS],
+  // M9: outcome → patient notice (B, C) + timeline; signed prescription → PDF render,
+  // notice and timeline. `appointment.in_consultation` updates the appointment's status.
+  'appointment.in_consultation': [TIMELINE],
+  'consultation.completed': [NOTIFICATIONS, TIMELINE],
+  'prescription.signed': [DOCUMENTS, NOTIFICATIONS, TIMELINE],
 });
 
 export const routesFor = (eventType) => EVENT_ROUTES[eventType] ?? [];

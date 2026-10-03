@@ -113,6 +113,20 @@ function PatientAppointments() {
                     {a.clinic && ` · ${a.clinic.name}`} · Ref {a.reference}
                   </p>
                 </div>
+                {(a.status === 'in_consultation' ||
+                  a.status === 'completed' ||
+                  (a.status === 'confirmed' && a.mode === 'online')) && (
+                  <Link
+                    to={`/app/appointments/${a.id}/consultation`}
+                    className="min-h-11 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text hover:bg-surface-muted"
+                  >
+                    {a.status === 'completed'
+                      ? 'Visit summary'
+                      : a.status === 'in_consultation'
+                        ? 'Join consultation'
+                        : 'Waiting room'}
+                  </Link>
+                )}
                 {['confirmed', 'pending_payment'].includes(a.status) && scope === 'upcoming' && (
                   <div className="flex flex-wrap gap-2">
                     {a.status === 'pending_payment' && (
@@ -181,6 +195,14 @@ function ScheduleItem({ a, now, onAction, pending }) {
           >
             View reason
           </Button>
+        )}
+        {['confirmed', 'checked_in', 'in_consultation', 'completed'].includes(a.status) && (
+          <Link
+            to={`/app/appointments/${a.id}/consultation`}
+            className="min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-surface-muted"
+          >
+            {a.status === 'completed' ? 'Summary' : 'Consultation'}
+          </Link>
         )}
         {['pending_payment', 'confirmed', 'checked_in', 'in_consultation'].includes(a.status) && (
           <Link

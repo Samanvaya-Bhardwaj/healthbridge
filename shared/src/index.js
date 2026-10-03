@@ -29,3 +29,4 @@ export * from './domain/schemas.js';
 export * from './domain/scheduling.js';
 export * from './domain/payments.js';
 export * from './domain/records.js';
+export * from './domain/consultations.js';

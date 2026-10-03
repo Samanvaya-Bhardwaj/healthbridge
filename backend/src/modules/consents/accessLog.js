@@ -31,6 +31,16 @@ const ACTIONS = [
   'record.question_answered',
   'brief.generated',
   'brief.viewed',
+  'consultation.started',
+  'consultation.viewed',
+  'consultation.outcome_recorded',
+  'consultation.emergency_escalated',
+  'clinical_note.signed',
+  'clinical_note.corrected',
+  'prescription.signed',
+  'prescription.corrected',
+  'prescription.list_viewed',
+  'prescription.downloaded',
   'patients:read',
 ];
 const SELF_REASONS = new Set(['patient_self', 'guardian_dependent']);
@@ -57,6 +67,16 @@ const DESCRIBE = {
   'record.question_answered': (a) => `${a} asked HealthBridge AI a question about the records`,
   'brief.generated': (a) => `${a} prepared an AI brief before an appointment`,
   'brief.viewed': (a) => `${a} viewed the AI brief for an appointment`,
+  'consultation.started': (a) => `${a} started a consultation`,
+  'consultation.viewed': (a) => `${a} viewed consultation notes and prescriptions`,
+  'consultation.outcome_recorded': (a) => `${a} recorded the outcome of a consultation`,
+  'consultation.emergency_escalated': (a) => `${a} advised emergency care during a consultation`,
+  'clinical_note.signed': (a) => `${a} signed a consultation note`,
+  'clinical_note.corrected': (a) => `${a} corrected a consultation note`,
+  'prescription.signed': (a) => `${a} signed a prescription`,
+  'prescription.corrected': (a) => `${a} corrected a prescription`,
+  'prescription.list_viewed': (a) => `${a} viewed the list of prescriptions`,
+  'prescription.downloaded': (a) => `${a} downloaded a prescription`,
   'patients:read': (a) => `${a} viewed the profile`,
 };
 const REJECTION_LABELS = {

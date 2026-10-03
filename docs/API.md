@@ -275,3 +275,23 @@ Internal (AI service): `POST /v1/documents/analyze` (service token + `X-Patient-
 
 Internal (AI service): `POST /v1/assist/answer` and `POST /v1/assist/brief`, each with a
 service token and `X-Patient-Scope`.
+
+## Endpoints (M9)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/appointments/:id/consultation` | `appointments:read` (patient side / the doctor) | Full view: consultation, waiting room, notes and prescriptions visible to the caller (audited when clinical content is returned) |
+| GET | `/appointments/:id/consultation/status` | same | Polling: state, waiting-room presence, emergency guidance. No clinical content |
+| POST | `/appointments/:id/waiting-room` | patient side | Heartbeat. `409 waiting_room_closed` outside the window |
+| POST | `/appointments/:id/consultation/start` | `consultations:conduct`, the doctor | Idempotent. Appointment → `in_consultation` |
+| POST | `/appointments/:id/consultation/join` | either party | `{ provider, url, room, token, expiresAt }` (live online consultations) |
+| PUT | `/appointments/:id/consultation/note` | `consultations:conduct` | SOAP draft `{ subjective, objective, assessment, plan }` |
+| POST | `/appointments/:id/consultation/note/sign` | `consultations:conduct` | Signs the draft |
+| POST | `/clinical-notes/:id/corrections` | author | `{ note, reason }` returns a new signed version (201) |
+| PUT | `/appointments/:id/consultation/prescription` | `prescriptions:sign` | Draft `{ items[], advice }`. Prescribing rules return `400` |
+| POST | `/prescriptions/:id/sign` | author | Content hash and seal; queues the PDF |
+| POST | `/prescriptions/:id/corrections` | author | `{ items, advice, reason }` returns a new signed version (201) |
+| GET | `/prescriptions/:id` | `prescriptions:read` | Author, patient side, or consented doctor |
+| POST | `/prescriptions/:id/pdf-url` | `prescriptions:read` | 60-second URL plus `sha256`. `409 pdf_not_ready` |
+| GET | `/patients/:patientId/prescriptions` | `prescriptions:read` (+ consent covering `prescription`) | Signed and superseded versions |
+| POST | `/appointments/:id/consultation/outcome` | `consultations:conduct` | One of `{ outcome: online_managed, followUpOn? }`, `{ outcome: physical_visit_required, visitNote? }` or `{ outcome: emergency_escalation, confirm: true }` |

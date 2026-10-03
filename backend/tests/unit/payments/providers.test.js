@@ -282,6 +282,12 @@ describe('payment and notification configuration', () => {
     CLAMAV_HOST: 'clamav.internal',
     NOTIFICATION_EMAIL_PROVIDER: 'smtp',
     SMTP_HOST: 'smtp.example.test',
+    // M9: a dedicated clinical data key and a real video provider (test-only values).
+    CLINICAL_DATA_KEY: Buffer.alloc(32, 7).toString('base64'),
+    VIDEO_PROVIDER: 'livekit',
+    LIVEKIT_URL: 'wss://video.example.test',
+    LIVEKIT_API_KEY: 'test-key',
+    LIVEKIT_API_SECRET: 'test-only-livekit-secret-0123456789abcdef',
   };
 
   it('defaults to the fake provider and simulation outside production', () => {

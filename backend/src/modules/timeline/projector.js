@@ -130,6 +130,76 @@ export function createTimelineProjector({ knex, logger }) {
     return true;
   }
 
+  const OUTCOME_TITLES = {
+    online_managed: 'Consultation: managed online',
+    physical_visit_required: 'Consultation: in-person visit advised',
+    emergency_escalation: 'Consultation: emergency care advised',
+  };
+
+  /** M9: the doctor's recorded outcome. Note content never enters the timeline. */
+  async function projectConsultation(trx, id) {
+    const c = await trx('consultations as c')
+      .join('doctors as d', 'd.id', 'c.doctor_id')
+      .where('c.id', id)
+      .first('c.*', 'd.professional_name');
+    if (!c || c.status !== 'ended') return false;
+    await upsert(trx, {
+      patient_id: c.patient_id,
+      event_type: 'consultation',
+      source_type: 'consultation',
+      source_id: c.id,
+      occurred_at: c.outcome_recorded_at,
+      date_precision: 'instant',
+      title: OUTCOME_TITLES[c.outcome],
+      status: c.outcome,
+      provenance: 'doctor_reported',
+      actor_label: c.professional_name,
+      detail: {
+        outcome: c.outcome,
+        mode: c.mode,
+        appointmentId: c.appointment_id,
+        followUpOn: c.outcome_detail?.followUpOn ?? null,
+      },
+      doctor_user_id: c.doctor_user_id,
+    });
+    return true;
+  }
+
+  /** M9: signed prescriptions (a superseded version stays visible, marked as such). */
+  async function projectPrescription(trx, id) {
+    const p = await trx('prescriptions as p')
+      .join('doctors as d', 'd.id', 'p.doctor_id')
+      .where('p.id', id)
+      .first('p.*', 'd.professional_name');
+    if (!p || !['signed', 'superseded'].includes(p.status)) return false;
+    const medicines = await trx('prescription_items')
+      .where({ prescription_id: id })
+      .orderBy('position')
+      .pluck('drug_name');
+    await upsert(trx, {
+      patient_id: p.patient_id,
+      event_type: 'prescription',
+      source_type: 'prescription',
+      source_id: p.id,
+      occurred_at: p.signed_at,
+      date_precision: 'instant',
+      title: `Prescription ${p.reference}${p.version > 1 ? ` (correction ${p.version - 1})` : ''}`,
+      status: p.status,
+      provenance: 'doctor_reported',
+      actor_label: p.professional_name,
+      detail: {
+        prescriptionId: p.id,
+        reference: p.reference,
+        version: p.version,
+        medicines,
+        supersedesId: p.supersedes_id,
+      },
+      document_type: 'prescription',
+      doctor_user_id: p.doctor_user_id,
+    });
+    return true;
+  }
+
   /** Projects the source of one outbox event. */
   async function handleEvent({ eventType, aggregateType, aggregateId, payload = {} }) {
     return withSystem(knex, 'timeline', async (trx) => {
@@ -142,6 +212,14 @@ export function createTimelineProjector({ knex, logger }) {
       }
       if (aggregateType === 'medical_document')
         return { projected: await projectDocument(trx, aggregateId) };
+      if (aggregateType === 'consultation')
+        return { projected: await projectConsultation(trx, aggregateId) };
+      if (aggregateType === 'prescription') {
+        const projected = await projectPrescription(trx, aggregateId);
+        // A correction supersedes the previous version.
+        if (payload.supersedesId) await projectPrescription(trx, payload.supersedesId);
+        return { projected };
+      }
       return { projected: false };
     });
   }
@@ -153,10 +231,14 @@ export function createTimelineProjector({ knex, logger }) {
       const appts = await trx('appointments').where({ patient_id: patientId }).pluck('id');
       const documents = await trx('medical_documents').where({ patient_id: patientId }).pluck('id');
       const labResults = await trx('lab_results').where({ patient_id: patientId }).pluck('id');
+      const consultations = await trx('consultations').where({ patient_id: patientId }).pluck('id');
+      const prescriptions = await trx('prescriptions').where({ patient_id: patientId }).pluck('id');
       let n = 0;
       for (const id of appts) n += (await projectAppointment(trx, id)) ? 1 : 0;
       for (const id of documents) n += (await projectDocument(trx, id)) ? 1 : 0;
       for (const id of labResults) n += (await projectLabResult(trx, id)) ? 1 : 0;
+      for (const id of consultations) n += (await projectConsultation(trx, id)) ? 1 : 0;
+      for (const id of prescriptions) n += (await projectPrescription(trx, id)) ? 1 : 0;
       return { projected: n };
     });
   }

@@ -83,6 +83,15 @@ export const domainMetrics = Object.freeze({
   ]),
   briefFeedback: counter('brief_feedback_total', 'Doctor feedback on briefs', ['rating']),
 
+  // M9: consultations and prescribing
+  consultations: counter('consultations_total', 'Consultations started and outcomes', [
+    'event',
+    'mode',
+  ]),
+  prescriptions: counter('prescriptions_total', 'Prescriptions signed, corrected, rendered', [
+    'event',
+  ]),
+
   providerLatency: histogram('payment_provider_duration_seconds', 'Payment provider call latency', [
     'operation',
     'outcome',
