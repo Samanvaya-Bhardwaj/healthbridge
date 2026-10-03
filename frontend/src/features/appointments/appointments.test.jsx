@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { App } from '../../app/App.jsx';
@@ -125,7 +125,21 @@ describe('patient appointments', () => {
       'href',
       `/app/appointments/book?rescheduleId=a1&doctorId=${DOCTOR}&mode=online`,
     );
-    await userEvent.setup().click(within(item).getByRole('button', { name: 'Cancel' }));
+    const user = userEvent.setup();
+    // Cancelling asks first; "Keep it" closes without calling the API.
+    await user.click(within(item).getByRole('button', { name: 'Cancel' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Cancel this appointment?' });
+    expect(within(dialog).getByRole('button', { name: 'Cancel appointment' })).toHaveFocus();
+    await user.click(within(dialog).getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(calls.some((c) => c.key === 'POST /api/v1/appointments/a1/cancel')).toBe(false);
+
+    await user.click(within(item).getByRole('button', { name: 'Cancel' }));
+    dialog = await screen.findByRole('dialog', { name: 'Cancel this appointment?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel appointment' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.key === 'POST /api/v1/appointments/a1/cancel')).toBe(true),
+    );
     expect(
       JSON.parse(calls.find((c) => c.key === 'POST /api/v1/appointments/a1/cancel').init.body),
     ).toEqual({ reasonCode: 'patient_request' });

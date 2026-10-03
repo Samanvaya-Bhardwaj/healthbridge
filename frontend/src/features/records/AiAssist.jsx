@@ -9,6 +9,9 @@ import { Button } from '../../components/ui/Button.jsx';
 import { Card } from '../../components/ui/Card.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { BackLink } from '../../components/ui/BackLink.jsx';
+import { RefreshCw, Sparkles } from 'lucide-react';
 
 const AI_NOTICE =
   'AI-generated from the shared records. Every sentence cites its source — check the sources before relying on it. It does not diagnose or recommend treatment.';
@@ -102,17 +105,25 @@ export function BriefPage() {
   const b = brief.data;
   return (
     <div className="space-y-6">
-      <Link to="/app/appointments" className="text-sm font-medium text-primary">
-        ← Appointments
-      </Link>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Pre-consultation brief</h1>
-        {b && (
-          <Button variant="secondary" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
-            {refresh.isPending ? 'Refreshing…' : 'Refresh'}
-          </Button>
-        )}
-      </div>
+      <BackLink to="/app/appointments">Schedule</BackLink>
+      <PageHeader
+        icon={Sparkles}
+        eyebrow="Clinical work · AI-assisted"
+        title="Pre-consultation brief"
+        description="A summary of the records this patient has shared with you, written by AI from verified lab values and document excerpts only. Every statement cites its source. It never diagnoses; check the sources before relying on it."
+        actions={
+          b && (
+            <Button
+              variant="secondary"
+              icon={RefreshCw}
+              onClick={() => refresh.mutate()}
+              loading={refresh.isPending}
+            >
+              {refresh.isPending ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          )
+        }
+      />
       {brief.isPending && <Skeleton className="h-32 w-full" />}
       {brief.isError && (
         <Alert tone="error">

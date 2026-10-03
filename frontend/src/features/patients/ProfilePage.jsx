@@ -12,6 +12,8 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { PatientProfileForm } from './PatientProfileForm.jsx';
 import { useAuth } from '../auth/authContext.js';
+import { UserRound } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
 
 const RELATIONSHIP_OPTIONS = GUARDIAN_RELATIONSHIP_TYPES.map((v) => ({
   value: v,
@@ -138,15 +140,20 @@ export function ProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Profile</h1>
-        <p className="mt-2 text-text-muted">
-          Your health profile is separate from your sign-in account. Doctors see it only when you
-          add them to your care team. Account security lives in{' '}
-          <Link to="/app/account" className="font-medium text-primary hover:text-primary-hover">
-            security settings
-          </Link>
-          .
-        </p>
+        <PageHeader
+          icon={UserRound}
+          eyebrow="Account"
+          title="Profile"
+          description="Your health profile and the family members whose care you manage. Doctors see it only when you add them to your care team."
+        >
+          <p className="mt-1.5 text-sm text-text-muted">
+            Password and signed-in devices are under{' '}
+            <Link to="/app/account" className="font-medium text-primary hover:text-primary-hover">
+              Sign-in &amp; security
+            </Link>
+            .
+          </p>
+        </PageHeader>
       </div>
       <Card>
         {profile.isPending && <Skeleton className="h-40 w-full" />}

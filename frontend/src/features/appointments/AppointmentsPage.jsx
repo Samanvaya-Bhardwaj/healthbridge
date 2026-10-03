@@ -7,10 +7,22 @@ import { schedulingApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Button } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
-import { EmptyState } from '../../components/ui/EmptyState.jsx';
+import { EmptyState, LoadingState, PermissionNotice } from '../../components/ui/EmptyState.jsx';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { Tabs } from '../../components/ui/Tabs.jsx';
+import { useConfirm } from '../../components/ui/useConfirm.jsx';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import {
+  Building2,
+  CalendarClock,
+  CalendarDays,
+  ClipboardList,
+  Sparkles,
+  Stethoscope,
+  Video,
+} from 'lucide-react';
 import { AvailabilityManager } from './AvailabilityManager.jsx';
 import {
   MODE_LABELS,
@@ -26,24 +38,6 @@ const weekRange = () => {
   from.setHours(0, 0, 0, 0);
   return { from: from.toISOString(), to: new Date(from.getTime() + 8 * 86_400_000).toISOString() };
 };
-
-function Tabs({ tabs, value, onChange, label }) {
-  return (
-    <div role="tablist" aria-label={label} className="flex gap-1 border-b border-border">
-      {tabs.map(([key, text]) => (
-        <button
-          key={key}
-          role="tab"
-          aria-selected={value === key}
-          onClick={() => onChange(key)}
-          className={`min-h-11 px-4 text-sm font-medium ${value === key ? 'border-b-2 border-primary text-primary' : 'text-text-muted hover:text-text'}`}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ── Patient ────────────────────────────────────────────────────────
 
@@ -61,21 +55,37 @@ function PatientAppointments() {
     mutationFn: (id) => schedulingApi.cancel(id, 'patient_request'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
   });
+  const { confirm, dialog } = useConfirm();
+  const confirmCancel = async (a) => {
+    const ok = await confirm({
+      title: 'Cancel this appointment?',
+      description: `${formatDateTime(a.startsAt)} with ${a.doctor?.professionalName ?? 'your doctor'}. ${
+        a.feePaise > 0
+          ? 'Paid visits cancelled at least 24 hours before the start are refunded in full; later cancellations are not refunded.'
+          : 'You can book another time afterwards.'
+      }`,
+      confirmLabel: 'Cancel appointment',
+      cancelLabel: 'Keep it',
+      destructive: true,
+      tone: 'warning',
+    });
+    if (ok) cancel.mutate(a.id);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-text">Appointments</h1>
-          <p className="mt-2 text-text-muted">Book with a doctor from your care team.</p>
-        </div>
-        <Link
-          to="/app/doctors"
-          className="min-h-11 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
-        >
-          Book with my doctors
-        </Link>
-      </div>
+      {dialog}
+      <PageHeader
+        icon={CalendarDays}
+        eyebrow="My care"
+        title="Appointments"
+        description="Your online and in-clinic consultations. You can book with any doctor in your care team."
+        actions={
+          <ButtonLink as={Link} to="/app/doctors" icon={Stethoscope}>
+            Book with my doctors
+          </ButtonLink>
+        }
+      />
       {location.state?.notice && <Alert tone="success">{location.state.notice}</Alert>}
       {cancel.isError && <Alert tone="error">{authErrorMessage(cancel.error)}</Alert>}
       <Tabs
@@ -83,69 +93,95 @@ function PatientAppointments() {
         value={scope}
         onChange={setScope}
         tabs={[
-          ['upcoming', 'Upcoming'],
-          ['past', 'Past & cancelled'],
+          ['upcoming', 'Upcoming', CalendarClock],
+          ['past', 'Past & cancelled', ClipboardList],
         ]}
       />
-      {list.isPending && <Skeleton className="h-24 w-full" />}
+      {list.isPending && <LoadingState label="Loading appointments" rows={2} />}
       {list.isError && <Alert tone="error">{authErrorMessage(list.error)}</Alert>}
-      {list.data?.length === 0 && (
-        <EmptyState title={scope === 'upcoming' ? 'No upcoming appointments' : 'Nothing here yet'}>
-          Your appointments with your doctors appear here.
-        </EmptyState>
-      )}
+      {list.data?.length === 0 &&
+        (scope === 'upcoming' ? (
+          <EmptyState
+            icon={CalendarDays}
+            title="No upcoming appointments"
+            action={
+              <ButtonLink as={Link} to="/app/doctors" icon={Stethoscope}>
+                Book with my doctors
+              </ButtonLink>
+            }
+          >
+            Book an online consultation first; your doctor will tell you if you need to visit the
+            clinic.
+          </EmptyState>
+        ) : (
+          <EmptyState icon={ClipboardList} title="No past appointments">
+            Completed and cancelled appointments appear here, with visit summaries.
+          </EmptyState>
+        ))}
       <ul className="space-y-3">
         {list.data?.map((a) => (
           <li key={a.id}>
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="flex flex-wrap items-center gap-2 font-medium text-text">
-                    {formatDateTime(a.startsAt)} <StatusBadge status={a.status} />
-                    {a.paymentStatus && a.paymentStatus !== 'pending' && (
-                      <span className="text-xs font-normal text-text-muted">
-                        Payment: <StatusBadge status={a.paymentStatus} />
-                      </span>
+                <div className="flex min-w-0 gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary"
+                  >
+                    {a.mode === 'online' ? (
+                      <Video className="h-5 w-5" />
+                    ) : (
+                      <Building2 className="h-5 w-5" />
                     )}
-                  </p>
-                  <p className="mt-1 text-sm text-text-muted">
-                    {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
-                    {a.clinic && ` · ${a.clinic.name}`} · Ref {a.reference}
-                  </p>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 font-medium text-text">
+                      {formatDateTime(a.startsAt)} <StatusBadge status={a.status} />
+                      {a.paymentStatus && a.paymentStatus !== 'pending' && (
+                        <span className="text-xs font-normal text-text-muted">
+                          Payment: <StatusBadge status={a.paymentStatus} />
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-1 text-sm text-text-muted">
+                      {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
+                      {a.clinic && ` · ${a.clinic.name}`} · Ref {a.reference}
+                    </p>
+                  </div>
                 </div>
                 {(a.status === 'in_consultation' ||
                   a.status === 'completed' ||
                   (a.status === 'confirmed' && a.mode === 'online')) && (
-                  <Link
+                  <ButtonLink
+                    as={Link}
                     to={`/app/appointments/${a.id}/consultation`}
-                    className="min-h-11 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text hover:bg-surface-muted"
+                    variant={a.status === 'in_consultation' ? 'primary' : 'secondary'}
+                    icon={a.status === 'completed' ? ClipboardList : Video}
                   >
                     {a.status === 'completed'
                       ? 'Visit summary'
                       : a.status === 'in_consultation'
                         ? 'Join consultation'
                         : 'Waiting room'}
-                  </Link>
+                  </ButtonLink>
                 )}
                 {['confirmed', 'pending_payment'].includes(a.status) && scope === 'upcoming' && (
                   <div className="flex flex-wrap gap-2">
                     {a.status === 'pending_payment' && (
-                      <Link
-                        to={`/app/appointments/${a.id}/pay`}
-                        className="min-h-11 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
-                      >
+                      <ButtonLink as={Link} to={`/app/appointments/${a.id}/pay`}>
                         Pay {formatFee(a.feePaise)}
-                      </Link>
+                      </ButtonLink>
                     )}
-                    <Link
+                    <ButtonLink
+                      as={Link}
                       to={`/app/appointments/book?rescheduleId=${a.id}&doctorId=${a.doctorId}&mode=${a.mode}`}
-                      className="min-h-11 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text hover:bg-surface-muted"
+                      variant="secondary"
                     >
                       Reschedule
-                    </Link>
+                    </ButtonLink>
                     <Button
                       variant="ghost"
-                      onClick={() => cancel.mutate(a.id)}
+                      onClick={() => confirmCancel(a)}
                       disabled={cancel.isPending}
                     >
                       Cancel
@@ -177,9 +213,9 @@ function ScheduleItem({ a, now, onAction, pending }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-3">
       <div>
-        <p className="flex items-center gap-2 text-sm font-medium text-text">
-          {formatTime(a.startsAt)} · {a.patient?.fullName ?? `Ref ${a.reference}`}{' '}
-          <StatusBadge status={a.status} />
+        <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
+          <span className="tabular-nums">{formatTime(a.startsAt)}</span> ·{' '}
+          {a.patient?.fullName ?? `Ref ${a.reference}`} <StatusBadge status={a.status} />
         </p>
         <p className="text-xs text-text-subtle">
           {MODE_LABELS[a.mode]}
@@ -187,35 +223,43 @@ function ScheduleItem({ a, now, onAction, pending }) {
         </p>
         {reason !== null && <p className="mt-1 text-sm text-text-muted">Reason: {reason}</p>}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {reason === null && (
           <Button
             variant="ghost"
+            size="sm"
             onClick={async () => setReason((await schedulingApi.get(a.id)).reason ?? '—')}
           >
             View reason
           </Button>
         )}
         {['confirmed', 'checked_in', 'in_consultation', 'completed'].includes(a.status) && (
-          <Link
+          <ButtonLink
+            as={Link}
             to={`/app/appointments/${a.id}/consultation`}
-            className="min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-surface-muted"
+            variant="secondary"
+            size="sm"
+            icon={a.status === 'completed' ? ClipboardList : Video}
           >
             {a.status === 'completed' ? 'Summary' : 'Consultation'}
-          </Link>
+          </ButtonLink>
         )}
         {['pending_payment', 'confirmed', 'checked_in', 'in_consultation'].includes(a.status) && (
-          <Link
+          <ButtonLink
+            as={Link}
             to={`/app/appointments/${a.id}/brief`}
-            className="min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-surface-muted"
+            variant="subtle"
+            size="sm"
+            icon={Sparkles}
           >
             AI brief
-          </Link>
+          </ButtonLink>
         )}
         {actions.map(([action, label]) => (
           <Button
             key={action}
             variant={action === 'cancel' ? 'ghost' : 'secondary'}
+            size="sm"
             disabled={pending}
             onClick={() => onAction(a.id, action)}
           >
@@ -244,16 +288,48 @@ function DoctorSchedule() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['doctor-schedule'] }),
   });
   const days = groupByDay(schedule.data ?? []);
+  const { confirm, dialog } = useConfirm();
+  const onAction = async (id, action) => {
+    if (action === 'cancel' || action === 'no-show') {
+      const ok = await confirm(
+        action === 'cancel'
+          ? {
+              title: 'Cancel this appointment?',
+              description:
+                'The patient is notified and any payment is refunded in full. This cannot be undone.',
+              confirmLabel: 'Cancel appointment',
+              cancelLabel: 'Keep it',
+              destructive: true,
+              tone: 'warning',
+            }
+          : {
+              title: 'Mark as no-show?',
+              description: 'Use this only when the patient did not attend.',
+              confirmLabel: 'Mark no-show',
+              destructive: true,
+            },
+      );
+      if (!ok) return;
+    }
+    act.mutate({ id, action });
+  };
   return (
     <div className="space-y-4">
+      {dialog}
       {act.isError && <Alert tone="error">{authErrorMessage(act.error)}</Alert>}
-      {schedule.isPending && <Skeleton className="h-24 w-full" />}
+      {schedule.isPending && <LoadingState label="Loading schedule" rows={2} />}
       {schedule.data?.length === 0 && (
-        <EmptyState title="No appointments this week">New bookings appear here.</EmptyState>
+        <EmptyState icon={CalendarDays} title="No appointments in the next week">
+          New bookings appear here as patients book from your availability. Check the Availability
+          tab to make sure your hours are up to date.
+        </EmptyState>
       )}
       {days.map(([key, items]) => (
         <Card key={key}>
-          <h2 className="text-sm font-semibold text-text">{formatDay(items[0].startsAt)}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
+            <CalendarDays aria-hidden="true" className="h-4 w-4 text-primary" />
+            {formatDay(items[0].startsAt)}
+          </h2>
           <ul className="mt-2 divide-y divide-border">
             {items.map((a) => (
               <ScheduleItem
@@ -261,7 +337,7 @@ function DoctorSchedule() {
                 a={a}
                 now={now}
                 pending={act.isPending}
-                onAction={(id, action) => act.mutate({ id, action })}
+                onAction={onAction}
               />
             ))}
           </ul>
@@ -275,19 +351,19 @@ function DoctorAppointments() {
   const [tab, setTab] = useState('schedule');
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Appointments</h1>
-        <p className="mt-2 text-text-muted">
-          Your schedule for the next week, and when patients can book you.
-        </p>
-      </div>
+      <PageHeader
+        icon={CalendarDays}
+        eyebrow="Clinical work"
+        title="Schedule"
+        description="Your appointments for the next week, and the hours when patients can book you."
+      />
       <Tabs
         label="Appointments"
         value={tab}
         onChange={setTab}
         tabs={[
-          ['schedule', 'Schedule'],
-          ['availability', 'Availability'],
+          ['schedule', 'Appointments', CalendarDays],
+          ['availability', 'Availability', CalendarClock],
         ]}
       />
       {tab === 'schedule' ? <DoctorSchedule /> : <AvailabilityManager />}
@@ -311,39 +387,55 @@ function ClinicBoard({ clinicId }) {
         : schedulingApi.action(id, action),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clinic-board', clinicId] }),
   });
+  const { confirm, dialog } = useConfirm();
+  const cancelVisit = async (a) => {
+    const ok = await confirm({
+      title: 'Cancel this appointment?',
+      description: `Ref ${a.reference} with ${a.doctor?.professionalName ?? 'the doctor'}. The patient is notified and any payment is refunded in full.`,
+      confirmLabel: 'Cancel appointment',
+      cancelLabel: 'Keep it',
+      destructive: true,
+      tone: 'warning',
+    });
+    if (ok) act.mutate({ id: a.id, action: 'cancel' });
+  };
   return (
     <Card>
+      {dialog}
       {act.isError && (
         <Alert tone="error" className="mb-4">
           {authErrorMessage(act.error)}
         </Alert>
       )}
-      {board.isPending && <Skeleton className="h-16 w-full" />}
+      {board.isPending && <LoadingState label="Loading clinic schedule" rows={2} />}
       {board.data?.length === 0 && (
-        <p className="text-sm text-text-muted">No appointments this week.</p>
+        <EmptyState compact icon={CalendarDays} title="No appointments in the next week">
+          Visits booked with your clinic’s doctors appear here.
+        </EmptyState>
       )}
       <ul className="divide-y divide-border">
         {board.data?.map((a) => (
           <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div>
-              <p className="flex items-center gap-2 text-sm font-medium text-text">
-                {formatDateTime(a.startsAt)} · Ref {a.reference} <StatusBadge status={a.status} />
-              </p>
-              <p className="text-xs text-text-subtle">
-                {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <PersonIdentity
+                name={a.doctor?.professionalName ?? 'Doctor'}
+                detail={`${formatDateTime(a.startsAt)} · ${MODE_LABELS[a.mode]} · Ref ${a.reference}`}
+                size="sm"
+              />
+              <StatusBadge status={a.status} />
             </div>
             <div className="flex gap-2">
               {a.status === 'confirmed' && a.mode === 'in_clinic' && (
                 <Button
                   variant="secondary"
+                  size="sm"
                   onClick={() => act.mutate({ id: a.id, action: 'check-in' })}
                 >
                   Check in
                 </Button>
               )}
               {['confirmed', 'pending_payment'].includes(a.status) && (
-                <Button variant="ghost" onClick={() => act.mutate({ id: a.id, action: 'cancel' })}>
+                <Button variant="ghost" size="sm" onClick={() => cancelVisit(a)}>
                   Cancel
                 </Button>
               )}
@@ -358,13 +450,12 @@ function ClinicBoard({ clinicId }) {
 function ClinicAppointments({ clinicIds }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Clinic appointments</h1>
-        <p className="mt-2 text-text-muted">
-          Patients identify themselves at the desk with their booking reference. Patient details and
-          visit reasons are visible only to the patient and their doctor.
-        </p>
-      </div>
+      <PageHeader
+        icon={CalendarDays}
+        eyebrow="Clinic"
+        title="Clinic schedule"
+        description="Every appointment at your clinic for the next week. Patients identify themselves at the desk with their booking reference; patient details and visit reasons are visible only to the patient and their doctor."
+      />
       {clinicIds.map((id) => (
         <ClinicBoard key={id} clinicId={id} />
       ))}
@@ -384,8 +475,9 @@ export function AppointmentsPage() {
   if (role === 'CLINIC_ADMIN') return <ClinicAppointments clinicIds={clinicIds} />;
   if (role === 'PATIENT') return <PatientAppointments />;
   return (
-    <EmptyState title="Appointment lookup is not available yet">
-      Support tools for appointments arrive with the support console.
-    </EmptyState>
+    <PermissionNotice title="No appointment view for your role">
+      Support staff can look up accounts under User lookup. Appointment details stay with the
+      patient, their doctor and the clinic.
+    </PermissionNotice>
   );
 }

@@ -15,6 +15,9 @@ import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { HeartPulse } from 'lucide-react';
 
 const OVERALL = [
   ['better', 'Better'],
@@ -110,7 +113,7 @@ function CheckInForm({ followUp, onDone }) {
           Anything else for your doctor? (optional)
         </span>
         <textarea
-          className="mt-1.5 block w-full rounded-lg border border-border bg-surface-raised px-3.5 py-2.5 text-text"
+          className={controlClass()}
           rows={3}
           maxLength={1000}
           value={note}
@@ -140,16 +143,13 @@ function PatientFollowUps() {
   };
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Follow-ups</h1>
-        <p className="mt-2 text-text-muted">
-          Short check-ins from your doctor after a consultation. If you feel very unwell, do not
-          wait — call 112.
-        </p>
-      </div>
-      {choices.length > 1 && (
-        <PatientSelect choices={choices} value={patientId} onChange={setPatientId} />
-      )}
+      <PageHeader
+        icon={HeartPulse}
+        eyebrow="My care"
+        title="Follow-ups"
+        description="Short check-ins your doctor asks for after a consultation: tell them how you are. If you feel very unwell, do not wait — call 112 or 108."
+        actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
+      />
       {guidance && <EmergencyGuidance guidance={guidance} />}
       {(isPending || list.isPending) && <Skeleton className="h-24 w-full" />}
       {list.isError && <Alert tone="error">{authErrorMessage(list.error)}</Alert>}
@@ -294,12 +294,12 @@ function DoctorFollowUps() {
   };
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Follow-ups</h1>
-        <p className="mt-2 text-text-muted">
-          Check-ins after consultations. Urgent answers come first.
-        </p>
-      </div>
+      <PageHeader
+        icon={HeartPulse}
+        eyebrow="Clinical work"
+        title="Follow-ups"
+        description="Check-ins after consultations. Urgent answers come first; warning signs are escalated by fixed rules, never by AI."
+      />
       <ScheduleForm onDone={refresh} />
       <SelectField
         className="max-w-xs"

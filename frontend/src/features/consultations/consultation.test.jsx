@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { App } from '../../app/App.jsx';
@@ -120,6 +120,49 @@ describe('consultation room', () => {
     expect(end).toBeDisabled();
     await userEvent.click(screen.getByRole('checkbox'));
     expect(end).toBeEnabled();
+  });
+
+  it('signing a note asks for confirmation; Escape cancels, confirming signs', async () => {
+    const live = {
+      party: 'doctor',
+      appointment: { ...appointment, status: 'in_consultation' },
+      consultation: { id: 'c1', status: 'live', mode: 'online', video: true, outcome: null },
+      waitingRoom,
+      notes: [],
+      prescriptions: [],
+      emergencyGuidance: null,
+    };
+    const calls = signedIn(['DOCTOR'], {
+      [`GET ${BASE}`]: () => json(200, { data: live }),
+      [`GET ${BASE}/status`]: () =>
+        json(200, {
+          data: {
+            party: 'doctor',
+            consultation: { id: 'c1', status: 'live', outcome: null },
+            waitingRoom,
+            emergencyGuidance: null,
+          },
+        }),
+      [`PUT ${BASE}/note`]: () => json(200, { data: { id: 'n1', status: 'draft' } }),
+      [`POST ${BASE}/note/sign`]: () => json(200, { data: { id: 'n1', status: 'signed' } }),
+    });
+    open();
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Subjective'), 'Synthetic: sore throat');
+    const signButton = screen.getByRole('button', { name: 'Sign note' });
+    await user.click(signButton);
+    const dialog = await screen.findByRole('dialog', { name: 'Sign this clinical note?' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(signButton).toHaveFocus(); // focus returns to the opener
+    expect(calls.some((c) => c.key === `POST ${BASE}/note/sign`)).toBe(false);
+
+    await user.click(signButton);
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sign note' }),
+    );
+    await waitFor(() => expect(calls.some((c) => c.key === `POST ${BASE}/note/sign`)).toBe(true));
   });
 
   it('patient sees fixed emergency guidance after outcome C', async () => {

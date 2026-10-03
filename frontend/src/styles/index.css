@@ -23,6 +23,10 @@
   --hb-success: #15803d;
   --hb-warning: #b45309;
   --hb-danger: #b91c1c;
+  --hb-info: #0369a1;
+  /* Elevation: borders do most of the work; shadows stay barely visible. */
+  --hb-shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
+  --hb-shadow-overlay: 0 12px 32px rgb(15 23 42 / 0.18);
   color-scheme: light;
 }
 
@@ -43,6 +47,9 @@
     --hb-success: #4ade80;
     --hb-warning: #fbbf24;
     --hb-danger: #f87171;
+    --hb-info: #7dd3fc;
+    --hb-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+    --hb-shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5);
     color-scheme: dark;
   }
 }
@@ -67,6 +74,11 @@
   --color-success: var(--hb-success);
   --color-warning: var(--hb-warning);
   --color-danger: var(--hb-danger);
+  --color-info: var(--hb-info);
+
+  /* Shape scale: controls 0.5rem (lg), cards 1rem (2xl), pills full. */
+  --shadow-card: var(--hb-shadow-card);
+  --shadow-overlay: var(--hb-shadow-overlay);
 }
 
 @layer base {

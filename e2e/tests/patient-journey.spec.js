@@ -39,7 +39,7 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
   });
 
   await test.step('ask Dr. Meera to join the care team', async () => {
-    await nav(patient, 'Doctors').click();
+    await nav(patient, 'My Doctors').click();
     await patient.getByPlaceholder('Name or specialty').fill('Meera');
     await patient.getByRole('button', { name: 'Search' }).click();
     const row = patient.getByRole('listitem').filter({ hasText: 'Dr. Meera Iyer' });
@@ -51,7 +51,7 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
     const doctorContext = await browser.newContext();
     const doctor = await doctorContext.newPage();
     await signIn(doctor, demoEmail('dr.meera'));
-    await nav(doctor, 'Patients').click();
+    await nav(doctor, 'My Patients').click();
     const request = doctor.getByRole('listitem').filter({ hasText: person.fullName });
     await request.getByRole('button', { name: 'Accept' }).click();
     await expect(request.getByRole('button', { name: 'Accept' })).toBeHidden();
@@ -59,7 +59,7 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
   });
 
   await test.step('book the first paid in-clinic slot (online consults are free in the demo)', async () => {
-    await nav(patient, 'Doctors').click();
+    await nav(patient, 'My Doctors').click();
     await patient.reload();
     await patient.getByRole('link', { name: 'Book' }).first().click();
     await expect(patient.getByRole('heading', { name: 'Book an appointment' })).toBeVisible();

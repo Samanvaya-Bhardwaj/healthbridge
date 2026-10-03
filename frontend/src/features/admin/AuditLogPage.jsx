@@ -9,6 +9,9 @@ import { Badge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { ScrollText } from 'lucide-react';
 
 const CATEGORIES = [
   'authentication',
@@ -70,7 +73,7 @@ function Field({ id, label, value, onChange, type = 'text', placeholder }) {
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value.trim())}
-        className="mt-1.5 min-h-11 w-full rounded-lg border border-border bg-surface-raised px-3.5"
+        className={controlClass()}
       />
     </div>
   );
@@ -216,12 +219,12 @@ export function AuditLogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Audit log</h1>
-        <p className="mt-2 text-text-muted">
-          Security and access events, newest first. Entries cannot be changed or deleted.
-        </p>
-      </div>
+      <PageHeader
+        icon={ScrollText}
+        eyebrow="Oversight"
+        title="Audit log"
+        description="Security and access events, newest first. Entries cannot be changed or deleted, and reading this log is itself recorded."
+      />
       <Card>
         <form
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
@@ -307,7 +310,7 @@ export function AuditLogPage() {
       ) : rows.length === 0 ? (
         <EmptyState title="No audit entries">No entries match these filters.</EmptyState>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border bg-surface-raised">
+        <div className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Audit entries</caption>
             <thead className="border-b border-border text-text-subtle">

@@ -156,6 +156,6 @@ describe('inbox', () => {
     ).toBeInTheDocument();
     const item = (await screen.findByText('Follow-up check-in from Dr. Synthetic')).closest('li');
     await userEvent.click(within(item).getByRole('button', { name: 'Mark read' }));
-    expect(await screen.findByText('You are all caught up.')).toBeInTheDocument();
+    expect(await screen.findByText(/You are all caught up/)).toBeInTheDocument();
   });
 });

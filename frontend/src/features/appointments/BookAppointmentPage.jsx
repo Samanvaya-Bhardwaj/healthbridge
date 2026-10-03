@@ -16,6 +16,11 @@ import {
   groupByDay,
   localDate,
 } from './format.js';
+import { controlClass } from '../../components/ui/fieldStyles.js';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { BackLink } from '../../components/ui/BackLink.jsx';
+import { CalendarPlus } from 'lucide-react';
+import { Building2, Video } from 'lucide-react';
 
 /**
  * Booking flow: mode → day → slot → reason → confirm. Reached from "My doctors" (the
@@ -77,19 +82,17 @@ export function BookAppointmentPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link to="/app/doctors" className="text-sm font-medium text-primary">
-          ← My doctors
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-text">
-          {rescheduleId ? 'Reschedule appointment' : 'Book an appointment'}
-        </h1>
-        {doctor.data && (
-          <p className="mt-1 text-text-muted">
-            {doctor.data.professionalName} · {doctor.data.primarySpecialization}
-          </p>
-        )}
-      </div>
+      <BackLink to="/app/doctors">My Doctors</BackLink>
+      <PageHeader
+        icon={CalendarPlus}
+        eyebrow="My care"
+        title={rescheduleId ? 'Reschedule appointment' : 'Book an appointment'}
+        description={
+          doctor.data
+            ? `${doctor.data.professionalName} · ${doctor.data.primarySpecialization}. Choose how to consult, then a time.`
+            : 'Choose how to consult, then a time.'
+        }
+      />
 
       {!rescheduleId && (
         <Card>
@@ -101,6 +104,7 @@ export function BookAppointmentPage() {
               {Object.entries(MODE_LABELS).map(([value, label]) => (
                 <Button
                   key={value}
+                  icon={value === 'online' ? Video : Building2}
                   variant={mode === value ? 'primary' : 'secondary'}
                   aria-pressed={mode === value}
                   onClick={() => {
@@ -182,7 +186,7 @@ export function BookAppointmentPage() {
                 maxLength={500}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="mt-1.5 block w-full rounded-lg border border-border bg-surface-raised px-3.5 py-2.5"
+                className={controlClass()}
               />
             </div>
           )}

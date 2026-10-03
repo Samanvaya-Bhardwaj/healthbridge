@@ -8,6 +8,8 @@ import { Button } from '../../components/ui/Button.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { ServerCog } from 'lucide-react';
 
 const QUEUE_STATES = ['waiting', 'active', 'delayed', 'failed'];
 
@@ -60,12 +62,12 @@ export function OperationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Operations</h1>
-        <p className="mt-2 text-text-muted">
-          Background jobs: the outbox, queues and jobs that need attention.
-        </p>
-      </div>
+      <PageHeader
+        icon={ServerCog}
+        eyebrow="Oversight"
+        title="Operations"
+        description="Background jobs: notifications, payments, documents and follow-ups. Retry jobs that failed after all automatic attempts; every retry is audited."
+      />
 
       {summary.isPending ? (
         <Skeleton className="h-32" />
@@ -78,7 +80,7 @@ export function OperationsPage() {
             <Counts title="Dead letters" counts={summary.data.deadLetters} />
           </div>
           {summary.data.queues ? (
-            <div className="overflow-x-auto rounded-2xl border border-border bg-surface-raised">
+            <div className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised">
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">Queues</caption>
                 <thead className="border-b border-border text-text-subtle">

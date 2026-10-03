@@ -3,14 +3,39 @@ import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { timelineApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Badge } from '../../components/ui/Badge.jsx';
+import { Badge, StatusBadge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import {
+  ConsentRequiredNotice,
+  EmptyState,
+  LoadingState,
+} from '../../components/ui/EmptyState.jsx';
+import {
+  BadgeCheck,
+  CalendarDays,
+  Download,
+  FileText,
+  FlaskConical,
+  HeartPulse,
+  History,
+  Pill,
+  Stethoscope,
+} from 'lucide-react';
 
 const TYPE_LABELS = {
   appointment: 'Appointments',
   document: 'Documents',
   lab_result: 'Lab values',
+  prescription: 'Prescriptions',
+  follow_up: 'Follow-ups',
+};
+const TYPE_ICONS = {
+  appointment: CalendarDays,
+  consultation: Stethoscope,
+  document: FileText,
+  lab_result: FlaskConical,
+  prescription: Pill,
+  follow_up: HeartPulse,
 };
 const PROVENANCE_TONES = {
   doctor_verified: 'success',
@@ -30,6 +55,18 @@ const formatWhen = (e) =>
   }).format(new Date(e.occurredAt));
 const monthOf = (iso) =>
   new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(new Date(iso));
+
+function TimelineIcon({ type }) {
+  const Icon = TYPE_ICONS[type] ?? History;
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary"
+    >
+      <Icon className="h-4 w-4" />
+    </span>
+  );
+}
 
 /** Timeline of a patient's record, newest first. Each event shows where it came from. */
 export function Timeline({ patientId, allowExport = false }) {
@@ -65,6 +102,8 @@ export function Timeline({ patientId, allowExport = false }) {
           {Object.entries(TYPE_LABELS).map(([t, label]) => (
             <Button
               key={t}
+              size="sm"
+              icon={TYPE_ICONS[t]}
               variant={types.includes(t) ? 'primary' : 'secondary'}
               aria-pressed={types.includes(t)}
               onClick={() => toggle(t)}
@@ -74,22 +113,32 @@ export function Timeline({ patientId, allowExport = false }) {
           ))}
         </div>
         {allowExport && (
-          <Button variant="ghost" onClick={() => exporter.mutate()} disabled={exporter.isPending}>
+          <Button
+            variant="ghost"
+            icon={Download}
+            onClick={() => exporter.mutate()}
+            loading={exporter.isPending}
+          >
             Export (JSON)
           </Button>
         )}
       </div>
       {exporter.isError && <Alert tone="error">{authErrorMessage(exporter.error)}</Alert>}
-      {timeline.isPending && <Skeleton className="h-24 w-full" />}
-      {timeline.isError && (
-        <Alert tone="error">
-          {timeline.error?.code === 'consent_required'
-            ? 'The patient has not shared their records with you.'
-            : authErrorMessage(timeline.error)}
-        </Alert>
-      )}
+      {timeline.isPending && <LoadingState label="Loading timeline" rows={3} />}
+      {timeline.isError &&
+        (timeline.error?.code === 'consent_required' ? (
+          <ConsentRequiredNotice compact>
+            The patient has not shared their records with you.
+          </ConsentRequiredNotice>
+        ) : (
+          <Alert tone="error">{authErrorMessage(timeline.error)}</Alert>
+        ))}
       {timeline.isSuccess && events.length === 0 && (
-        <p className="text-sm text-text-muted">Nothing on the timeline yet.</p>
+        <EmptyState compact icon={History} title="Nothing on the timeline yet">
+          {types.length
+            ? 'No entries of the selected kinds. Clear the filters to see everything.'
+            : 'Appointments, uploaded documents, verified lab values, prescriptions and follow-ups appear here as they happen.'}
+        </EmptyState>
       )}
       <ol className="space-y-2">
         {events.map((e, i) => {
@@ -102,21 +151,27 @@ export function Timeline({ patientId, allowExport = false }) {
                   {month}
                 </h3>
               )}
-              <div className="rounded-lg border border-border p-3">
-                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
-                  {e.title}
-                  {e.status && e.type !== 'document' && (
-                    <Badge>{e.status.replace(/_/g, ' ')}</Badge>
-                  )}
-                </p>
-                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                  <time dateTime={e.occurredAt}>{formatWhen(e)}</time>
-                  <Badge tone={PROVENANCE_TONES[e.provenance]}>{e.provenanceLabel}</Badge>
-                  {e.actor && <span>{e.actor}</span>}
-                  {e.detail?.aiDerivedFields?.length > 0 && (
-                    <Badge tone="warning">Date/issuer read by AI</Badge>
-                  )}
-                </p>
+              <div className="relative flex gap-3 rounded-xl border border-border bg-surface-raised p-3">
+                <TimelineIcon type={e.type} />
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
+                    {e.title}
+                    {e.status && e.type !== 'document' && <StatusBadge status={e.status} />}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                    <time dateTime={e.occurredAt}>{formatWhen(e)}</time>
+                    <Badge
+                      tone={PROVENANCE_TONES[e.provenance]}
+                      icon={e.provenance === 'doctor_verified' ? BadgeCheck : undefined}
+                    >
+                      {e.provenanceLabel}
+                    </Badge>
+                    {e.actor && <span>{e.actor}</span>}
+                    {e.detail?.aiDerivedFields?.length > 0 && (
+                      <Badge tone="warning">Date/issuer read by AI</Badge>
+                    )}
+                  </p>
+                </div>
               </div>
             </li>
           );

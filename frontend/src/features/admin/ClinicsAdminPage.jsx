@@ -7,6 +7,9 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { Building2 } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
 
 function AppointAdmin({ clinic }) {
   const [q, setQ] = useState('');
@@ -34,7 +37,7 @@ function AppointAdmin({ clinic }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Find user by name or email"
-          className="min-h-11 flex-1 rounded-lg border border-border bg-surface-raised px-3.5"
+          className={`${controlClass(false, { inline: true })} flex-1`}
         />
         <Button type="submit" variant="secondary">
           Find
@@ -73,10 +76,12 @@ export function ClinicsAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Clinics</h1>
-        <p className="mt-2 text-text-muted">Create clinics and appoint their administrators.</p>
-      </div>
+      <PageHeader
+        icon={Building2}
+        eyebrow="Administration"
+        title="Clinics"
+        description="Create clinics, activate them, and appoint their administrators. Clinic administrators manage their own clinic only."
+      />
       <Card>
         <h2 className="text-base font-semibold text-text">New clinic</h2>
         <form
@@ -97,7 +102,7 @@ export function ClinicsAdminPage() {
                 value={form[key]}
                 onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                 placeholder={key === 'name' ? 'Clinic name' : 'City'}
-                className="min-h-11 w-full rounded-lg border border-border bg-surface-raised px-3.5"
+                className={controlClass(false, { inline: true })}
               />
             </div>
           ))}

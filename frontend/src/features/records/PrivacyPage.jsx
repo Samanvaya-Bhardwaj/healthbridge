@@ -15,6 +15,14 @@ import { usePatientChoice } from './usePatientChoice.js';
 import { PatientSelect } from './PatientSelect.jsx';
 import { PURPOSE_LABELS, SCOPE_LABELS } from './labels.js';
 import { DOCUMENT_TYPE_LABELS } from './upload.js';
+import { ShieldCheck } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { MissingProfileNotice } from '../patients/MissingProfileNotice.jsx';
+import { SectionHeader } from '../../components/ui/Typography.jsx';
+import { LoadingState } from '../../components/ui/EmptyState.jsx';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import { useConfirm } from '../../components/ui/useConfirm.jsx';
+import { Eye, KeyRound, Lock, ShieldOff } from 'lucide-react';
 
 function GrantForm({ patientId, onGranted }) {
   const team = useQuery({
@@ -135,11 +143,19 @@ function AccessLog({ patientId }) {
   const items = log.data?.pages.flatMap((p) => p.data) ?? [];
   return (
     <Card>
-      <h2 className="text-sm font-semibold text-text">Recent access</h2>
-      {log.isPending && <Skeleton className="mt-4 h-20 w-full" />}
+      <SectionHeader
+        icon={Eye}
+        title="Who looked at my records"
+        description="Every time a doctor opened your records or a document, and every refused attempt."
+      />
+      {log.isPending && <LoadingState label="Loading access history" rows={2} className="mt-4" />}
       {log.isError && <Alert tone="error">{authErrorMessage(log.error)}</Alert>}
       {log.isSuccess && items.length === 0 && (
-        <p className="mt-3 text-sm text-text-muted">Nobody has accessed these records yet.</p>
+        <div className="mt-3">
+          <EmptyState compact icon={Eye} title="Nobody has accessed these records yet">
+            When a doctor opens something you shared, it is listed here.
+          </EmptyState>
+        </div>
       )}
       <ul className="mt-2 divide-y divide-border">
         {items.map((e, i) => (
@@ -186,41 +202,53 @@ export function PrivacyPage() {
     mutationFn: (id) => consentsApi.revoke(id, 'no_longer_needed'),
     onSuccess: refresh,
   });
+  const { confirm, dialog } = useConfirm();
+  const confirmRevoke = async (c) => {
+    const ok = await confirm({
+      title: `Revoke ${c.doctor.professionalName}’s access?`,
+      description:
+        'From their next request they can no longer see what you shared, including during a consultation. You can give access again at any time.',
+      confirmLabel: 'Revoke access',
+      destructive: true,
+    });
+    if (ok) revoke.mutate(c.id);
+  };
 
   if (isPending) return <Skeleton className="h-40 w-full" />;
-  if (missingProfile) return <Alert tone="info">Create your patient profile first.</Alert>;
+  if (missingProfile) return <MissingProfileNotice />;
   const active = (consents.data ?? []).filter((c) => c.status === 'active');
   const past = (consents.data ?? []).filter((c) => c.status !== 'active');
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-text">Privacy &amp; access</h1>
-          <p className="mt-2 text-text-muted">
-            Doctors see your records only with your permission. You can withdraw it at any time; it
-            takes effect immediately.
-          </p>
-        </div>
-        <PatientSelect choices={choices} value={patientId} onChange={setPatientId} />
-      </div>
+      <PageHeader
+        icon={ShieldCheck}
+        eyebrow="My health"
+        title="Privacy & Access"
+        description="Doctors see your records only with your permission. Choose who sees what and for how long; withdraw it at any time and it takes effect immediately. Below, you can see every time someone opened your records."
+        actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
+      />
 
       <Card>
-        <h2 className="text-sm font-semibold text-text">Who has access</h2>
-        {consents.isPending && <Skeleton className="mt-4 h-16 w-full" />}
+        {dialog}
+        <SectionHeader icon={ShieldCheck} title="Who has access" />
+        {consents.isPending && <LoadingState label="Loading access" rows={1} className="mt-4" />}
         {consents.isError && <Alert tone="error">{authErrorMessage(consents.error)}</Alert>}
         {revoke.isError && <Alert tone="error">{authErrorMessage(revoke.error)}</Alert>}
         {consents.isSuccess && active.length === 0 && (
-          <EmptyState title="No doctor has access">
-            Give a doctor in your care team access below.
-          </EmptyState>
+          <div className="mt-3">
+            <EmptyState compact icon={Lock} title="No doctor can see your records">
+              Your records are private. To share them for a consultation, give a doctor in your care
+              team access below; you choose what they see and for how long.
+            </EmptyState>
+          </div>
         )}
         <ul className="divide-y divide-border">
           {active.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div>
-                <p className="font-medium text-text">{c.doctor.professionalName}</p>
-                <p className="mt-0.5 text-sm text-text-muted">
+              <div className="min-w-0">
+                <PersonIdentity name={c.doctor.professionalName} verified />
+                <p className="mt-2 text-sm text-text-muted">
                   {c.scopes.map((s) => SCOPE_LABELS[s]).join(', ')}
                   {c.documentTypes &&
                     ` (${c.documentTypes.map((t) => DOCUMENT_TYPE_LABELS[t]).join(', ')})`}{' '}
@@ -230,7 +258,8 @@ export function PrivacyPage() {
               </div>
               <Button
                 variant="secondary"
-                onClick={() => revoke.mutate(c.id)}
+                icon={ShieldOff}
+                onClick={() => confirmRevoke(c)}
                 disabled={revoke.isPending}
               >
                 Revoke
@@ -259,7 +288,12 @@ export function PrivacyPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-sm font-semibold text-text">Give a doctor access</h2>
+        <SectionHeader
+          icon={KeyRound}
+          title="Give a doctor access"
+          description="Only doctors in your care team are listed. Access ends automatically on the date you choose."
+          className="mb-4"
+        />
         <GrantForm patientId={patientId} onGranted={refresh} />
       </Card>
 

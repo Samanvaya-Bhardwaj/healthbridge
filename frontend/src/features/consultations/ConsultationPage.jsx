@@ -6,7 +6,12 @@ import { consultationApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge, StatusBadge } from '../../components/ui/Badge.jsx';
-import { Button } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
+import { TextAreaField } from '../../components/ui/Fields.jsx';
+import { LoadingState } from '../../components/ui/EmptyState.jsx';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { useConfirm } from '../../components/ui/useConfirm.jsx';
+import { ArrowLeft, Building2, FileSignature, PenLine, Video } from 'lucide-react';
 import { Card } from '../../components/ui/Card.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
@@ -36,22 +41,16 @@ const EMPTY_ITEM = {
   duration: '',
   instructions: '',
 };
-const linkButton =
-  'inline-flex min-h-11 items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover';
-
 function TextArea({ label, hint, value, onChange, rows = 3, maxLength = 4000 }) {
   return (
-    <label className="block">
-      <span className="block text-sm font-medium text-text">{label}</span>
-      {hint && <span className="mt-1 block text-sm text-text-subtle">{hint}</span>}
-      <textarea
-        className="mt-1.5 block w-full rounded-lg border border-border bg-surface-raised px-3.5 py-2.5 text-text"
-        rows={rows}
-        maxLength={maxLength}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </label>
+    <TextAreaField
+      label={label}
+      hint={hint}
+      rows={rows}
+      maxLength={maxLength}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
 
@@ -154,6 +153,7 @@ function NoteEditor({ appointmentId, draft, onSaved }) {
     mutationFn: () => consultationApi.saveNote(appointmentId, note),
     onSuccess: onSaved,
   });
+  const { confirm, dialog } = useConfirm();
   const sign = useMutation({
     mutationFn: async () => {
       await consultationApi.saveNote(appointmentId, note);
@@ -183,16 +183,23 @@ function NoteEditor({ appointmentId, draft, onSaved }) {
           {save.isPending ? 'Saving…' : 'Save draft'}
         </Button>
         <Button
-          disabled={empty || sign.isPending}
-          onClick={() => {
-            if (window.confirm('Sign this note? Signed notes cannot be edited, only corrected.')) {
-              sign.mutate();
-            }
+          icon={PenLine}
+          disabled={empty}
+          loading={sign.isPending}
+          onClick={async () => {
+            const ok = await confirm({
+              title: 'Sign this clinical note?',
+              description:
+                'Signed notes become part of the patient’s record and cannot be edited, only corrected with a reason (as a new version).',
+              confirmLabel: 'Sign note',
+            });
+            if (ok) sign.mutate();
           }}
         >
           Sign note
         </Button>
       </div>
+      {dialog}
     </div>
   );
 }
@@ -362,6 +369,7 @@ function PrescriptionSection({ appointmentId, prescriptions, live, onSaved }) {
     mutationFn: (id) => consultationApi.signPrescription(id),
     onSuccess: () => onSaved(),
   });
+  const { confirm, dialog } = useConfirm();
   const correct = useMutation({
     mutationFn: (body) => consultationApi.correctPrescription(current.id, body),
     onSuccess: () => {
@@ -393,15 +401,21 @@ function PrescriptionSection({ appointmentId, prescriptions, live, onSaved }) {
                 {draft.items.length === 1 ? '' : 's'} saved.
               </p>
               <Button
-                onClick={() => {
-                  if (window.confirm('Sign this prescription? It cannot be edited afterwards.')) {
-                    sign.mutate(draft.id);
-                  }
+                icon={FileSignature}
+                loading={sign.isPending}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Sign this prescription?',
+                    description:
+                      'Signing seals the prescription and makes it available to the patient as a PDF. It cannot be edited afterwards, only corrected as a new version.',
+                    confirmLabel: 'Sign prescription',
+                  });
+                  if (ok) sign.mutate(draft.id);
                 }}
-                disabled={sign.isPending}
               >
                 Sign prescription
               </Button>
+              {dialog}
               <ErrorAlert error={sign.error} />
             </div>
           )}
@@ -628,12 +642,14 @@ function PatientView({ view, status, appointmentId }) {
           {c.outcomeDetail?.visitNote && (
             <p className="mt-2 text-sm text-text">{c.outcomeDetail.visitNote}</p>
           )}
-          <Link
-            className={`${linkButton} mt-3`}
+          <ButtonLink
+            as={Link}
+            className="mt-3"
+            icon={Building2}
             to={`/app/appointments/book?doctorId=${view.appointment.doctorId}&mode=in_clinic`}
           >
             Book an in-clinic visit
-          </Link>
+          </ButtonLink>
         </Card>
       )}
       {signed.length > 0 && (
@@ -695,23 +711,30 @@ export function ConsultationPage() {
   const a = view.data?.appointment;
   return (
     <div className="space-y-6">
-      <Link to="/app/appointments" className="text-sm font-medium text-primary">
-        ← Appointments
+      <Link
+        to="/app/appointments"
+        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-hover"
+      >
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+        Appointments
       </Link>
-      {view.isPending && <Skeleton className="h-32 w-full" />}
+      {view.isPending && <LoadingState label="Loading consultation" rows={3} />}
       {view.isError && <Alert tone="error">{authErrorMessage(view.error)}</Alert>}
       {a && (
         <>
-          <div>
-            <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-text">
-              Consultation <StatusBadge status={a.status} />
-              {view.data.consultation?.status === 'live' && <Badge tone="primary">Live</Badge>}
-            </h1>
-            <p className="mt-2 text-text-muted">
-              {formatDateTime(a.startsAt)} · {MODE_LABELS[a.mode]} · {a.doctorName}
-              {a.clinicName && ` · ${a.clinicName}`}
-            </p>
-          </div>
+          <PageHeader
+            icon={a.mode === 'online' ? Video : Building2}
+            eyebrow={party === 'doctor' ? 'Clinical work' : 'My care'}
+            title="Consultation"
+            description={`${formatDateTime(a.startsAt)} · ${MODE_LABELS[a.mode]} · ${a.doctorName}${
+              a.clinicName ? ` · ${a.clinicName}` : ''
+            }`}
+          >
+            <div className="mt-2 flex flex-wrap gap-2">
+              <StatusBadge status={a.status} />
+              {view.data.consultation?.status === 'live' && <StatusBadge status="live" />}
+            </div>
+          </PageHeader>
           {party === 'doctor' ? (
             <DoctorView
               view={view.data}

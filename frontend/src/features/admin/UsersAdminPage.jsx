@@ -17,6 +17,9 @@ import { Badge, StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { Users } from 'lucide-react';
 
 const roleOptions = ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 const STATUS_REASONS = [
@@ -228,15 +231,21 @@ export function UsersAdminPage() {
     getNextPageParam: (last) => last.meta?.nextCursor ?? undefined,
   });
   const rows = users.data?.pages.flatMap((p) => p.data) ?? [];
+  const { hasPermission } = useAuth();
+  const canAdminister = hasPermission(PERMISSIONS.USERS_UPDATE);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Users</h1>
-        <p className="mt-2 text-text-muted">
-          Account lookup and administration. Every search and view is recorded in the audit log.
-        </p>
-      </div>
+      <PageHeader
+        icon={Users}
+        eyebrow={canAdminister ? 'Administration' : 'Support'}
+        title={canAdminister ? 'Users' : 'User lookup'}
+        description={
+          canAdminister
+            ? 'Account lookup and administration. Every search and view is recorded in the audit log.'
+            : 'Find an account to help someone sign in or find their way. You can view accounts but not change them; every lookup is recorded in the audit log.'
+        }
+      />
       <Card>
         <form
           className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
@@ -255,7 +264,7 @@ export function UsersAdminPage() {
               value={draft.q}
               onChange={(e) => setDraft({ ...draft, q: e.target.value })}
               placeholder="At least 2 characters"
-              className="mt-1.5 min-h-11 w-full rounded-lg border border-border bg-surface-raised px-3.5"
+              className={controlClass()}
             />
           </div>
           <SelectField
@@ -288,7 +297,7 @@ export function UsersAdminPage() {
       ) : rows.length === 0 ? (
         <EmptyState title="No users found">Try a different name, email or filter.</EmptyState>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border bg-surface-raised">
+        <div className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Users</caption>
             <thead className="border-b border-border text-text-subtle">

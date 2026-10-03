@@ -9,6 +9,8 @@ import { Button } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { MODE_LABELS, formatDateTime, formatFee, formatTime } from './format.js';
 import { openRazorpayCheckout } from './razorpayCheckout.js';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { CreditCard } from 'lucide-react';
 
 const POLL_MS = 2_000;
 const SLOW_AFTER_MS = 60_000;
@@ -134,13 +136,12 @@ export function PaymentPage() {
   return (
     <div className="space-y-6">
       {back}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Complete payment</h1>
-        <p className="mt-1 text-text-muted">
-          Your slot is reserved until {formatTime(a.holdExpiresAt)}. It is confirmed as soon as the
-          payment is received.
-        </p>
-      </div>
+      <PageHeader
+        icon={CreditCard}
+        eyebrow="My care"
+        title="Complete payment"
+        description={`Your slot is reserved until ${formatTime(a.holdExpiresAt)}. It is confirmed as soon as the payment provider confirms the payment.`}
+      />
 
       <Card>
         {summary}

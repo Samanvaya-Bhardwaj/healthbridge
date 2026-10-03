@@ -7,6 +7,14 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { UsersRound } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import { useConfirm } from '../../components/ui/useConfirm.jsx';
+import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
+import { SectionHeader } from '../../components/ui/Typography.jsx';
+import { UserPlus } from 'lucide-react';
 
 const ageFrom = (dob) => {
   if (!dob) return null;
@@ -52,7 +60,7 @@ function InvitePatient({ onDone }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="patient@example.com"
-          className="min-h-11 flex-1 rounded-lg border border-border bg-surface-raised px-3.5"
+          className={`${controlClass(false, { inline: true })} flex-1`}
         />
         <Button type="submit" variant="secondary" disabled={invite.isPending}>
           Send invitation
@@ -78,25 +86,44 @@ export function DoctorPatientsPage() {
     mutationFn: ({ id, action }) => careApi.act(id, action),
     onSuccess: refresh,
   });
+  const { confirm, dialog } = useConfirm();
+  const confirmEnd = async (r) => {
+    const ok = await confirm({
+      title: 'End this care relationship?',
+      description:
+        'You will no longer see this patient’s profile, and they can no longer book with you. The patient can add you again later.',
+      confirmLabel: 'End relationship',
+      destructive: true,
+      tone: 'warning',
+    });
+    if (ok) act.mutate({ id: r.id, action: 'end' });
+  };
   const pending = patients.data?.filter((r) => r.status === 'pending') ?? [];
   const others = patients.data?.filter((r) => r.status !== 'pending') ?? [];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Patients</h1>
-        <p className="mt-2 text-text-muted">Patients who chose you as their doctor.</p>
-      </div>
+      <PageHeader
+        icon={UsersRound}
+        eyebrow="Patients"
+        title="My Patients"
+        description="Patients who chose you as their doctor. Accept new requests to join their care team; you see their records only when they share them with you."
+      />
       {act.isError && <Alert tone="error">{authErrorMessage(act.error)}</Alert>}
       {patients.isError && <Alert tone="error">{authErrorMessage(patients.error)}</Alert>}
-      {patients.isPending && <Skeleton className="h-24 w-full" />}
+      {dialog}
+      {patients.isPending && <LoadingState label="Loading patients" rows={2} />}
       {pending.length > 0 && (
         <Card>
-          <h2 className="text-base font-semibold text-text">Requests</h2>
+          <SectionHeader
+            icon={UserPlus}
+            title="Requests"
+            description="These patients asked you to join their care team."
+          />
           <ul className="mt-4 divide-y divide-border">
             {pending.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <p className="text-sm font-medium text-text">{r.patient.displayName}</p>
+                <PersonIdentity name={r.patient.displayName} tone="neutral" />
                 <div className="flex gap-2">
                   <Button onClick={() => act.mutate({ id: r.id, action: 'accept' })}>Accept</Button>
                   <Button
@@ -113,19 +140,27 @@ export function DoctorPatientsPage() {
       )}
       {patients.data && (
         <Card>
-          <h2 className="text-base font-semibold text-text">My patients</h2>
-          {others.length === 0 && <p className="mt-2 text-sm text-text-muted">No patients yet.</p>}
+          <SectionHeader icon={UsersRound} title="My patients" />
+          {others.length === 0 && (
+            <div className="mt-3">
+              <EmptyState compact icon={UsersRound} title="No patients yet">
+                Patients add you from their My Doctors page, or you can invite a patient who already
+                uses HealthBridge by email (below).
+              </EmptyState>
+            </div>
+          )}
           <ul className="mt-4 divide-y divide-border">
             {others.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div>
-                  <p className="flex items-center gap-2 text-sm font-medium text-text">
-                    {r.patient.fullName ?? r.patient.displayName ?? 'Invited patient'}{' '}
-                    <StatusBadge status={r.status} />
-                  </p>
-                  {r.patient.dateOfBirth && (
-                    <p className="text-xs text-text-subtle">Age {ageFrom(r.patient.dateOfBirth)}</p>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <PersonIdentity
+                    name={r.patient.fullName ?? r.patient.displayName ?? 'Invited patient'}
+                    detail={
+                      r.patient.dateOfBirth ? `Age ${ageFrom(r.patient.dateOfBirth)}` : undefined
+                    }
+                    tone="neutral"
+                  />
+                  <StatusBadge status={r.status} />
                 </div>
                 {r.status === 'invited' && (
                   <Button
@@ -136,7 +171,7 @@ export function DoctorPatientsPage() {
                   </Button>
                 )}
                 {['active', 'paused'].includes(r.status) && (
-                  <Button variant="ghost" onClick={() => act.mutate({ id: r.id, action: 'end' })}>
+                  <Button variant="ghost" onClick={() => confirmEnd(r)}>
                     End relationship
                   </Button>
                 )}

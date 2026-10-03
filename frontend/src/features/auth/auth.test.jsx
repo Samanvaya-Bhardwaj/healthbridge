@@ -52,10 +52,20 @@ describe('sign in', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome, Asha' })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    for (const label of ['Home', 'Appointments', 'Health Records', 'Doctors', 'Profile']) {
+    for (const label of [
+      'Home',
+      'My Doctors',
+      'Appointments',
+      'Health Records',
+      'Prescriptions',
+      'Privacy & Access',
+      'Profile',
+      'Sign-in & security',
+    ]) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
     }
-    expect(within(nav).queryByRole('link', { name: 'Prescriptions' })).not.toBeInTheDocument();
+    // Doctor-only sections never appear for patients.
+    expect(within(nav).queryByRole('link', { name: 'My Patients' })).not.toBeInTheDocument();
 
     const me = calls.find((c) => c.key === 'GET /api/v1/auth/me');
     expect(me.init.headers.authorization).toBe('Bearer access-token-1');
@@ -153,13 +163,14 @@ describe('session restoration and lifecycle', () => {
       'GET /api/v1/auth/me': () => json(200, { data: user }),
     });
     renderAt('/app');
-    expect(await screen.findByRole('heading', { name: 'Welcome, Asha' })).toBeInTheDocument();
+    // Doctors land on today's clinical work.
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeInTheDocument();
     const refresh = calls.find((c) => c.key === 'POST /api/v1/auth/refresh');
     expect(refresh.init.headers['x-csrf-token']).toBe('csrf-123');
     expect(refresh.init.credentials).toBe('same-origin');
 
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    for (const label of ['Dashboard', 'Patients', 'Medical Records', 'Follow-ups']) {
+    for (const label of ['Today', 'Schedule', 'My Patients', 'Patient Records', 'Follow-ups']) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
     }
   });

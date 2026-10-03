@@ -8,6 +8,10 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { BadgeCheck } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
 
 const REJECTION_REASONS = VERIFICATION_REASON_CODES.filter((c) => c !== 'credentials_confirmed');
 const humanize = (code) => code.replace(/_/g, ' ');
@@ -34,7 +38,7 @@ function Decision({ item, onDone }) {
         rows={2}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        className="block w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
+        className={controlClass(false, { inline: true })}
       />
       <div className="flex flex-wrap items-end gap-2">
         <Button onClick={() => decide.mutate('verified')} disabled={decide.isPending}>
@@ -47,7 +51,7 @@ function Decision({ item, onDone }) {
           id={`reason-${item.id}`}
           value={reasonCode}
           onChange={(e) => setReasonCode(e.target.value)}
-          className="min-h-11 rounded-lg border border-border bg-surface-raised px-3"
+          className={controlClass(false, { inline: true })}
         >
           {REJECTION_REASONS.map((r) => (
             <option key={r} value={r}>
@@ -80,16 +84,19 @@ export function VerificationQueuePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Doctor verification</h1>
-        <p className="mt-2 text-text-muted">
-          Check each registration against the medical council register before approving. Every
-          decision is audited.
-        </p>
-      </div>
+      <PageHeader
+        icon={BadgeCheck}
+        eyebrow="Administration"
+        title="Doctor verification"
+        description="Check each registration against the medical council register before approving. Only verified doctors appear to patients. Every decision is audited."
+      />
       {start.isError && <Alert tone="error">{authErrorMessage(start.error)}</Alert>}
       {queue.isPending && <Skeleton className="h-24 w-full" />}
-      {queue.data?.length === 0 && <Card>No verifications waiting.</Card>}
+      {queue.data?.length === 0 && (
+        <EmptyState icon={BadgeCheck} title="No doctors waiting for verification">
+          New applications appear here when doctors submit their profile.
+        </EmptyState>
+      )}
       {queue.data?.map((item) => (
         <Card key={item.id}>
           <div className="flex flex-wrap items-start justify-between gap-4">

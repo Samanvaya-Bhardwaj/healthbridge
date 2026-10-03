@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { Bell } from 'lucide-react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inboxApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -9,6 +10,8 @@ import { Card } from '../../components/ui/Card.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { formatDateTime } from '../appointments/format.js';
+import { CheckCheck } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
 
 /** Header link to the inbox with the unread count (refreshed every minute). */
 export function NotificationBell() {
@@ -22,12 +25,13 @@ export function NotificationBell() {
   return (
     <Link
       to="/app/notifications"
-      className="relative inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
+      className="relative inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
       aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
     >
-      Notifications
+      <Bell aria-hidden="true" className="h-5 w-5" />
+      <span className="hidden lg:inline">Notifications</span>
       {unread > 0 && (
-        <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-contrast">
+        <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-contrast">
           {unread > 99 ? '99+' : unread}
         </span>
       )}
@@ -54,19 +58,27 @@ export function InboxPage() {
   const unread = pages.data?.pages[0]?.meta?.unreadCount ?? 0;
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-text">Notifications</h1>
-          <p className="mt-2 text-text-muted">
-            {unread ? `${unread} unread` : 'You are all caught up.'}
-          </p>
-        </div>
-        {unread > 0 && (
-          <Button variant="secondary" onClick={() => readAll.mutate()} disabled={readAll.isPending}>
-            Mark all as read
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        icon={Bell}
+        title="Notifications"
+        description={
+          unread
+            ? `${unread} unread. Notices never contain medical details; open one to see more.`
+            : 'You are all caught up. Notices never contain medical details.'
+        }
+        actions={
+          unread > 0 && (
+            <Button
+              variant="secondary"
+              icon={CheckCheck}
+              onClick={() => readAll.mutate()}
+              loading={readAll.isPending}
+            >
+              Mark all as read
+            </Button>
+          )
+        }
+      />
       {pages.isPending && <Skeleton className="h-24 w-full" />}
       {pages.isError && <Alert tone="error">{authErrorMessage(pages.error)}</Alert>}
       {pages.isSuccess && items.length === 0 && (

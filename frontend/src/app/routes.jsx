@@ -23,6 +23,7 @@ import { ClinicsAdminPage } from '../features/admin/ClinicsAdminPage.jsx';
 import { UsersAdminPage } from '../features/admin/UsersAdminPage.jsx';
 import { AuditLogPage } from '../features/admin/AuditLogPage.jsx';
 import { OperationsPage } from '../features/admin/OperationsPage.jsx';
+import { PrescriptionsPage } from '../features/consultations/PrescriptionsPage.jsx';
 import { ClinicPage } from '../features/clinics/ClinicPage.jsx';
 import { AppointmentsPage } from '../features/appointments/AppointmentsPage.jsx';
 import { BookAppointmentPage } from '../features/appointments/BookAppointmentPage.jsx';
@@ -62,6 +63,7 @@ const PAGES = [
   [SECTIONS.users, <UsersAdminPage key="users" />],
   [SECTIONS.audit, <AuditLogPage key="audit" />],
   [SECTIONS.operations, <OperationsPage key="operations" />],
+  [SECTIONS.prescriptions, <PrescriptionsPage key="prescriptions" />],
 ];
 
 /**

@@ -6,6 +6,8 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { EmptyState } from '../../components/ui/EmptyState.jsx';
+import { FlaskConical, Sparkles } from 'lucide-react';
 
 const FLAG_TONES = { high: 'warning', low: 'warning', normal: 'success' };
 
@@ -33,7 +35,12 @@ export function ExtractionPanel({ documentId, canVerify = false }) {
   if (extraction.isError) return <Alert tone="error">{authErrorMessage(extraction.error)}</Alert>;
   const x = extraction.data;
   if (!x) {
-    return <p className="text-sm text-text-muted">No extracted values yet.</p>;
+    return (
+      <EmptyState compact icon={Sparkles} title="Not analysed">
+        AI reading is off, or the document has not been processed yet. Patients can turn AI reading
+        on in Health Records.
+      </EmptyState>
+    );
   }
   if (x.status === 'failed' || x.status === 'no_text') {
     return (
@@ -66,7 +73,7 @@ export function ExtractionPanel({ documentId, canVerify = false }) {
         </p>
       )}
       {x.labResults.length === 0 ? (
-        <p className="text-sm text-text-muted">No lab values were found.</p>
+        <EmptyState compact icon={FlaskConical} title="No lab values found in this document" />
       ) : (
         <table className="w-full text-left text-sm">
           <thead className="text-text-muted">
@@ -130,7 +137,12 @@ export function LabResults({ patientId }) {
   if (labs.isPending) return <Skeleton className="h-16 w-full" />;
   if (labs.isError) return <Alert tone="error">{authErrorMessage(labs.error)}</Alert>;
   if (!labs.data.length) {
-    return <p className="text-sm text-text-muted">No verified lab values yet.</p>;
+    return (
+      <EmptyState compact icon={FlaskConical} title="No verified lab values yet">
+        When you upload lab reports, AI can propose the values (if you turn it on); a doctor checks
+        them before they appear here.
+      </EmptyState>
+    );
   }
   return (
     <ul className="divide-y divide-border text-sm">

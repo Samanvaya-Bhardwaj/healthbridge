@@ -231,6 +231,6 @@ describe('administration', () => {
     expect(await screen.findByText('Sunrise Clinic')).toBeInTheDocument();
     expect(await screen.findByText('Dr. Meera')).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(nav).getByRole('link', { name: 'Clinic' })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'Clinic team' })).toBeInTheDocument();
   });
 });

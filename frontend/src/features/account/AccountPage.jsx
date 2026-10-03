@@ -11,6 +11,8 @@ import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { KeyRound } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
 
 const formatDate = (value) =>
   new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -207,10 +209,12 @@ export function AccountPage() {
   const { user } = useAuth();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Profile & security</h1>
-        <p className="mt-2 text-text-muted">Manage your account details, password and devices.</p>
-      </div>
+      <PageHeader
+        icon={KeyRound}
+        eyebrow="Account"
+        title="Sign-in & security"
+        description="Your account details, password, email confirmation and the devices signed in to your account."
+      />
       <Card>
         <h2 className="text-base font-semibold text-text">Account</h2>
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">

@@ -14,6 +14,13 @@ import { Timeline } from './Timeline.jsx';
 import { AskRecords } from './AiAssist.jsx';
 import { useDownload } from './useDownload.js';
 import { SCOPE_LABELS } from './labels.js';
+import { FileText } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { BackLink } from '../../components/ui/BackLink.jsx';
+import { FolderOpen } from 'lucide-react';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import { ButtonLink } from '../../components/ui/Button.jsx';
+import { ShieldCheck } from 'lucide-react';
 
 /**
  * Doctor: patients who shared records. The list is just the doctor's own active consents;
@@ -26,31 +33,40 @@ export function DoctorRecordsPage() {
   );
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Medical records</h1>
-        <p className="mt-2 text-text-muted">
-          Records your patients have chosen to share with you. Access ends when they revoke it or it
-          expires.
-        </p>
-      </div>
+      <PageHeader
+        icon={FileText}
+        eyebrow="Patients"
+        title="Patient Records"
+        description="Records your patients have chosen to share with you. Access ends the moment a patient revokes it, or when it expires."
+      />
       {received.isPending && <Skeleton className="h-24 w-full" />}
       {received.isError && <Alert tone="error">{authErrorMessage(received.error)}</Alert>}
       {received.isSuccess && active.length === 0 && (
-        <EmptyState title="No shared records">
-          Patients can share records with you from their Privacy &amp; Access page.
+        <EmptyState icon={ShieldCheck} title="No records shared with you yet">
+          Patients share records from their Privacy &amp; Access page, choosing what you can see and
+          for how long. Shared records appear here until the access ends.
         </EmptyState>
       )}
       <ul className="space-y-3">
         {active.map((c) => (
           <li key={c.id}>
-            <Card>
-              <Link to={`/app/medical-records/${c.patientId}`} className="font-medium text-primary">
-                {c.patientName}
-              </Link>
-              <p className="mt-1 text-sm text-text-muted">
-                {c.scopes.map((s) => SCOPE_LABELS[s]).join(', ')} · until{' '}
-                {formatDateTime(c.expiresAt)}
-              </p>
+            <Card className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <PersonIdentity name={c.patientName} tone="neutral" />
+                <p className="mt-2 flex items-center gap-1.5 text-sm text-text-muted">
+                  <ShieldCheck aria-hidden="true" className="h-4 w-4 text-primary" />
+                  {c.scopes.map((s) => SCOPE_LABELS[s]).join(', ')} · until{' '}
+                  {formatDateTime(c.expiresAt)}
+                </p>
+              </div>
+              <ButtonLink
+                as={Link}
+                to={`/app/medical-records/${c.patientId}`}
+                variant="secondary"
+                icon={FolderOpen}
+              >
+                Open records
+              </ButtonLink>
             </Card>
           </li>
         ))}
@@ -69,10 +85,13 @@ export function DoctorPatientRecordsPage() {
   const download = useDownload();
   return (
     <div className="space-y-6">
-      <Link to="/app/medical-records" className="text-sm font-medium text-primary">
-        ← Medical records
-      </Link>
-      <h1 className="text-2xl font-semibold tracking-tight text-text">Shared documents</h1>
+      <BackLink to="/app/medical-records">Patient Records</BackLink>
+      <PageHeader
+        icon={FolderOpen}
+        eyebrow="Patients"
+        title="Shared records"
+        description="Documents, verified lab values, prescriptions and timeline this patient has shared with you. Access ends when they revoke it or it expires."
+      />
       {documents.isPending && <Skeleton className="h-24 w-full" />}
       {documents.isError && (
         <Alert tone="error">

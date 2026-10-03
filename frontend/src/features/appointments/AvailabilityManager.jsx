@@ -7,10 +7,10 @@ import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { MODE_LABELS, formatDateTime, formatFee, localDate } from './format.js';
+import { controlClass } from '../../components/ui/fieldStyles.js';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const inputClass =
-  'mt-1.5 block min-h-11 w-full rounded-lg border border-border bg-surface-raised px-3';
+const inputClass = controlClass();
 
 function Field({ label, children }) {
   return (

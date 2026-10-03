@@ -24,6 +24,13 @@ import {
   postToStorage,
   sha256Hex,
 } from './upload.js';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { CheckboxField, FileField } from '../../components/ui/Fields.jsx';
+import { SectionHeader } from '../../components/ui/Typography.jsx';
+import { MissingProfileNotice } from '../patients/MissingProfileNotice.jsx';
+import { useConfirm } from '../../components/ui/useConfirm.jsx';
+import { LoadingState } from '../../components/ui/EmptyState.jsx';
+import { FileText, FlaskConical, FolderHeart, Pill, Sparkles, Upload } from 'lucide-react';
 
 const IN_PROGRESS = new Set(['pending_upload', 'quarantined', 'scanning']);
 const MAX_BYTES = 10 * 1024 * 1024; // mirrors the server default; the server decides
@@ -67,11 +74,11 @@ function UploadForm({ patientId, onUploaded }) {
 
   return (
     <Card>
-      <h2 className="text-sm font-semibold text-text">Add a document</h2>
-      <p className="mt-1 text-sm text-text-muted">
-        PDF, PNG or JPEG up to 10 MB. Every file is checked for safety before it is added to your
-        record.
-      </p>
+      <SectionHeader
+        icon={Upload}
+        title="Add a document"
+        description="Lab reports, prescriptions, scans or discharge summaries. Every file is checked for safety before it is added to your record."
+      />
       <form
         className="mt-4 grid gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
@@ -81,6 +88,7 @@ function UploadForm({ patientId, onUploaded }) {
       >
         <SelectField
           label="Type"
+          hint="What kind of document this is."
           value={documentType}
           onChange={(e) => setDocumentType(e.target.value)}
           options={DOCUMENT_TYPES.map((t) => ({ value: t, label: DOCUMENT_TYPE_LABELS[t] }))}
@@ -92,18 +100,14 @@ function UploadForm({ patientId, onUploaded }) {
           onChange={(e) => setTitle(e.target.value)}
           hint="Optional — shown in your records list."
         />
-        <div className="sm:col-span-2">
-          <label htmlFor="record-file" className="block text-sm font-medium text-text">
-            File
-          </label>
-          <input
-            id="record-file"
-            type="file"
-            accept={ACCEPT}
-            className="mt-1.5 block w-full text-sm text-text-muted"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </div>
+        <FileField
+          className="sm:col-span-2"
+          label="File"
+          hint="PDF, PNG or JPEG, up to 10 MB."
+          accept={ACCEPT}
+          fileName={file?.name}
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
         {progress !== null && (
           <div className="sm:col-span-2">
             <progress className="w-full" max={1} value={progress} aria-label="Upload progress" />
@@ -115,7 +119,7 @@ function UploadForm({ patientId, onUploaded }) {
           </Alert>
         )}
         <div className="sm:col-span-2">
-          <Button type="submit" disabled={!file || upload.isPending}>
+          <Button type="submit" icon={Upload} disabled={!file} loading={upload.isPending}>
             {upload.isPending ? 'Uploading…' : 'Upload'}
           </Button>
         </div>
@@ -138,26 +142,27 @@ function AiProcessingCard({ patientId }) {
   });
   if (!setting.data) return null;
   return (
-    <Card>
-      <label className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          className="mt-1"
-          checked={setting.data.enabled}
-          disabled={toggle.isPending}
-          onChange={(e) => toggle.mutate(e.target.checked)}
-        />
-        <span>
-          <span className="block text-sm font-semibold text-text">
-            Read my documents to suggest key values
-          </span>
-          <span className="block text-sm text-text-muted">
-            HealthBridge AI reads your documents to pull out values such as test results, each with
-            the exact text it came from. They stay suggestions until a doctor you shared them with
-            verifies them. You can switch this off at any time.
-          </span>
+    <Card className="border-primary/20">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"
+        >
+          <Sparkles className="h-4 w-4" />
         </span>
-      </label>
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+            AI assistance · optional
+          </p>
+          <CheckboxField
+            label="Read my documents to suggest key values"
+            description="HealthBridge AI reads your documents to pull out values such as test results, each with the exact text it came from. They stay suggestions until a doctor you shared them with verifies them. AI never diagnoses. You can switch this off at any time."
+            checked={setting.data.enabled}
+            disabled={toggle.isPending}
+            onChange={(e) => toggle.mutate(e.target.checked)}
+          />
+        </div>
+      </div>
     </Card>
   );
 }
@@ -177,33 +182,48 @@ export function RecordsPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['documents', patientId] });
   const remove = useMutation({ mutationFn: recordsApi.retire, onSuccess: refresh });
   const download = useDownload();
+  const { confirm, dialog } = useConfirm();
+  const confirmRemove = async (id) => {
+    const ok = await confirm({
+      title: 'Remove this document from your records?',
+      description:
+        'It disappears from your records and from doctors you shared it with. For safety it is retired, not destroyed, so it stays in the audit history.',
+      confirmLabel: 'Remove document',
+      destructive: true,
+    });
+    if (ok) remove.mutate(id);
+  };
 
   if (isPending) return <Skeleton className="h-40 w-full" />;
-  if (missingProfile) return <Alert tone="info">Create your patient profile first.</Alert>;
+  if (missingProfile) return <MissingProfileNotice />;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-text">Health records</h1>
-          <p className="mt-2 text-text-muted">
-            Your documents stay private. Doctors see them only when you give them access.
-          </p>
-        </div>
-        <PatientSelect choices={choices} value={patientId} onChange={setPatientId} />
-      </div>
+      <PageHeader
+        icon={FileText}
+        eyebrow="My health"
+        title="Health Records"
+        description="Upload reports and documents so your doctors can see your history. Files stay private: every upload is checked for safety, and doctors see it only when you give them access in Privacy & Access."
+        actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
+      />
       <AiProcessingCard patientId={patientId} />
       <UploadForm patientId={patientId} onUploaded={refresh} />
       {download.isError && <Alert tone="error">{authErrorMessage(download.error)}</Alert>}
       {remove.isError && <Alert tone="error">{authErrorMessage(remove.error)}</Alert>}
       <Card>
-        <h2 className="text-sm font-semibold text-text">Documents</h2>
-        {documents.isPending && <Skeleton className="mt-4 h-20 w-full" />}
+        {dialog}
+        <SectionHeader icon={FolderHeart} title="Documents" />
+        {documents.isPending && (
+          <LoadingState label="Loading documents" rows={2} className="mt-4" />
+        )}
         {documents.isError && <Alert tone="error">{authErrorMessage(documents.error)}</Alert>}
         {documents.data?.length === 0 && (
-          <EmptyState title="No documents yet">
-            Upload a report or prescription to start.
-          </EmptyState>
+          <div className="mt-3">
+            <EmptyState compact icon={FileText} title="No documents yet">
+              Use “Add a document” above to upload a lab report, prescription or scan. Your doctors
+              see it only when you share it with them.
+            </EmptyState>
+          </div>
         )}
         {documents.data?.length > 0 && (
           <DocumentList
@@ -217,17 +237,22 @@ export function RecordsPage() {
             )}
             documents={documents.data}
             download={download}
-            onRemove={(id) => remove.mutate(id)}
+            onRemove={confirmRemove}
             removing={remove.isPending}
           />
         )}
       </Card>
       <Card>
-        <h2 className="mb-2 text-sm font-semibold text-text">Verified lab values</h2>
+        <SectionHeader
+          icon={FlaskConical}
+          title="Verified lab values"
+          description="Values a doctor has checked against your reports."
+          className="mb-3"
+        />
         <LabResults patientId={patientId} />
       </Card>
       <Card>
-        <h2 className="mb-2 text-sm font-semibold text-text">Prescriptions</h2>
+        <SectionHeader icon={Pill} title="Prescriptions" className="mb-3" />
         <PatientPrescriptions patientId={patientId} />
       </Card>
     </div>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { App } from '../../app/App.jsx';
@@ -189,7 +189,10 @@ describe('privacy and access', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/View documents · Ongoing care/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Revoke' }));
-    expect(await screen.findByText('No doctor has access')).toBeInTheDocument();
+    // Revoking asks first: it blocks the doctor's very next request.
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke Dr. Meera Iyer’s access?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke access' }));
+    expect(await screen.findByText('No doctor can see your records')).toBeInTheDocument();
     expect(calls.some((c) => c.key === 'POST /api/v1/consents/c1/revoke')).toBe(true);
   });
 });

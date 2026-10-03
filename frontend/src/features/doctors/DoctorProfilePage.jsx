@@ -16,6 +16,9 @@ import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { ClipboardList } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
 
 const LOCKED = new Set(['pending', 'under_review', 'verified']);
 const VERIFICATION_HELP = {
@@ -139,12 +142,7 @@ function DoctorForm({ profile, onSaved }) {
         <label htmlFor="doctor-bio" className="block text-sm font-medium text-text">
           About (optional)
         </label>
-        <textarea
-          id="doctor-bio"
-          rows={3}
-          className="mt-1.5 block w-full rounded-lg border border-border bg-surface-raised px-3.5 py-2.5"
-          {...register('bio')}
-        />
+        <textarea id="doctor-bio" rows={3} className={controlClass()} {...register('bio')} />
       </div>
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? 'Saving…' : profile ? 'Save changes' : 'Create doctor profile'}
@@ -242,13 +240,12 @@ export function DoctorProfilePage() {
   const missing = profile.error instanceof ApiError && profile.error.status === 404;
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Doctor profile</h1>
-        <p className="mt-2 text-text-muted">
-          Your professional profile is separate from your account. Only verified doctors appear to
-          patients.
-        </p>
-      </div>
+      <PageHeader
+        icon={ClipboardList}
+        eyebrow="Practice"
+        title="Professional profile"
+        description="Your professional details, verification status and clinics. Only verified doctors appear to patients."
+      />
       {profile.isPending && <Skeleton className="h-40 w-full" />}
       {profile.data && <Verification profile={profile.data} onChange={refresh} />}
       <Card>

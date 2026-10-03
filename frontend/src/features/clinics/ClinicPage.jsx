@@ -8,6 +8,9 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { Building2 } from 'lucide-react';
+import { PageHeader } from '../../components/ui/Typography.jsx';
+import { controlClass } from '../../components/ui/fieldStyles.js';
 
 const ROLE_LABEL = { CLINIC_ADMIN: 'Administrator', DOCTOR: 'Doctor' };
 
@@ -38,7 +41,7 @@ function InviteDoctor({ clinicId, memberUserIds, onInvited }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Doctor name or specialty"
-          className="min-h-11 flex-1 rounded-lg border border-border bg-surface-raised px-3.5"
+          className={`${controlClass(false, { inline: true })} flex-1`}
         />
         <Button type="submit" variant="secondary">
           Search
@@ -144,13 +147,12 @@ export function ClinicPage() {
   ];
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-text">Clinic</h1>
-        <p className="mt-2 text-text-muted">
-          Doctors and administrators at your clinic. Clinic membership never grants access to
-          patient records.
-        </p>
-      </div>
+      <PageHeader
+        icon={Building2}
+        eyebrow="Clinic"
+        title="Clinic team"
+        description="Doctors and administrators at your clinic. Invite a verified doctor to join; they accept from their profile. Clinic membership never grants access to patient records."
+      />
       {clinicIds.map((id) => (
         <ClinicCard key={id} clinicId={id} />
       ))}
