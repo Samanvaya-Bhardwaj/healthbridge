@@ -61,6 +61,9 @@ npm start          # secrets, build, every service, demo data; prints URLs and s
 - **Everyday commands:** `npm stop`, `npm run logs`, `npm run reset`.
 - **Verify everything:** `npm ci && npm run check`.
 
+**Platform overview** (features, roles, flows, where AI is used):
+**[docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md)**.
+
 **The complete guide** covers running, the demo tour, testing, deployment, troubleshooting,
 and what's included or not: **[RUNNING.md](RUNNING.md)**.
 
