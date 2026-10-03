@@ -154,3 +154,15 @@ export const timelineApi = {
     ),
   export: (patientId) => apiRequest(`/patients/${patientId}/timeline/export`),
 };
+
+/** AI assistance for treating doctors (M8): cited answers and briefs, never diagnoses. */
+export const assistApi = {
+  ask: (patientId, question) =>
+    data(
+      apiRequest(`/patients/${patientId}/record-questions`, { method: 'POST', body: { question } }),
+    ),
+  brief: (appointmentId, refresh) =>
+    data(apiRequest(`/appointments/${appointmentId}/brief`, { method: 'POST', body: { refresh } })),
+  feedback: (briefId, rating) =>
+    data(apiRequest(`/briefs/${briefId}/feedback`, { method: 'POST', body: { rating } })),
+};

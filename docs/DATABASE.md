@@ -23,6 +23,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261006000000_consents_medical_documents` | `consents`, `medical_documents` (key/lifecycle/immutability guards), `authz.has_consent` / `is_patient_side` / `document_ref`, system purposes `documents` and `consents`, document notification templates, `consents:*` / `access_log:read` |
 | `20261007000000_document_intelligence` | `extensions` schema (pgvector moved), `ai.ai_runs`/`ai_sources`/`document_extractions`/`document_chunks` (vector 1024, HNSW, tsvector) with per-role RLS, `ai.scope_patient_id()`, `document_metadata`, immutable `lab_results`, `patients.ai_document_processing`, `authz.ai_processing_enabled()`, `lab_results:verify` |
 | `20261008000000_medical_timeline` | `medical_events` projection (provenance, date precision, hidden), RLS (patient side / consent by document type / own appointments), `timeline` system purpose and read policies on sources, `records:export` |
+| `20261009000000_doctor_brief_rag` | `ai.doctor_briefs` (AI-scoped RLS; app: the appointment doctor while consent lasts), `brief_feedback` (own rows, consent), `ai_assist:use` |
 
 ## Identity, RBAC and audit (M1)
 

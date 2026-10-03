@@ -28,6 +28,9 @@ const ACTIONS = [
   'timeline.viewed',
   'timeline.exported',
   'patient.ai_processing_changed',
+  'record.question_answered',
+  'brief.generated',
+  'brief.viewed',
   'patients:read',
 ];
 const SELF_REASONS = new Set(['patient_self', 'guardian_dependent']);
@@ -51,6 +54,9 @@ const DESCRIBE = {
   'timeline.exported': (a) => `${a} exported the health timeline`,
   'patient.ai_processing_changed': (a, e) =>
     `${a} turned AI document reading ${e.reason === 'enabled' ? 'on' : 'off'}`,
+  'record.question_answered': (a) => `${a} asked HealthBridge AI a question about the records`,
+  'brief.generated': (a) => `${a} prepared an AI brief before an appointment`,
+  'brief.viewed': (a) => `${a} viewed the AI brief for an appointment`,
   'patients:read': (a) => `${a} viewed the profile`,
 };
 const REJECTION_LABELS = {

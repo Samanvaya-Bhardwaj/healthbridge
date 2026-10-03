@@ -234,6 +234,18 @@ routes → controllers → application services → domain (pure rules) → repo
   cover.
 - Patients can export it as JSON ([ADR-0023](adr/0023-medical-timeline-projection.md)).
 
+### Doctor brief and RAG (M8)
+
+- Treating doctors with consent can ask questions about a patient's records and get a
+  pre-consultation brief, when the patient has opted in to AI processing.
+- The backend passes only the documents and verified facts the doctor may see, with a
+  scope token.
+- The AI service runs hybrid pgvector and full-text retrieval under RLS, then a LangGraph
+  agent with no tools that generates cited sentences.
+- Validators keep only cited, number-consistent, supported and non-diagnostic sentences.
+  If none remain, the answer is the exact insufficient-information fallback
+  ([ADR-0024](adr/0024-doctor-brief-patient-scoped-rag.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -263,5 +275,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M7 complete (medical timeline with provenance and export).**
+Current status: **M8 complete (doctor brief and patient-scoped RAG).**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

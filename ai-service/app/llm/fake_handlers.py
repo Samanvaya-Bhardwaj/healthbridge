@@ -80,9 +80,79 @@ def extract(request: LLMRequest) -> dict[str, Any]:
     }
 
 
+_SOURCE = re.compile(r"^\[(?P<label>[SF]\d+)\] (?P<text>.*?)(?=^\[[SF]\d+\] |\Z)", re.M | re.S)
+_QUESTION = re.compile(r"<question>\n(.*?)\n</question>", re.S)
+_STOP = {
+    "what",
+    "which",
+    "were",
+    "does",
+    "with",
+    "from",
+    "have",
+    "that",
+    "this",
+    "about",
+    "the",
+    "and",
+    "any",
+    "her",
+    "his",
+    "their",
+    "patient",
+    "value",
+    "values",
+    "result",
+    "results",
+}
+
+
+def _sources(request: LLMRequest) -> list[tuple[str, str]]:
+    body = request.messages[-1].content
+    inner = body.split("<sources>\n", 1)[-1].rsplit("\n</sources>", 1)[0]
+    return [(m["label"], m["text"].strip()) for m in _SOURCE.finditer(inner)]
+
+
+def answer(request: LLMRequest) -> dict[str, Any]:
+    """Quotes the first source line containing a question keyword, with its label."""
+    q = _QUESTION.search(request.messages[-1].content)
+    words = [
+        w
+        for w in re.findall(r"[a-z0-9]+", (q.group(1) if q else "").lower())
+        if len(w) > 2 and w not in _STOP
+    ]
+    sentences = []
+    for label, text in _sources(request):
+        for line in text.splitlines():
+            if any(w in line.lower() for w in words):
+                sentences.append({"text": line.strip(), "citations": [label]})
+                break
+        if len(sentences) >= 3:
+            break
+    return {"sentences": sentences}
+
+
+def brief(request: LLMRequest) -> dict[str, Any]:
+    labs, docs = [], []
+    for label, text in _sources(request):
+        first = text.splitlines()[0].strip() if text else ""
+        if not first:
+            continue
+        target = labs if label.startswith("F") else docs
+        target.append({"text": first, "citations": [label]})
+    sections = []
+    if labs:
+        sections.append({"heading": "Recent verified lab values", "sentences": labs[:10]})
+    if docs:
+        sections.append({"heading": "Documents on file", "sentences": docs[:6]})
+    return {"sections": sections}
+
+
 Handler = Callable[[LLMRequest], Any]
 
 DEFAULT_HANDLERS: dict[str, Handler] = {
     "document_classification": classify,
     "document_extraction": extract,
+    "record_question": answer,
+    "doctor_brief": brief,
 }

@@ -71,6 +71,32 @@ export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchIm
     request,
     /** Authenticated round-trip: verifies reachability and internal auth together. */
     ping: (requestId) => request('/v1/meta', { requestId }),
+    /** Patient-scoped record question over the authorised documents and verified facts. */
+    askRecord: (input, { requestId } = {}) =>
+      request('/v1/assist/answer', {
+        method: 'POST',
+        body: input,
+        requestId,
+        timeout: 90_000,
+        scope: {
+          patientId: input.patientId,
+          purpose: 'record_question',
+          documentIds: input.documentIds,
+        },
+      }),
+    /** Pre-consultation brief for one appointment (stored by the AI service in `ai`). */
+    generateBrief: (input, { requestId } = {}) =>
+      request('/v1/assist/brief', {
+        method: 'POST',
+        body: input,
+        requestId,
+        timeout: 120_000,
+        scope: {
+          patientId: input.patientId,
+          purpose: 'doctor_brief',
+          documentIds: input.documentIds,
+        },
+      }),
     /** Document agent run for one authorised document (content sent, never stored here). */
     analyzeDocument: (input, { requestId } = {}) =>
       request('/v1/documents/analyze', {

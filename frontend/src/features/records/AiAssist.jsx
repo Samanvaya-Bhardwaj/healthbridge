@@ -1,0 +1,161 @@
+import { useState } from 'react';
+import { Link, useParams } from 'react-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { assistApi } from '../../lib/domainApi.js';
+import { authErrorMessage } from '../auth/errorMessages.js';
+import { Alert } from '../../components/ui/Alert.jsx';
+import { Badge } from '../../components/ui/Badge.jsx';
+import { Button } from '../../components/ui/Button.jsx';
+import { Card } from '../../components/ui/Card.jsx';
+import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { TextField } from '../../components/ui/TextField.jsx';
+
+const AI_NOTICE =
+  'AI-generated from the shared records. Every sentence cites its source — check the sources before relying on it. It does not diagnose or recommend treatment.';
+
+function Sentences({ sentences }) {
+  return (
+    <ul className="space-y-2">
+      {sentences.map((s, i) => (
+        <li key={i} className="text-sm text-text">
+          {s.text}{' '}
+          {s.citations.map((c) => (
+            <span
+              key={`${c.label}-${c.title}`}
+              className="ml-1 inline-flex rounded bg-surface-muted px-1.5 py-0.5 text-xs text-text-muted"
+              title={c.title}
+            >
+              {c.label} · {c.title}
+            </span>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Doctor: ask a question about a consented patient's records (patient-scoped RAG). */
+export function AskRecords({ patientId }) {
+  const [question, setQuestion] = useState('');
+  const ask = useMutation({ mutationFn: () => assistApi.ask(patientId, question.trim()) });
+  return (
+    <div className="space-y-3">
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (question.trim().length >= 3) ask.mutate();
+        }}
+      >
+        <TextField
+          className="min-w-64 flex-1"
+          label="Ask about these records"
+          value={question}
+          maxLength={500}
+          onChange={(e) => setQuestion(e.target.value)}
+          hint="For example: What was the most recent WBC count?"
+        />
+        <Button type="submit" disabled={ask.isPending || question.trim().length < 3}>
+          {ask.isPending ? 'Searching…' : 'Ask'}
+        </Button>
+      </form>
+      {ask.isError && (
+        <Alert tone="error">
+          {ask.error?.code === 'ai_processing_disabled'
+            ? 'The patient has not turned on AI reading of their documents.'
+            : authErrorMessage(ask.error)}
+        </Alert>
+      )}
+      {ask.data && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="mb-2 flex items-center gap-2 text-xs text-text-muted">
+            <Badge tone="primary">AI-generated</Badge> {AI_NOTICE}
+          </p>
+          {ask.data.status === 'answered' ? (
+            <Sentences sentences={ask.data.sentences} />
+          ) : (
+            <p className="text-sm font-medium text-text">{ask.data.answer}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Doctor: pre-consultation brief for one of their appointments. */
+export function BriefPage() {
+  const { id } = useParams();
+  const queryClient = useQueryClient();
+  const brief = useQuery({
+    queryKey: ['brief', id],
+    queryFn: () => assistApi.brief(id, false),
+    retry: false,
+  });
+  const refresh = useMutation({
+    mutationFn: () => assistApi.brief(id, true),
+    onSuccess: (data) => queryClient.setQueryData(['brief', id], data),
+  });
+  const feedback = useMutation({
+    mutationFn: (rating) => assistApi.feedback(brief.data.id, rating),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['brief', id] }),
+  });
+  const b = brief.data;
+  return (
+    <div className="space-y-6">
+      <Link to="/app/appointments" className="text-sm font-medium text-primary">
+        ← Appointments
+      </Link>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-text">Pre-consultation brief</h1>
+        {b && (
+          <Button variant="secondary" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+            {refresh.isPending ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        )}
+      </div>
+      {brief.isPending && <Skeleton className="h-32 w-full" />}
+      {brief.isError && (
+        <Alert tone="error">
+          {brief.error?.code === 'consent_required'
+            ? 'The patient has not shared their records with you.'
+            : brief.error?.code === 'ai_processing_disabled'
+              ? 'The patient has not turned on AI reading of their documents.'
+              : authErrorMessage(brief.error)}
+        </Alert>
+      )}
+      {b && (
+        <Card>
+          <p className="mb-4 flex items-center gap-2 text-xs text-text-muted">
+            <Badge tone="primary">AI-generated</Badge> {AI_NOTICE}
+          </p>
+          {b.sections.length === 0 ? (
+            <p className="text-sm font-medium text-text">{b.message}</p>
+          ) : (
+            <div className="space-y-5">
+              {b.sections.map((section) => (
+                <section key={section.heading}>
+                  <h2 className="mb-2 text-sm font-semibold text-text">{section.heading}</h2>
+                  <Sentences sentences={section.sentences} />
+                </section>
+              ))}
+            </div>
+          )}
+          <div className="mt-6 flex items-center gap-2 border-t border-border pt-4 text-sm text-text-muted">
+            Was this brief helpful?
+            {['helpful', 'not_helpful'].map((rating) => (
+              <Button
+                key={rating}
+                variant={b.feedback?.rating === rating ? 'primary' : 'ghost'}
+                aria-pressed={b.feedback?.rating === rating}
+                onClick={() => feedback.mutate(rating)}
+                disabled={feedback.isPending}
+              >
+                {rating === 'helpful' ? 'Yes' : 'No'}
+              </Button>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}

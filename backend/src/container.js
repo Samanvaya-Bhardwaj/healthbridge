@@ -44,6 +44,7 @@ import { createAccessLogService } from './modules/consents/accessLog.js';
 import { createIntelligenceService } from './modules/intelligence/service.js';
 import { createTimelineProjector } from './modules/timeline/projector.js';
 import { createTimelineService } from './modules/timeline/service.js';
+import { createAssistService } from './modules/assist/service.js';
 
 /** Rate limits for authentication endpoints (points per window). */
 export const DEFAULT_RATE_LIMITS = Object.freeze({
@@ -244,6 +245,7 @@ export function createContainer({
   const accessLogService = createAccessLogService({ knex, accessPolicy });
   const timelineProjector = createTimelineProjector({ knex, logger });
   const timelineService = createTimelineService({ knex, accessPolicy, audit });
+  const assistService = createAssistService({ knex, aiClient, accessPolicy, audit });
   const intelligenceService = createIntelligenceService({
     knex,
     config,
@@ -337,6 +339,7 @@ export function createContainer({
     intelligenceService,
     timelineProjector,
     timelineService,
+    assistService,
     aiClient,
     authenticate,
   };

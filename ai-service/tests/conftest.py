@@ -32,11 +32,15 @@ def make_settings(**overrides) -> Settings:
 
 
 class _Cursor:
-    def __init__(self, row) -> None:
+    def __init__(self, row, rows=None) -> None:
         self._row = row
+        self._rows = rows or []
 
     async def fetchone(self):
         return self._row
+
+    async def fetchall(self):
+        return self._rows
 
 
 class FakeConnection:
@@ -48,6 +52,17 @@ class FakeConnection:
 
     async def execute(self, sql: str, params=()):
         self.db.statements.append((self.patient_id, " ".join(sql.split()), params))
+        if "FROM ai.document_chunks" in sql:
+            # Mirrors the real query: only chunks of the requested (authorised) documents.
+            docs = params["docs"] if isinstance(params, dict) else params[0]
+            rows = [
+                (c["id"], c["document_id"], c["content"], 1.0)
+                for c in self.db.chunks
+                if c["document_id"] in docs
+            ]
+            if sql.lstrip().startswith("SELECT DISTINCT ON (c.document_id)"):
+                rows = [(r[0], r[1], r[2]) for r in rows]
+            return _Cursor(None, rows)
         if "max(version)" in sql:
             versions = [e["version"] for e in self.db.extractions if e["document_id"] == params[0]]
             return _Cursor((max(versions, default=0) + 1,))
@@ -118,6 +133,7 @@ class FakeDatabase:
         self.closed = False
         self.statements: list = []
         self.extractions: list = []
+        self.chunks: list = []
         self.scopes: list[str] = []
 
     @asynccontextmanager

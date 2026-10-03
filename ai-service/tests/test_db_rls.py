@@ -85,3 +85,51 @@ def test_ai_history_cannot_be_deleted_or_rewritten(conn) -> None:
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         scoped(conn, a)
         conn.execute("UPDATE ai.document_extractions SET status = 'completed'")
+
+
+async def test_hybrid_retrieval_is_patient_and_document_scoped() -> None:
+    from app.embeddings import HashingEmbeddingProvider, to_pgvector
+    from app.rag.retrieval import hybrid_search
+
+    embedder = HashingEmbeddingProvider()
+    a, b = str(uuid.uuid4()), str(uuid.uuid4())
+    d1, d2 = str(uuid.uuid4()), str(uuid.uuid4())
+    conn = await psycopg.AsyncConnection.connect(
+        host=os.environ["DB_HOST"],
+        port=int(os.environ.get("DB_PORT", "5432")),
+        dbname=os.environ["POSTGRES_DB"],
+        user=os.environ["DB_AI_USER"],
+        password=os.environ["DB_AI_PASSWORD"],
+    )
+    try:
+        async with conn.transaction(force_rollback=True):
+            await conn.execute("SELECT set_config('ai.patient_id', %s, true)", (a,))
+            run = str(uuid.uuid4())
+            await conn.execute(
+                "INSERT INTO ai.ai_runs (id, workflow, patient_id, status) VALUES (%s,'t',%s,'ok')",
+                (run, a),
+            )
+            for doc, text in ((d1, "Hemoglobin: 12.9 g/dL"), (d2, "Hemoglobin: 9.1 g/dL secret")):
+                ext = str(uuid.uuid4())
+                await conn.execute(
+                    """INSERT INTO ai.document_extractions (id, patient_id, document_id,
+                         document_type, version, run_id, input_sha256, prompt_version, status,
+                         text_source)
+                       VALUES (%s,%s,%s,'lab_report',1,%s,%s,'t','completed','pdf_text')""",
+                    (ext, a, doc, run, "b" * 64),
+                )
+                vec = to_pgvector((await embedder.embed([text]))[0])
+                await conn.execute(
+                    """INSERT INTO ai.document_chunks (id, patient_id, document_id, document_type,
+                         extraction_id, chunk_index, content, embedding)
+                       VALUES (%s,%s,%s,'lab_report',%s,0,%s,%s::extensions.vector)""",
+                    (str(uuid.uuid4()), a, doc, ext, text, vec),
+                )
+            hits = await hybrid_search(conn, embedder, "hemoglobin", [d1])
+            assert {h.document_id for h in hits} == {d1}
+            assert all("secret" not in h.text for h in hits)
+            # Another patient's scope sees nothing, even naming the same document.
+            await conn.execute("SELECT set_config('ai.patient_id', %s, true)", (b,))
+            assert await hybrid_search(conn, embedder, "hemoglobin", [d1, d2]) == []
+    finally:
+        await conn.close()

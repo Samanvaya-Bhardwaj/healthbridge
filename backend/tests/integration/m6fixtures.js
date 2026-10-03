@@ -78,5 +78,61 @@ export function stubAiClient(getHarness) {
       });
       return { extractionId, reused: false };
     },
+    async askRecord(input) {
+      calls.push({ kind: 'question', ...input });
+      const fact = input.facts[0];
+      return fact
+        ? {
+            status: 'answered',
+            answer: fact.text,
+            sentences: [
+              {
+                text: fact.text,
+                citations: [{ label: 'F1', type: 'lab_result', id: fact.id, documentId: null }],
+              },
+            ],
+          }
+        : {
+            status: 'insufficient_information',
+            answer: 'Insufficient information. Please consult the doctor.',
+            sentences: [],
+          };
+    },
+    async generateBrief(input) {
+      calls.push({ kind: 'brief', ...input });
+      const h = getHarness();
+      const runId = randomUUID();
+      await h.ownerKnex('ai.ai_runs').insert({
+        id: runId,
+        workflow: 'doctor_brief',
+        patient_id: input.patientId,
+        status: 'ok',
+        provider: 'fake',
+      });
+      const sections = input.facts.length
+        ? [
+            {
+              heading: 'Recent verified lab values',
+              sentences: input.facts.map((f, i) => ({
+                text: f.text,
+                citations: [{ label: `F${i + 1}`, type: 'lab_result', id: f.id, documentId: null }],
+              })),
+            },
+          ]
+        : [];
+      const briefId = randomUUID();
+      await h.ownerKnex('ai.doctor_briefs').insert({
+        id: briefId,
+        patient_id: input.patientId,
+        appointment_id: input.appointmentId,
+        doctor_user_id: input.doctorUserId,
+        run_id: runId,
+        status: sections.length ? 'ready' : 'insufficient_information',
+        sections: JSON.stringify(sections),
+        source_count: input.facts.length + input.documentIds.length,
+        prompt_version: 'test',
+      });
+      return { briefId, status: sections.length ? 'ready' : 'insufficient_information' };
+    },
   };
 }

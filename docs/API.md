@@ -264,3 +264,14 @@ Internal (AI service): `POST /v1/documents/analyze` (service token + `X-Patient-
 |---|---|---|---|
 | GET | `/patients/:patientId/timeline?cursor&limit&types` | `medical_records:read` + consent | Newest first: `{ id, type, occurredAt, datePrecision, title, status, provenance, provenanceLabel, actor, detail, source }`; `meta.nextCursor` |
 | GET | `/patients/:patientId/timeline/export` | `records:export` (patient side) | JSON attachment `healthbridge.timeline.v1` with provenance legend; audited |
+
+## Endpoints (M8)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/patients/:patientId/record-questions` | `ai_assist:use` + consent + patient opt-in | `{ question }` returns `{ status: answered \| insufficient_information, answer, sentences[{ text, citations[{ label, type, documentId, title }] }], source: "ai_generated" }`. `409 ai_processing_disabled` |
+| POST | `/appointments/:id/brief` | `ai_assist:use`, own appointment | `{ refresh? }` returns `{ id, status, sections[{ heading, sentences }], message, feedback }` (12 h cache) |
+| POST | `/briefs/:id/feedback` | brief's doctor | `{ rating: helpful \| not_helpful, issue? }` |
+
+Internal (AI service): `POST /v1/assist/answer` and `POST /v1/assist/brief`, each with a
+service token and `X-Patient-Scope`.

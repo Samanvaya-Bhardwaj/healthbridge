@@ -182,6 +182,14 @@ function ScheduleItem({ a, now, onAction, pending }) {
             View reason
           </Button>
         )}
+        {['pending_payment', 'confirmed', 'checked_in', 'in_consultation'].includes(a.status) && (
+          <Link
+            to={`/app/appointments/${a.id}/brief`}
+            className="min-h-11 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-surface-muted"
+          >
+            AI brief
+          </Link>
+        )}
         {actions.map(([action, label]) => (
           <Button
             key={action}

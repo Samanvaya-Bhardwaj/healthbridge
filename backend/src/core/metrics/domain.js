@@ -76,6 +76,13 @@ export const domainMetrics = Object.freeze({
   ]),
   labResultsVerified: counter('lab_results_verified_total', 'Lab values verified by doctors'),
 
+  // M8: AI assistance
+  aiAssistRequests: counter('ai_assist_requests_total', 'Record questions and briefs', [
+    'kind',
+    'status',
+  ]),
+  briefFeedback: counter('brief_feedback_total', 'Doctor feedback on briefs', ['rating']),
+
   providerLatency: histogram('payment_provider_duration_seconds', 'Payment provider call latency', [
     'operation',
     'outcome',

@@ -286,3 +286,18 @@ Each layer is tested on its own:
   values never appear.
 - Export is limited to the patient side and audited. The access log shows
   `timeline.viewed` and `timeline.exported`.
+
+## Doctor brief and record questions (M8, ADR-0024)
+
+- **Who:** a treating doctor with `ai_assist:use` and an active `medical_documents`
+  consent, for a patient who opted in. Briefs are only for the doctor's own appointment.
+- **What the AI sees:** only the RLS-visible documents (the consented types) and verified
+  lab values, named in a scope token. The AI service refuses anything else, and retrieval
+  SQL is limited to those documents under patient-scoped RLS.
+- **What leaves:** cited sentences only. Unknown citations, numbers absent from the
+  sources, unsupported wording and diagnostic or treatment language are removed. With
+  nothing left, the answer is exactly "Insufficient information. Please consult the
+  doctor."
+- **Privacy:** question text is never stored, logged or audited; only counts and a hash
+  are kept. Briefs are visible to their doctor only while consent lasts.
+- **Rate limit:** 60 AI calls per doctor per hour.

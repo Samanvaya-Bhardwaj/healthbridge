@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 
-from app.api import documents, health, internal
+from app.api import assist, documents, health, internal
 from app.core.config import Settings, get_settings
 from app.core.db import Database, DatabaseLike
 from app.core.errors import register_exception_handlers
@@ -107,4 +107,5 @@ def create_app(
     app.include_router(health.router)
     app.include_router(internal.router)
     app.include_router(documents.router)
+    app.include_router(assist.router)
     return app

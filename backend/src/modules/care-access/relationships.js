@@ -47,6 +47,7 @@ export const CONSENT_SCOPE_FOR_PERMISSION = Object.freeze({
   [PERMISSIONS.MEDICAL_RECORDS_READ]: 'medical_documents',
   [PERMISSIONS.MEDICAL_RECORDS_WRITE]: 'medical_documents_upload',
   [PERMISSIONS.LAB_RESULTS_VERIFY]: 'medical_documents',
+  [PERMISSIONS.AI_ASSIST_USE]: 'medical_documents',
 });
 
 const DOCUMENT_PERMISSIONS = new Set([
