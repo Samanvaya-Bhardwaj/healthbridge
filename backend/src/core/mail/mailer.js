@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { smtpTransportOptions } from './smtp.js';
 
 /**
  * Minimal transactional-email port (the full notification service arrives in M10).
@@ -9,14 +10,8 @@ import nodemailer from 'nodemailer';
  */
 
 /** SMTP mailer (Mailpit locally; a provider such as SES via SMTP in production). */
-export function createSmtpMailer({ smtpHost, smtpPort, from, logger }) {
-  const transport = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: false,
-    // Local Mailpit has no TLS; production SMTP endpoints should require STARTTLS.
-    ignoreTLS: smtpPort === 1025,
-  });
+export function createSmtpMailer({ from, logger, ...mail }) {
+  const transport = nodemailer.createTransport(smtpTransportOptions(mail));
   return {
     async send({ to, subject, text, template }) {
       await transport.sendMail({ from, to, subject, text });

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     db_ai_user: str
     db_ai_password: SecretStr
     db_pool_max: int = Field(default=5, ge=1, le=50)
+    # TLS to managed databases (ADR-0028): disable | require | verify-full, with an
+    # optional base64 PEM CA bundle (e.g. the RDS global bundle).
+    db_ssl: Literal["disable", "require", "verify-full"] = "disable"
+    db_ssl_ca: SecretStr | None = None
 
     internal_service_secret: SecretStr
 

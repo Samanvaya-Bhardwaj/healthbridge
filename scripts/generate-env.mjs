@@ -139,6 +139,10 @@ const values = {
   // Consultations (ADR-0025): key-encryption key for clinical notes; mock video locally.
   CLINICAL_DATA_KEY: randomBytes(32).toString('base64'),
   VIDEO_PROVIDER: 'mock',
+  // Local LiveKit server (`npm start -- --video` switches VIDEO_PROVIDER to livekit).
+  LIVEKIT_URL: 'ws://localhost:7880',
+  LIVEKIT_API_KEY: 'hb-dev',
+  LIVEKIT_API_SECRET: secret(32),
 
   // Operator tools (ADR-0027), loopback only: read-only Bull Board in the worker, and
   // Grafana for `docker compose --profile observability up -d`.

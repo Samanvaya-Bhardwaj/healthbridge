@@ -47,8 +47,11 @@ privacy, security and compliance review described there.
 - High-sensitivity free text (SOAP notes, follow-up notes) is envelope-encrypted with
   AES-256-GCM, with key IDs and AAD binding to the record.
 - Prescriptions are sealed with SHA-256 plus HKDF-derived HMAC.
-- TLS termination and HSTS at the edge are part of the production deployment (M12,
-  `infra/nginx/tls.conf.example`). Helmet already sends HSTS from the API.
+- **TLS** (added in M12, ADR-0028):
+  - **Edge:** TLS 1.2/1.3 with HSTS, and HTTP redirects to HTTPS. Termination happens in
+    the web container (single host) or at the ALB (AWS).
+  - **Managed services:** `DB_SSL=verify-full`, `REDIS_TLS` and SMTP STARTTLS (required
+    in staging and production).
 - **Residual:** key management uses environment variables, not a KMS (planned for
   production; ADR-0025).
 
@@ -94,10 +97,9 @@ privacy, security and compliance review described there.
   Grafana. Checked by `e2e/tests/security.spec.js`.
 - Containers run as unprivileged users. Images are scanned by Trivy (fixable
   high/critical findings fail CI).
-- **Note:** `Permissions-Policy` sets `camera=()` and `microphone=()` because the browser
-  never captures media today: the mock video provider carries none, and the LiveKit
-  browser client is a later integration (ADR-0025). Enabling LiveKit in the browser
-  requires changing this to `(self)`.
+- **Camera and microphone:** `Permissions-Policy` allows them only when live video is
+  configured (`HB_MEDIA=on`, ADR-0028), and only for the app's own origin (`(self)`).
+  Otherwise they stay `()`.
 
 ### A06 Vulnerable and outdated components: **controls in place**
 
@@ -150,7 +152,7 @@ privacy, security and compliance review described there.
   - rejected webhooks;
   - browser errors;
   - LLM errors.
-- **Residual:** alert routing to a pager is part of the production deployment (M12).
+- **Residual:** Alertmanager routing to a pager still has to be configured for each deployment. The rules exist, but no pager integration is set up here.
 
 ### A10 Server-side request forgery: **controls in place**
 

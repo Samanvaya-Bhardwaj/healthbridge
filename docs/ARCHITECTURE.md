@@ -286,6 +286,23 @@ routes → controllers → application services → domain (pure rules) → repo
   tokens delivered in link fragments. A reset revokes every session
   ([ADR-0027](adr/0027-admin-observability-account-recovery.md)).
 
+### Deployment (M12)
+
+- **Images:** the same images run everywhere. They are built once per release, scanned,
+  and pushed with an SBOM and provenance.
+- **Single host:** `infra/deploy/compose.prod.yml`:
+  - TLS in the web container, only 80/443 public;
+  - ClamAV, read-only containers and an encrypted backup service.
+- **AWS:** `infra/deploy/ecs/` task definitions for Fargate:
+  - secrets from Secrets Manager;
+  - RDS (`DB_SSL=verify-full`), ElastiCache (`REDIS_TLS`), S3 through the task role;
+  - TLS at the ALB.
+- **Backups:** snapshot-consistent and age-encrypted, with a row-count manifest. Restore
+  drills require an exact manifest match.
+- **CD:** staging over SSH with a smoke test and automatic rollback; production on ECS
+  after approval, using OIDC
+  ([ADR-0028](adr/0028-deployment-tls-backups-cd.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -324,5 +341,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M11 complete (administration, observability, account recovery, e2e, security review).**
+Current status: **M12 complete: all Phase 1 milestones delivered.** Deployment and operations: [OPERATIONS.md](OPERATIONS.md).
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

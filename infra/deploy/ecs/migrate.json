@@ -1,0 +1,267 @@
+{
+  "family": "healthbridge-${HB_ENV}-migrate",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/healthbridge-${HB_ENV}-execution",
+  "volumes": [
+    {
+      "name": "tmp"
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "migrate",
+      "image": "${IMAGE_REGISTRY}/healthbridge-backend:${IMAGE_TAG}",
+      "essential": true,
+      "readonlyRootFilesystem": true,
+      "mountPoints": [
+        {
+          "sourceVolume": "tmp",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
+      "linuxParameters": {
+        "initProcessEnabled": true,
+        "capabilities": {
+          "drop": ["ALL"]
+        }
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/healthbridge/${HB_ENV}/migrate",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "migrate",
+          "awslogs-create-group": "true",
+          "mode": "non-blocking"
+        }
+      },
+      "command": ["node", "scripts/migrate.js", "latest"],
+      "environment": [
+        {
+          "name": "APP_ENV",
+          "value": "${HB_ENV}"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "DEMO_MODE",
+          "value": "false"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "${DB_HOST}"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "POSTGRES_DB",
+          "value": "${POSTGRES_DB}"
+        },
+        {
+          "name": "DB_APP_USER",
+          "value": "hb_app"
+        },
+        {
+          "name": "DB_AI_USER",
+          "value": "hb_ai"
+        },
+        {
+          "name": "DB_POOL_MAX",
+          "value": "20"
+        },
+        {
+          "name": "DB_SSL",
+          "value": "verify-full"
+        },
+        {
+          "name": "REDIS_HOST",
+          "value": "${REDIS_HOST}"
+        },
+        {
+          "name": "REDIS_PORT",
+          "value": "6379"
+        },
+        {
+          "name": "REDIS_TLS",
+          "value": "true"
+        },
+        {
+          "name": "S3_REGION",
+          "value": "${AWS_REGION}"
+        },
+        {
+          "name": "S3_BUCKET_DOCUMENTS",
+          "value": "${S3_BUCKET_DOCUMENTS}"
+        },
+        {
+          "name": "SMTP_HOST",
+          "value": "email-smtp.${AWS_REGION}.amazonaws.com"
+        },
+        {
+          "name": "SMTP_PORT",
+          "value": "587"
+        },
+        {
+          "name": "MAIL_FROM",
+          "value": "${MAIL_FROM}"
+        },
+        {
+          "name": "API_PORT",
+          "value": "4000"
+        },
+        {
+          "name": "METRICS_PORT",
+          "value": "9464"
+        },
+        {
+          "name": "CORS_ORIGINS",
+          "value": "${PUBLIC_APP_URL}"
+        },
+        {
+          "name": "PUBLIC_APP_URL",
+          "value": "${PUBLIC_APP_URL}"
+        },
+        {
+          "name": "TRUST_PROXY",
+          "value": "2"
+        },
+        {
+          "name": "AI_SERVICE_URL",
+          "value": "http://ai-service:8000"
+        },
+        {
+          "name": "AUTH_COOKIE_SECURE",
+          "value": "true"
+        },
+        {
+          "name": "PAYMENT_PROVIDER",
+          "value": "razorpay"
+        },
+        {
+          "name": "RAZORPAY_KEY_ID",
+          "value": "${RAZORPAY_KEY_ID}"
+        },
+        {
+          "name": "NOTIFICATION_EMAIL_PROVIDER",
+          "value": "smtp"
+        },
+        {
+          "name": "WORKER_METRICS_PORT",
+          "value": "9465"
+        },
+        {
+          "name": "DOCUMENT_SCANNER",
+          "value": "clamav"
+        },
+        {
+          "name": "CLAMAV_HOST",
+          "value": "clamav"
+        },
+        {
+          "name": "VIDEO_PROVIDER",
+          "value": "${VIDEO_PROVIDER}"
+        },
+        {
+          "name": "LIVEKIT_URL",
+          "value": "${LIVEKIT_URL}"
+        },
+        {
+          "name": "CLINICAL_DATA_KEY_ID",
+          "value": "${CLINICAL_DATA_KEY_ID}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_APP_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:DB_APP_PASSWORD::"
+        },
+        {
+          "name": "DB_SSL_CA",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:DB_SSL_CA::"
+        },
+        {
+          "name": "REDIS_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:REDIS_PASSWORD::"
+        },
+        {
+          "name": "INTERNAL_SERVICE_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:INTERNAL_SERVICE_SECRET::"
+        },
+        {
+          "name": "AUTH_JWT_PRIVATE_KEY",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:AUTH_JWT_PRIVATE_KEY::"
+        },
+        {
+          "name": "AUTH_JWT_PREVIOUS_PUBLIC_KEYS",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:AUTH_JWT_PREVIOUS_PUBLIC_KEYS::"
+        },
+        {
+          "name": "PAYMENT_WEBHOOK_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:PAYMENT_WEBHOOK_SECRET::"
+        },
+        {
+          "name": "RAZORPAY_KEY_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:RAZORPAY_KEY_SECRET::"
+        },
+        {
+          "name": "SMTP_USER",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:SMTP_USER::"
+        },
+        {
+          "name": "SMTP_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:SMTP_PASSWORD::"
+        },
+        {
+          "name": "LIVEKIT_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:LIVEKIT_API_KEY::"
+        },
+        {
+          "name": "LIVEKIT_API_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:LIVEKIT_API_SECRET::"
+        },
+        {
+          "name": "CLINICAL_DATA_KEY",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:CLINICAL_DATA_KEY::"
+        },
+        {
+          "name": "CLINICAL_DATA_PREVIOUS_KEYS",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:CLINICAL_DATA_PREVIOUS_KEYS::"
+        },
+        {
+          "name": "POSTGRES_USER",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:POSTGRES_USER::"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:POSTGRES_PASSWORD::"
+        }
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "key": "app",
+      "value": "healthbridge"
+    },
+    {
+      "key": "env",
+      "value": "${HB_ENV}"
+    }
+  ]
+}

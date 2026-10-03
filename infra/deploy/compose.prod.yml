@@ -1,0 +1,397 @@
+# HealthBridge single-host production / staging stack (ADR-0028).
+#
+#   docker compose -f infra/deploy/compose.prod.yml --env-file /etc/healthbridge/healthbridge.env \
+#     up -d --wait
+#
+# Differences from the development stack (docker-compose.yml):
+#   - images come from the registry, pinned by HB_VERSION (never built on the server);
+#   - TLS terminates in the web container (HB_TLS=on); only 80/443 are published;
+#   - no host ports for data services, no Mailpit, MinIO console disabled;
+#   - ClamAV is always on (the fake scanner is refused outside development);
+#   - resource limits, log rotation and an encrypted backup service.
+# The application refuses unsafe settings at start-up (fake providers, insecure cookies,
+# http app URL, missing clinical data key, demo mode in production).
+
+name: ${HB_PROJECT:-healthbridge}
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '20m', max-file: '5' }
+
+x-backend-image: &backend-image ${HB_REGISTRY:-ghcr.io/samanvaya-bhardwaj}/healthbridge-backend:${HB_VERSION:?set HB_VERSION to the release tag}
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:?staging or production}
+  NODE_ENV: production
+  DEMO_MODE: ${DEMO_MODE:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DB_HOST: postgres
+  DB_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:?}
+  DB_APP_USER: ${DB_APP_USER:?}
+  DB_APP_PASSWORD: ${DB_APP_PASSWORD:?}
+  DB_AI_USER: ${DB_AI_USER:?}
+  DB_POOL_MAX: ${DB_POOL_MAX:-20}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION:-ap-south-1}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+  S3_BUCKET_DOCUMENTS: ${S3_BUCKET_DOCUMENTS:?}
+  S3_FORCE_PATH_STYLE: 'true'
+  S3_PUBLIC_ENDPOINT: ${PUBLIC_APP_URL:?https URL of the app}
+  SMTP_HOST: ${SMTP_HOST:?}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  MAIL_FROM: ${MAIL_FROM:?}
+  API_PORT: 4000
+  METRICS_PORT: 9464
+  CORS_ORIGINS: ${PUBLIC_APP_URL:?}
+  PUBLIC_APP_URL: ${PUBLIC_APP_URL:?}
+  TRUST_PROXY: ${TRUST_PROXY:-1}
+  AI_SERVICE_URL: http://ai-service:8000
+  INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?}
+  AUTH_JWT_PRIVATE_KEY: ${AUTH_JWT_PRIVATE_KEY:?}
+  AUTH_JWT_PREVIOUS_PUBLIC_KEYS: ${AUTH_JWT_PREVIOUS_PUBLIC_KEYS:-}
+  AUTH_ACCESS_TOKEN_TTL_SECONDS: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:-600}
+  AUTH_COOKIE_SECURE: 'true'
+  DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?}
+  PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?}
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+  NOTIFICATION_EMAIL_PROVIDER: smtp
+  REMINDER_OFFSETS_MINUTES: ${REMINDER_OFFSETS_MINUTES:-1440,60}
+  WORKER_METRICS_PORT: 9465
+  DOCUMENT_SCANNER: clamav
+  CLAMAV_HOST: clamav
+  DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-10485760}
+  DOCUMENT_DOWNLOAD_URL_TTL_SECONDS: ${DOCUMENT_DOWNLOAD_URL_TTL_SECONDS:-60}
+  VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+  LIVEKIT_URL: ${LIVEKIT_URL:-}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+  CLINICAL_DATA_KEY: ${CLINICAL_DATA_KEY:?}
+  CLINICAL_DATA_KEY_ID: ${CLINICAL_DATA_KEY_ID:-k1}
+  CLINICAL_DATA_PREVIOUS_KEYS: ${CLINICAL_DATA_PREVIOUS_KEYS:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --data-checksums
+      DB_APP_USER: ${DB_APP_USER:?}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?}
+      DB_AI_USER: ${DB_AI_USER:?}
+      DB_AI_PASSWORD: ${DB_AI_PASSWORD:?}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-100}
+      - -c
+      - log_min_duration_statement=1000 # slow queries only; parameters are not logged
+      - -c
+      - log_statement=none
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [private]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    shm_size: 256mb
+    deploy: { resources: { limits: { memory: 2g } } }
+    logging: *logging
+    restart: always
+
+  redis:
+    image: redis:7.4-alpine
+    command:
+      [
+        'redis-server',
+        '--requirepass',
+        '${REDIS_PASSWORD:?}',
+        '--appendonly',
+        'yes',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+    volumes:
+      - redis-data:/data
+    networks: [private]
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    deploy: { resources: { limits: { memory: 512m } } }
+    logging: *logging
+    restart: always
+
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:4692462f35d97d7e82c30371d82f057703c5d9489bcae726010594c812f2d285
+    command: ['server', '/data']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      MINIO_BROWSER: 'off'
+    volumes:
+      - minio-data:/data
+    networks: [private, storage]
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/9000 && printf "GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && read -r status <&3 && [[ "$$status" == *" 200 "* ]]'
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    deploy: { resources: { limits: { memory: 1g } } }
+    logging: *logging
+    restart: always
+
+  clamav:
+    image: clamav/clamav:1.4
+    networks: [private]
+    healthcheck:
+      test: ['CMD-SHELL', 'clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      start_period: 300s # signature download on first start
+      retries: 5
+    deploy: { resources: { limits: { memory: 3g } } }
+    logging: *logging
+    restart: always
+
+  migrate:
+    image: *backend-image
+    command: ['node', 'scripts/migrate.js', 'latest']
+    environment:
+      <<: *backend-env
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [private]
+    logging: *logging
+    restart: 'no'
+
+  storage-init:
+    image: *backend-image
+    command: ['node', 'scripts/bootstrap-storage.js']
+    environment:
+      <<: *backend-env
+      # This stack's MinIO is provisioned here (versioned bucket); on AWS, IaC does it.
+      STORAGE_BOOTSTRAP: self-hosted
+    depends_on:
+      minio: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [private]
+    logging: *logging
+    restart: 'no'
+
+  api:
+    image: *backend-image
+    environment: *backend-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      storage-init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+    networks: [private, edge]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 4s
+      start_period: 30s
+      retries: 6
+    read_only: true
+    tmpfs: [/tmp]
+    deploy: { resources: { limits: { memory: 1g } } }
+    stop_grace_period: 30s
+    logging: *logging
+    restart: always
+
+  worker:
+    image: *backend-image
+    command: ['node', 'src/worker.js']
+    environment:
+      <<: *backend-env
+      BULL_BOARD_USERNAME: ${BULL_BOARD_USERNAME:-ops}
+      BULL_BOARD_PASSWORD: ${BULL_BOARD_PASSWORD:-}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+    # Read-only Bull Board on the host's loopback only (reach it through SSH tunnelling).
+    ports:
+      - '127.0.0.1:${BULL_BOARD_HOST_PORT:-3010}:9466'
+    networks: [private]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:9465/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 4s
+      start_period: 30s
+      retries: 4
+    read_only: true
+    tmpfs: [/tmp]
+    deploy: { resources: { limits: { memory: 1g } } }
+    stop_grace_period: 35s
+    logging: *logging
+    restart: always
+
+  ai-service:
+    image: ${HB_REGISTRY:-ghcr.io/samanvaya-bhardwaj}/healthbridge-ai:${HB_VERSION:?}
+    environment:
+      APP_ENV: ${APP_ENV:?}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      DB_AI_USER: ${DB_AI_USER:?}
+      DB_AI_PASSWORD: ${DB_AI_PASSWORD:?}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL_DEFAULT: ${LLM_MODEL_DEFAULT:-claude-opus-5-5}
+      LLM_MODEL_FAST: ${LLM_MODEL_FAST:-claude-haiku-4-5}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      LLM_REFUSAL_FALLBACK: ${LLM_REFUSAL_FALLBACK:-true}
+      # Real patient data must not reach an external LLM without the review in ADR-0008.
+      LLM_EXTERNAL_PROCESSING_APPROVED: ${LLM_EXTERNAL_PROCESSING_APPROVED:-false}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hashing}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3.5}
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [private]
+    read_only: true
+    tmpfs: [/tmp]
+    deploy: { resources: { limits: { memory: 1g } } }
+    logging: *logging
+    restart: always
+
+  web:
+    image: ${HB_REGISTRY:-ghcr.io/samanvaya-bhardwaj}/healthbridge-web:${HB_VERSION:?}
+    environment:
+      HB_TLS: 'on'
+      # Live video (VIDEO_PROVIDER=livekit): camera/mic for this origin + LiveKit in the CSP.
+      HB_MEDIA: ${HB_MEDIA:-off}
+      HB_CSP_CONNECT_EXTRA: ${HB_CSP_CONNECT_EXTRA:-}
+      # Reload every 12 h so renewed certificates are picked up without downtime.
+      HB_RELOAD_HOURS: '12'
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - '${HB_HTTP_PORT:-80}:8080'
+      - '${HB_HTTPS_PORT:-443}:8443'
+    volumes:
+      - ${HB_TLS_DIR:-/etc/healthbridge/tls}:/etc/nginx/tls:ro
+      - acme-webroot:/var/www/acme:ro
+    networks: [edge, storage]
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1']
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    deploy: { resources: { limits: { memory: 256m } } }
+    logging: *logging
+    restart: always
+
+  # Let's Encrypt (HTTP-01 via the web container's webroot). Optional: use
+  # `--profile acme`, or provide certificates in HB_TLS_DIR from your own CA.
+  certbot:
+    image: certbot/certbot:v4.1.1
+    profiles: [acme]
+    entrypoint:
+      - sh
+      - -c
+      - |
+        trap exit TERM
+        while :; do
+          certbot certonly --webroot -w /var/www/acme -d "$$HB_DOMAIN" \
+            --email "$$HB_ACME_EMAIL" --agree-tos --non-interactive --keep-until-expiring \
+            --deploy-hook 'cp -L /etc/letsencrypt/live/$$HB_DOMAIN/fullchain.pem /etc/letsencrypt/live/$$HB_DOMAIN/privkey.pem /tls/'
+          sleep 12h & wait $$!
+        done
+    environment:
+      HB_DOMAIN: ${HB_DOMAIN:-}
+      HB_ACME_EMAIL: ${HB_ACME_EMAIL:-}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - acme-webroot:/var/www/acme
+      - ${HB_TLS_DIR:-/etc/healthbridge/tls}:/tls
+    logging: *logging
+    restart: always
+
+  # Encrypted backups (PostgreSQL dump + manifest; document objects through rclone crypt).
+  # See docs/OPERATIONS.md for restore and the restore drill.
+  backup:
+    image: ${HB_REGISTRY:-ghcr.io/samanvaya-bhardwaj}/healthbridge-backup:${HB_VERSION:?}
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:?}
+      PGUSER: ${POSTGRES_USER:?}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+      S3_BUCKET_DOCUMENTS: ${S3_BUCKET_DOCUMENTS:?}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:?age public key used to encrypt backups}
+      BACKUP_OBJECTS_PASSWORD: ${BACKUP_OBJECTS_PASSWORD:?}
+      BACKUP_INTERVAL_MINUTES: ${BACKUP_INTERVAL_MINUTES:-60}
+      BACKUP_KEEP_HOURLY: ${BACKUP_KEEP_HOURLY:-48}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-14}
+      BACKUP_REMOTE: ${BACKUP_REMOTE:-}
+      RCLONE_CONFIG_OFFSITE_TYPE: ${BACKUP_OFFSITE_TYPE:-s3}
+      RCLONE_CONFIG_OFFSITE_PROVIDER: ${BACKUP_OFFSITE_PROVIDER:-AWS}
+      RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID: ${BACKUP_OFFSITE_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY: ${BACKUP_OFFSITE_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_OFFSITE_REGION: ${BACKUP_OFFSITE_REGION:-ap-south-1}
+    depends_on:
+      postgres: { condition: service_healthy }
+      # The bucket must exist before the first object sync.
+      storage-init: { condition: service_completed_successfully }
+    volumes:
+      - backups:/backups
+      - ${BACKUP_AGE_IDENTITY_FILE:-/dev/null}:/run/secrets/backup-identity.txt:ro
+    networks: [private]
+    deploy: { resources: { limits: { memory: 512m } } }
+    logging: *logging
+    restart: always
+
+networks:
+  edge:
+  private:
+  storage:
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  backups:
+  letsencrypt:
+  acme-webroot:

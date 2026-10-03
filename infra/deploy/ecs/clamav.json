@@ -1,0 +1,63 @@
+{
+  "family": "healthbridge-${HB_ENV}-clamav",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "cpu": "1024",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/healthbridge-${HB_ENV}-execution",
+  "volumes": [
+    {
+      "name": "tmp"
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "clamav",
+      "image": "clamav/clamav:1.4",
+      "essential": true,
+      "readonlyRootFilesystem": false,
+      "mountPoints": [],
+      "linuxParameters": {
+        "initProcessEnabled": true
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/healthbridge/${HB_ENV}/clamav",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "clamav",
+          "awslogs-create-group": "true",
+          "mode": "non-blocking"
+        }
+      },
+      "portMappings": [
+        {
+          "name": "clamav",
+          "containerPort": 3310,
+          "protocol": "tcp"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "clamdcheck.sh"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 5,
+        "startPeriod": 300
+      }
+    }
+  ],
+  "tags": [
+    {
+      "key": "app",
+      "value": "healthbridge"
+    },
+    {
+      "key": "env",
+      "value": "${HB_ENV}"
+    }
+  ]
+}

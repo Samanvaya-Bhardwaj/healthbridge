@@ -28,16 +28,17 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M9** | Consultation and prescribing: waiting room, video adapter, SOAP notes, outcome A/B/C, signed immutable prescriptions + PDF | ✅ Complete |
 | **M10** | Follow-ups and notifications: check-ins, reminders, rule-based escalation, AI summary for doctors, in-app inbox | ✅ Complete |
 | **M11** | Admin UI (users, audit log, operations), Bull Board, metrics and dashboards, password reset and email verification, Playwright e2e, OWASP review | ✅ Complete |
-| M12 | Production deployment: TLS, backups and restore drill, staging, CD | Next |
+| **M12** | Deployment: production Compose + ECS manifests, TLS, encrypted backups with restore drill and DR rehearsal, staging rehearsal, CD pipeline | ✅ Complete |
 
 ## Architecture at a glance
 
 - **frontend/**: React + Vite + Tailwind CSS SPA, served by unprivileged Nginx
 - **backend/**: Node.js/Express modular monolith (REST `/api/v1`), Knex migrations, BullMQ workers
-- **ai-service/**: Python/FastAPI, internal only. Provider-neutral `LLMProvider` (Claude first), LangGraph agents (later milestones)
+- **ai-service/**: Python/FastAPI, internal only. Provider-neutral `LLMProvider` (Claude first; offline fake by default), bounded LangGraph agents (documents, brief/RAG, follow-ups)
 - **shared/**: constants and schemas shared by the frontend and backend
-- **infra/**: Nginx and PostgreSQL bootstrap configuration
-- **docs/**: architecture, ADRs and development guide
+- **infra/**: Nginx (plain/TLS), PostgreSQL bootstrap, observability (Prometheus, Grafana), deployment (production Compose, ECS, backups)
+- **e2e/**: Playwright browser journeys
+- **docs/**: architecture, ADRs, security review, operations runbook and development guide
 
 Core invariants: **AI proposes → backend validates → backend commits** · three-gate access
 control (role, relationship, consent) with RLS as defence in depth · transactional
@@ -48,14 +49,31 @@ See [ARCHITECTURE](docs/ARCHITECTURE.md), [SECURITY](docs/SECURITY.md), [API](do
 
 ## Quick start
 
+You need Docker Desktop and Node.js 24.
+
 ```bash
-npm ci
-node scripts/generate-env.mjs          # local .env with random secrets (never committed)
-docker compose up -d --build --wait
+git clone https://github.com/Samanvaya-Bhardwaj/healthbridge.git && cd healthbridge
+npm start          # secrets, build, every service, demo data; prints URLs and sign-ins
 ```
 
-Then open the web URL printed by `generate-env` (default `http://localhost:8080`).
-Full instructions: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+- **Options:** `npm start -- --video` (live video), `--scanner` (ClamAV),
+  `--observability` (Grafana).
+- **Everyday commands:** `npm stop`, `npm run logs`, `npm run reset`.
+- **Verify everything:** `npm ci && npm run check`.
+
+**The complete guide** covers running, the demo tour, testing, deployment, troubleshooting,
+and what's included or not: **[RUNNING.md](RUNNING.md)**.
+
+## Deployment
+
+- **Single host (staging or small production):** `infra/deploy/compose.prod.yml` with TLS,
+  ClamAV and encrypted backups.
+- **AWS (production):** ECS Fargate task definitions in `infra/deploy/ecs/`.
+- **Releases:** a `v*` tag runs the CD pipeline: build and scan the images, push them
+  with an SBOM and provenance, deploy to staging with a smoke test and automatic rollback,
+  then deploy to production after approval.
+- **Details:** see the [operations runbook](docs/OPERATIONS.md) and
+  [ADR-0028](docs/adr/0028-deployment-tls-backups-cd.md).
 
 ## Repository layout
 
@@ -65,9 +83,11 @@ healthbridge/
 ├── backend/       Express API, migrations, scripts, tests
 ├── ai-service/    FastAPI AI service (uv, pytest, ruff)
 ├── shared/        @healthbridge/shared
-├── infra/         nginx/, postgres/init/
-├── docs/          ARCHITECTURE, DECISIONS (+ adr/), DEVELOPMENT, proposal
-├── scripts/       generate-env.mjs
-├── .github/       CI workflow, Dependabot
+├── e2e/           Playwright browser journeys (patient, recovery, admin, security, video)
+├── infra/         nginx/, postgres/init/, observability/, deploy/ (prod Compose, ECS, backup)
+├── docs/          ARCHITECTURE, SECURITY(+_REVIEW), API, DATABASE, OPERATIONS, DECISIONS (+ adr/)
+├── scripts/       start.mjs (npm start), check.mjs (npm run check), generate-env, backup-drill
+├── .github/       CI and CD workflows, Dependabot
+├── RUNNING.md     the complete run/use/verify/deploy guide
 └── docker-compose.yml
 ```

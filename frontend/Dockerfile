@@ -22,7 +22,11 @@ USER root
 RUN apk upgrade --no-cache
 USER 101
 COPY infra/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY infra/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
+# Owned by the nginx user: the start-up script adapts them per environment.
+COPY --chown=101:101 infra/nginx/app.conf infra/nginx/security-headers.conf /etc/nginx/snippets/
+# Start-up script: HB_TLS=on (TLS variant), HB_STORAGE_PROXY=off, HB_CSP_CONNECT_EXTRA.
+COPY infra/nginx/default.tls.conf /etc/nginx/variants/default.tls.conf
+COPY --chmod=755 infra/nginx/40-healthbridge.sh /docker-entrypoint.d/40-healthbridge.sh
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \

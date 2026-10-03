@@ -1,5 +1,8 @@
 """PostgreSQL access for the AI service (least-privilege role, `ai` schema only)."""
 
+import base64
+import os
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Protocol
@@ -17,6 +20,19 @@ class DatabaseLike(Protocol):
     def patient_scope(self, patient_id: str) -> Any: ...
 
 
+def ssl_params(settings: Settings) -> dict[str, str]:
+    """libpq TLS parameters; the CA bundle is written to a private temp file."""
+    if settings.db_ssl == "disable":
+        return {"sslmode": "disable"}
+    params = {"sslmode": settings.db_ssl}
+    if settings.db_ssl_ca:
+        fd, path = tempfile.mkstemp(prefix="db-ca-", suffix=".pem")
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(base64.b64decode(settings.db_ssl_ca.get_secret_value()))
+        params["sslrootcert"] = path
+    return params
+
+
 class Database:
     def __init__(self, settings: Settings) -> None:
         conninfo = make_conninfo(
@@ -28,6 +44,7 @@ class Database:
             application_name="healthbridge-ai",
             connect_timeout=5,
             options="-c statement_timeout=15000",
+            **ssl_params(settings),
         )
         self._pool = AsyncConnectionPool(
             conninfo,

@@ -14,6 +14,11 @@
     "e2e"
   ],
   "scripts": {
+    "start": "node scripts/start.mjs",
+    "stop": "docker compose --profile observability --profile scanner --profile video stop",
+    "logs": "docker compose logs -f --tail=100",
+    "reset": "docker compose --profile observability --profile scanner --profile video down -v --remove-orphans",
+    "check": "node scripts/check.mjs",
     "env:init": "node scripts/generate-env.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",

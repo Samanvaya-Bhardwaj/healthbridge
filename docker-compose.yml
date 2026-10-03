@@ -276,6 +276,33 @@ services:
     networks: [private]
     restart: unless-stopped
 
+  # Optional real video (ADR-0028): `npm start -- --video` (or `--profile video` with
+  # VIDEO_PROVIDER=livekit). Media flows browser ↔ LiveKit directly; the API only issues
+  # short-lived room tokens. Loopback ports: signalling 7880, RTC over TCP 7881 / UDP 7882.
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    profiles: [video]
+    environment:
+      LIVEKIT_KEYS: '${LIVEKIT_API_KEY:-hb-dev}: ${LIVEKIT_API_SECRET:-}'
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: false
+          node_ip: 127.0.0.1
+        room:
+          empty_timeout: 300
+          max_participants: 4
+        logging:
+          level: info
+    ports:
+      - '127.0.0.1:${HOST_PORT_LIVEKIT:-7880}:7880'
+      - '127.0.0.1:7881:7881'
+      - '127.0.0.1:7882:7882/udp'
+    networks: [private]
+    restart: unless-stopped
+
   # Optional observability stack (ADR-0027): `docker compose --profile observability up -d`.
   # Loopback-only ports; Grafana refuses to start without GRAFANA_ADMIN_PASSWORD.
   prometheus:
@@ -324,6 +351,11 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     image: healthbridge-web:local
+    environment:
+      # Set by `npm start -- --video`: camera/microphone for this origin, and the LiveKit
+      # signalling origin in the CSP.
+      HB_MEDIA: ${HB_MEDIA:-off}
+      HB_CSP_CONNECT_EXTRA: ${HB_CSP_CONNECT_EXTRA:-}
     depends_on:
       api: { condition: service_healthy }
     ports:

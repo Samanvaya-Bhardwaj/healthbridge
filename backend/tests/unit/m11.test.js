@@ -66,3 +66,82 @@ describe('client error reports', () => {
     ).toBe(false);
   });
 });
+
+describe('managed-service TLS (M12)', () => {
+  it('maps DB_SSL modes to node-postgres options and enables Redis TLS', async () => {
+    const { pgSsl } = await import('../../src/core/db/ssl.js');
+    expect(pgSsl()).toBe(false);
+    expect(pgSsl({ mode: 'require' })).toEqual({ rejectUnauthorized: false });
+    const pem = '-----BEGIN CERTIFICATE-----\nsynthetic\n-----END CERTIFICATE-----\n';
+    expect(pgSsl({ mode: 'verify-full', caBase64: Buffer.from(pem).toString('base64') })).toEqual({
+      rejectUnauthorized: true,
+      ca: pem,
+    });
+    expect(() => pgSsl({ mode: 'prefer' })).toThrow();
+
+    const config = loadConfig({ ...validEnv, DB_SSL: 'verify-full', REDIS_TLS: 'true' });
+    expect(config.db.ssl).toBe('verify-full');
+    expect(config.redis.tls).toBe(true);
+    expect(loadConfig(validEnv).redis.tls).toBe(false);
+    expect(() => loadConfig({ ...validEnv, DB_SSL: 'prefer' })).toThrow();
+
+    const { bullConnection } = await import('../../src/core/queue/queues.js');
+    expect(
+      bullConnection({ host: 'cache.example', port: 6379, password: 'x', tls: true }).tls,
+    ).toEqual({
+      servername: 'cache.example',
+    });
+  });
+});
+
+describe('object storage credentials (M12)', () => {
+  it('uses static keys for MinIO, or the AWS default credential chain when both are unset', async () => {
+    const { createS3Client } = await import('../../src/core/storage/s3.js');
+    const aws = { ...validEnv, S3_ENDPOINT: '', S3_ACCESS_KEY_ID: '', S3_SECRET_ACCESS_KEY: '' };
+    const config = loadConfig(aws);
+    expect(config.storage.accessKeyId).toBeUndefined();
+    const client = createS3Client(config.storage);
+    expect(client.config.credentials).toBeTypeOf('function'); // default provider chain
+    client.destroy();
+
+    expect(() => loadConfig({ ...aws, S3_ACCESS_KEY_ID: 'only-one' })).toThrow(/S3_SECRET/);
+    expect(() => loadConfig({ ...aws, S3_ENDPOINT: 'http://minio:9000' })).toThrow(
+      /S3_ACCESS_KEY_ID/,
+    );
+  });
+});
+
+describe('SMTP transport (M12)', () => {
+  it('is plain only for local Mailpit and requires STARTTLS in staging/production', async () => {
+    const { smtpTransportOptions } = await import('../../src/core/mail/smtp.js');
+    expect(smtpTransportOptions({ smtpHost: 'mailpit', smtpPort: 1025 })).toMatchObject({
+      ignoreTLS: true,
+      secure: false,
+    });
+    const relay = smtpTransportOptions({
+      smtpHost: 'email-smtp.ap-south-1.amazonaws.com',
+      smtpPort: 587,
+      requireTls: true,
+      user: 'AKIASYNTHETIC',
+      password: 'synthetic-secret',
+    });
+    expect(relay).toMatchObject({ requireTLS: true, auth: { user: 'AKIASYNTHETIC' } });
+    expect(relay.ignoreTLS).toBeUndefined();
+    // Even on port 1025, staging/production never fall back to plain SMTP.
+    expect(smtpTransportOptions({ smtpHost: 'x', smtpPort: 1025, requireTls: true })).toMatchObject(
+      { requireTLS: true },
+    );
+
+    const staging = loadConfig({
+      ...validEnv,
+      APP_ENV: 'staging',
+      PUBLIC_APP_URL: 'https://staging.example',
+      AUTH_COOKIE_SECURE: 'true',
+      DOCUMENT_SCANNER: 'clamav',
+      CLAMAV_HOST: 'clamav',
+      CLINICAL_DATA_KEY: Buffer.alloc(32, 3).toString('base64'),
+    });
+    expect(staging.mail.requireTls).toBe(true);
+    expect(() => loadConfig({ ...validEnv, SMTP_USER: 'only-user' })).toThrow(/SMTP_PASSWORD/);
+  });
+});

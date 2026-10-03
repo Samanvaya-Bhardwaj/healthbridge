@@ -10,6 +10,8 @@ export function createRedis(redis, connectionName = 'healthbridge-api') {
     host: redis.host,
     port: redis.port,
     password: redis.password,
+    // ElastiCache / managed Redis with in-transit encryption (ADR-0028).
+    ...(redis.tls ? { tls: { servername: redis.host } } : {}),
     connectionName,
     lazyConnect: true,
     maxRetriesPerRequest: 2,

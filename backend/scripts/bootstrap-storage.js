@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Creates the documents bucket with versioning for LOCAL/CI environments (MinIO).
-// In staging/production, buckets, encryption (SSE-KMS), versioning and lifecycle
-// policies are provisioned by infrastructure-as-code, never by the application.
+// Creates the documents bucket with versioning for MinIO: local/CI environments, and the
+// self-hosted single-host deployment (infra/deploy/compose.prod.yml sets
+// STORAGE_BOOTSTRAP=self-hosted). On AWS, buckets, encryption (SSE-KMS), versioning and
+// lifecycle policies are provisioned by infrastructure-as-code, never by the application.
 
 import {
   CreateBucketCommand,
@@ -16,7 +17,8 @@ const log = (msg, extra = {}) =>
     JSON.stringify({ level: 'info', service: 'healthbridge-storage-bootstrap', msg, ...extra }),
   );
 
-if (['staging', 'production'].includes(env.APP_ENV)) {
+const selfHosted = env.STORAGE_BOOTSTRAP === 'self-hosted' && Boolean(env.S3_ENDPOINT);
+if (['staging', 'production'].includes(env.APP_ENV) && !selfHosted) {
   console.error('Refusing to bootstrap storage in staging/production; use infrastructure-as-code.');
   process.exit(1);
 }

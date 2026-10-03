@@ -44,3 +44,19 @@ def test_secrets_are_not_exposed_in_repr() -> None:
     settings = make_settings(llm_provider="claude", anthropic_api_key="sk-very-secret")
     assert "sk-very-secret" not in repr(settings)
     assert "t" * 48 not in repr(settings)
+
+
+def test_database_tls_parameters() -> None:
+    import base64
+
+    from app.core.db import ssl_params
+
+    assert ssl_params(make_settings()) == {"sslmode": "disable"}
+    assert ssl_params(make_settings(db_ssl="require")) == {"sslmode": "require"}
+    pem = b"-----BEGIN CERTIFICATE-----\nsynthetic\n-----END CERTIFICATE-----\n"
+    params = ssl_params(
+        make_settings(db_ssl="verify-full", db_ssl_ca=base64.b64encode(pem).decode())
+    )
+    assert params["sslmode"] == "verify-full"
+    with open(params["sslrootcert"], "rb") as handle:
+        assert handle.read() == pem

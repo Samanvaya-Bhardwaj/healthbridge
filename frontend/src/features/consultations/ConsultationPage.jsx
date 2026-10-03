@@ -13,6 +13,7 @@ import { TextField } from '../../components/ui/TextField.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { MODE_LABELS, formatDateTime } from '../appointments/format.js';
 import { PrescriptionCard } from './Prescriptions.jsx';
+import { VideoRoom } from './VideoRoom.jsx';
 
 const SOAP = [
   ['subjective', 'Subjective', 'What the patient reports'],
@@ -131,14 +132,12 @@ function VideoPanel({ appointmentId }) {
             <p className="font-medium">Demo video room</p>
             <p className="mt-1 text-white/70">
               The mock provider issues a real, short-lived join token but carries no audio or video.
-              Configure LiveKit for live calls.
+              Start with live video (npm start -- --video) for real calls.
             </p>
           </div>
         </div>
       ) : (
-        <p className="text-sm text-text">
-          Join token issued for {join.data.url}. Open the call in the LiveKit client.
-        </p>
+        <VideoRoom url={join.data.url} token={join.data.token} onLeave={() => join.reset()} />
       )}
       <ErrorAlert error={join.error} />
     </div>

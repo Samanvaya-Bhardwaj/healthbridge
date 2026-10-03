@@ -26,9 +26,22 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     locale: 'en-IN',
     timezoneId: 'Asia/Kolkata',
+    // Staging rehearsals use a self-signed certificate (never set against real hosts).
+    ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === '1',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, grepInvert: /@video/ },
+    // Live video: Chromium's synthetic camera/microphone, no permission prompts.
+    {
+      name: 'video',
+      grep: /@video/,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+        },
+      },
+    },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, grep: /@mobile/ },
   ],
 });

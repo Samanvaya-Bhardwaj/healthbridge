@@ -35,15 +35,21 @@ const envSchema = z
     DB_APP_USER: z.string().min(1),
     DB_APP_PASSWORD: z.string().min(1),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    // TLS to managed databases (ADR-0028); see core/db/ssl.js.
+    DB_SSL: z.enum(['disable', 'require', 'verify-full']).default('disable'),
+    DB_SSL_CA: optional(z.base64()),
 
     REDIS_HOST: z.string().min(1),
     REDIS_PORT: port.default(6379),
     REDIS_PASSWORD: z.string().min(1),
+    REDIS_TLS: z.stringbool().default(false),
 
-    S3_ENDPOINT: z.url().optional(),
+    S3_ENDPOINT: optional(z.url()),
     S3_REGION: z.string().min(1),
-    S3_ACCESS_KEY_ID: z.string().min(1),
-    S3_SECRET_ACCESS_KEY: z.string().min(1),
+    // Static keys for MinIO / non-AWS S3. On AWS leave both unset: the SDK uses the task
+    // role (ECS) through the default credential chain.
+    S3_ACCESS_KEY_ID: optional(z.string().min(1)),
+    S3_SECRET_ACCESS_KEY: optional(z.string().min(1)),
     S3_BUCKET_DOCUMENTS: z.string().min(3),
     S3_FORCE_PATH_STYLE: z.stringbool().default(false),
     // Endpoint browsers use for presigned uploads/downloads (e.g. the Nginx origin); the
@@ -66,6 +72,11 @@ const envSchema = z
 
     SMTP_HOST: z.string().min(1).optional(),
     SMTP_PORT: port.default(1025),
+    // Relay credentials (e.g. Amazon SES SMTP) and implicit TLS (port 465). STARTTLS is
+    // required automatically in staging and production (core/mail/smtp.js).
+    SMTP_USER: optional(z.string().min(1)),
+    SMTP_PASSWORD: optional(z.string().min(1)),
+    SMTP_SECURE: z.stringbool().default(false),
     MAIL_FROM: z.string().min(3).default('HealthBridge <no-reply@healthbridge.local>'),
 
     AI_SERVICE_URL: z.url(),
@@ -148,6 +159,20 @@ const envSchema = z
         message: 'secure cookies are required outside development/test',
       });
     }
+    if (Boolean(env.S3_ACCESS_KEY_ID) !== Boolean(env.S3_SECRET_ACCESS_KEY)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['S3_SECRET_ACCESS_KEY'],
+        message: 'set both S3 keys, or neither to use the AWS default credential chain',
+      });
+    }
+    if (env.S3_ENDPOINT && !env.S3_ACCESS_KEY_ID) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['S3_ACCESS_KEY_ID'],
+        message: 'a custom S3 endpoint (MinIO) needs static keys',
+      });
+    }
     // Emailed links must point at the real, TLS-protected app outside development.
     if (
       ['staging', 'production'].includes(env.APP_ENV) &&
@@ -207,6 +232,9 @@ const envSchema = z
         message: 'the fake notification provider cannot be used when APP_ENV=production',
       });
     }
+    if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASSWORD)) {
+      ctx.addIssue({ code: 'custom', path: ['SMTP_PASSWORD'], message: 'set both or neither' });
+    }
     if (env.NOTIFICATION_EMAIL_PROVIDER === 'smtp' && !env.SMTP_HOST) {
       ctx.addIssue({ code: 'custom', path: ['SMTP_HOST'], message: 'required for smtp' });
     }
@@ -225,6 +253,18 @@ const envSchema = z
         code: 'custom',
         path: ['VIDEO_PROVIDER'],
         message: 'the mock video provider cannot be used when APP_ENV=production',
+      });
+    }
+    if (
+      env.VIDEO_PROVIDER === 'livekit' &&
+      ['staging', 'production'].includes(env.APP_ENV) &&
+      env.LIVEKIT_URL &&
+      !env.LIVEKIT_URL.startsWith('wss://')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['LIVEKIT_URL'],
+        message: 'media signalling must use wss:// outside development/test',
       });
     }
     if (env.VIDEO_PROVIDER === 'livekit') {
@@ -342,8 +382,15 @@ export function loadConfig(env = process.env) {
       user: e.DB_APP_USER,
       password: e.DB_APP_PASSWORD,
       poolMax: e.DB_POOL_MAX,
+      ssl: e.DB_SSL,
+      sslCa: e.DB_SSL_CA,
     },
-    redis: { host: e.REDIS_HOST, port: e.REDIS_PORT, password: e.REDIS_PASSWORD },
+    redis: {
+      host: e.REDIS_HOST,
+      port: e.REDIS_PORT,
+      password: e.REDIS_PASSWORD,
+      tls: e.REDIS_TLS,
+    },
     storage: {
       endpoint: e.S3_ENDPOINT,
       region: e.S3_REGION,
@@ -360,7 +407,15 @@ export function loadConfig(env = process.env) {
       uploadUrlTtlSeconds: e.DOCUMENT_UPLOAD_URL_TTL_SECONDS,
       downloadUrlTtlSeconds: e.DOCUMENT_DOWNLOAD_URL_TTL_SECONDS,
     },
-    mail: { smtpHost: e.SMTP_HOST, smtpPort: e.SMTP_PORT, from: e.MAIL_FROM },
+    mail: {
+      smtpHost: e.SMTP_HOST,
+      smtpPort: e.SMTP_PORT,
+      from: e.MAIL_FROM,
+      user: e.SMTP_USER,
+      password: e.SMTP_PASSWORD,
+      secure: e.SMTP_SECURE,
+      requireTls: ['staging', 'production'].includes(e.APP_ENV),
+    },
     payments: {
       provider: e.PAYMENT_PROVIDER,
       webhookSecret,

@@ -4,6 +4,7 @@
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { pgSsl } from './src/core/db/ssl.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +22,7 @@ export function migrationConfig(env = process.env) {
       database: env.POSTGRES_DB,
       user: env.POSTGRES_USER,
       password: env.POSTGRES_PASSWORD,
+      ssl: pgSsl({ mode: env.DB_SSL || 'disable', caBase64: env.DB_SSL_CA || undefined }),
       application_name: 'healthbridge-migrate',
     },
     pool: { min: 0, max: 2 },

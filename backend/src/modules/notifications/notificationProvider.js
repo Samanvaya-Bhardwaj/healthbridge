@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { smtpTransportOptions } from '../../core/mail/smtp.js';
 import { renderTemplate } from './templates.js';
 
 /**
@@ -67,16 +68,8 @@ export function createFakeNotificationProvider({ logger } = {}) {
  * Email over SMTP (Mailpit locally; SES or similar via SMTP in production). SMS has no
  * real provider yet (no costs in development): messages are recorded by the fake.
  */
-export function createSmtpNotificationProvider({ smtpHost, smtpPort, from, logger }) {
-  const transport = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: false,
-    ignoreTLS: smtpPort === 1025, // local Mailpit only
-    connectionTimeout: 5_000,
-    greetingTimeout: 5_000,
-    socketTimeout: 10_000,
-  });
+export function createSmtpNotificationProvider({ from, logger, ...mail }) {
+  const transport = nodemailer.createTransport(smtpTransportOptions(mail));
   const sms = createFakeNotificationProvider({ logger });
   return withTemplateOperations({
     name: 'smtp',

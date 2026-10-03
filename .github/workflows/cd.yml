@@ -1,0 +1,238 @@
+name: CD
+
+# Release pipeline (ADR-0028): build once, deploy the same images everywhere.
+#   - v* tags: build, scan and push images → staging (single-host Compose over SSH) →
+#     production (ECS Fargate, behind the GitHub "production" environment's approval).
+#   - manual runs deploy an existing version to one environment.
+# Deploy jobs run only when their environment is configured (repository variables), so
+# forks and unconfigured repositories build and scan without deploying anything.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        required: true
+      version:
+        description: Existing release tag to deploy (e.g. v1.2.0)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.event.inputs.environment || 'release' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+  images:
+    name: Build, scan and push images
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: backend, context: ., file: backend/Dockerfile, target: '' }
+          - { name: web, context: ., file: frontend/Dockerfile, target: '' }
+          - { name: ai, context: ai-service, file: ai-service/Dockerfile, target: runtime }
+          - {
+              name: backup,
+              context: infra/deploy/backup,
+              file: infra/deploy/backup/Dockerfile,
+              target: '',
+            }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        id: image
+        run: echo "ref=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')/healthbridge-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+      - name: Build (local, for scanning)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          load: true
+          tags: ${{ steps.image.outputs.ref }}:${{ env.VERSION }}
+      - name: Scan (fixable high/critical fail the release)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.image.outputs.ref }}:${{ env.VERSION }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Push with SBOM and provenance
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: |
+            ${{ steps.image.outputs.ref }}:${{ env.VERSION }}
+            ${{ steps.image.outputs.ref }}:sha-${{ github.sha }}
+
+  staging:
+    name: Deploy to staging (single host)
+    needs: [images]
+    if: >-
+      ${{ !failure() && !cancelled() && vars.STAGING_HOST != '' &&
+          (github.event_name == 'push' || github.event.inputs.environment == 'staging') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://${{ vars.STAGING_DOMAIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: SSH identity (pinned host key, no trust-on-first-use)
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy, smoke test, roll back on failure
+        env:
+          HOST: ${{ vars.STAGING_HOST }}
+          USER: ${{ vars.STAGING_SSH_USER || 'deploy' }}
+          DOMAIN: ${{ vars.STAGING_DOMAIN }}
+        run: |
+          set -euo pipefail
+          ssh_() { ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "$USER@$HOST" "$@"; }
+          # Ship the deployment definition (infra/ only; never secrets: the env file lives on the host).
+          tar czf - infra | ssh_ 'mkdir -p /opt/healthbridge && tar xzf - -C /opt/healthbridge'
+          previous=$(ssh_ 'cat /opt/healthbridge/CURRENT_VERSION 2>/dev/null || true')
+          deploy() {
+            ssh_ "cd /opt/healthbridge && HB_VERSION=$1 docker compose -f infra/deploy/compose.prod.yml \
+              --env-file /etc/healthbridge/healthbridge.env pull --quiet && HB_VERSION=$1 docker compose \
+              -f infra/deploy/compose.prod.yml --env-file /etc/healthbridge/healthbridge.env up -d --wait \
+              --wait-timeout 600"
+          }
+          deploy "$VERSION"
+          if node infra/deploy/smoke.mjs "https://$DOMAIN" --expect-version "$VERSION"; then
+            ssh_ "echo $VERSION > /opt/healthbridge/CURRENT_VERSION"
+          else
+            echo "::error::smoke test failed; rolling back to ${previous:-nothing}"
+            if [ -n "$previous" ]; then deploy "$previous"; fi
+            exit 1
+          fi
+
+  production:
+    name: Deploy to production (ECS Fargate)
+    needs: [images, staging]
+    if: >-
+      ${{ !failure() && !cancelled() && vars.AWS_DEPLOY_ROLE_ARN != '' &&
+          (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production') }}
+    runs-on: ubuntu-latest
+    # Protect this environment with required reviewers in the repository settings.
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    permissions:
+      contents: read
+      id-token: write # OIDC to AWS: no long-lived cloud keys in GitHub
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+      HB_ENV: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Copy the released images to ECR (same digests)
+        id: ecr
+        run: |
+          set -euo pipefail
+          account=$(aws sts get-caller-identity --query Account --output text)
+          ecr="$account.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$ecr"
+          src=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
+          for name in backend web ai; do
+            docker buildx imagetools create --tag "$ecr/healthbridge-$name:$VERSION" "$src/healthbridge-$name:$VERSION"
+          done
+          echo "registry=$ecr" >> "$GITHUB_OUTPUT"
+          echo "account=$account" >> "$GITHUB_OUTPUT"
+      - name: Render and register task definitions
+        env:
+          AWS_ACCOUNT_ID: ${{ steps.ecr.outputs.account }}
+          IMAGE_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ env.VERSION }}
+          DB_HOST: ${{ vars.DB_HOST }}
+          POSTGRES_DB: ${{ vars.POSTGRES_DB || 'healthbridge' }}
+          REDIS_HOST: ${{ vars.REDIS_HOST }}
+          S3_BUCKET_DOCUMENTS: ${{ vars.S3_BUCKET_DOCUMENTS }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          PUBLIC_APP_URL: ${{ vars.PRODUCTION_URL }}
+          RAZORPAY_KEY_ID: ${{ vars.RAZORPAY_KEY_ID }}
+          VIDEO_PROVIDER: ${{ vars.VIDEO_PROVIDER || 'mock' }}
+          LIVEKIT_URL: ${{ vars.LIVEKIT_URL || 'wss://unused.invalid' }}
+          CLINICAL_DATA_KEY_ID: ${{ vars.CLINICAL_DATA_KEY_ID || 'k1' }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'fake' }}
+          # ADR-0008: stays false until the privacy/security/compliance review is done.
+          LLM_EXTERNAL_PROCESSING_APPROVED: ${{ vars.LLM_EXTERNAL_PROCESSING_APPROVED || 'false' }}
+        run: |
+          set -euo pipefail
+          node infra/deploy/ecs/render.mjs rendered
+          for f in rendered/*.json; do
+            arn=$(aws ecs register-task-definition --cli-input-json "file://$f" \
+              --query taskDefinition.taskDefinitionArn --output text)
+            # Shell-safe keys (ai-service → ai_service) so the file can be sourced.
+            echo "$(basename "$f" .json | tr - _)=$arn" >> task-arns.env
+          done
+          cat task-arns.env
+      - name: Migrate (one-off task, must exit 0)
+        env:
+          SUBNETS: ${{ vars.ECS_PRIVATE_SUBNETS }}
+          SECURITY_GROUP: ${{ vars.ECS_TASK_SECURITY_GROUP }}
+        run: |
+          set -euo pipefail
+          . ./task-arns.env
+          task=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$migrate" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+          code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --query 'tasks[0].containers[0].exitCode' --output text)
+          test "$code" = "0" || { echo "::error::migration task exited with $code"; exit 1; }
+      - name: Roll out services and wait until stable
+        run: |
+          set -euo pipefail
+          for svc in clamav ai-service api worker web; do
+            arn=$(grep "^${svc//-/_}=" task-arns.env | cut -d= -f2-)
+            # The deployment circuit breaker (service setting) rolls back failed rollouts.
+            aws ecs update-service --cluster "$CLUSTER" --service "healthbridge-$HB_ENV-$svc" \
+              --task-definition "$arn" --query 'service.serviceName' --output text
+          done
+          aws ecs wait services-stable --cluster "$CLUSTER" --services \
+            "healthbridge-$HB_ENV-api" "healthbridge-$HB_ENV-worker" "healthbridge-$HB_ENV-web" \
+            "healthbridge-$HB_ENV-ai-service" "healthbridge-$HB_ENV-clamav"
+      - name: Smoke test
+        run: node infra/deploy/smoke.mjs "${{ vars.PRODUCTION_URL }}" --expect-version "$VERSION"

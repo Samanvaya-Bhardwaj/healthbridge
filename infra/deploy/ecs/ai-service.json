@@ -1,0 +1,139 @@
+{
+  "family": "healthbridge-${HB_ENV}-ai-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/healthbridge-${HB_ENV}-execution",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/healthbridge-${HB_ENV}-ai-service",
+  "volumes": [
+    {
+      "name": "tmp"
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "ai-service",
+      "image": "${IMAGE_REGISTRY}/healthbridge-ai:${IMAGE_TAG}",
+      "essential": true,
+      "readonlyRootFilesystem": true,
+      "mountPoints": [
+        {
+          "sourceVolume": "tmp",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
+      "linuxParameters": {
+        "initProcessEnabled": true,
+        "capabilities": {
+          "drop": ["ALL"]
+        }
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/healthbridge/${HB_ENV}/ai-service",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ai-service",
+          "awslogs-create-group": "true",
+          "mode": "non-blocking"
+        }
+      },
+      "portMappings": [
+        {
+          "name": "ai-service",
+          "containerPort": 8000,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "APP_ENV",
+          "value": "${HB_ENV}"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "${DB_HOST}"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "POSTGRES_DB",
+          "value": "${POSTGRES_DB}"
+        },
+        {
+          "name": "DB_AI_USER",
+          "value": "hb_ai"
+        },
+        {
+          "name": "DB_SSL",
+          "value": "verify-full"
+        },
+        {
+          "name": "LLM_PROVIDER",
+          "value": "${LLM_PROVIDER}"
+        },
+        {
+          "name": "LLM_EXTERNAL_PROCESSING_APPROVED",
+          "value": "${LLM_EXTERNAL_PROCESSING_APPROVED}"
+        },
+        {
+          "name": "EMBEDDING_PROVIDER",
+          "value": "hashing"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_AI_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:DB_AI_PASSWORD::"
+        },
+        {
+          "name": "DB_SSL_CA",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:DB_SSL_CA::"
+        },
+        {
+          "name": "INTERNAL_SERVICE_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:INTERNAL_SERVICE_SECRET::"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:ANTHROPIC_API_KEY::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live',timeout=3).status==200 else 1)"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 4,
+        "startPeriod": 30
+      }
+    }
+  ],
+  "tags": [
+    {
+      "key": "app",
+      "value": "healthbridge"
+    },
+    {
+      "key": "env",
+      "value": "${HB_ENV}"
+    }
+  ]
+}

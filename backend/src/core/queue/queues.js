@@ -32,6 +32,7 @@ export function bullConnection(redis, { worker = false } = {}) {
     host: redis.host,
     port: redis.port,
     password: redis.password,
+    ...(redis.tls ? { tls: { servername: redis.host } } : {}),
     connectTimeout: 3_000,
     retryStrategy: (attempt) => Math.min(attempt * 500, 5_000),
     ...(worker

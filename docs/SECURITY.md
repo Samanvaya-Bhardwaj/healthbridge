@@ -380,3 +380,32 @@ Each layer is tested on its own:
   - **Residual:** email is the recovery factor until MFA (Phase 2).
 - **Email verification:** the link is sent at registration and on request, expires after
   24 hours and is single-use.
+
+## Deployment (M12, ADR-0028)
+
+- **TLS:**
+  - at the edge (TLS 1.2+, HSTS, redirect);
+  - to managed PostgreSQL and Redis (`DB_SSL=verify-full`, `REDIS_TLS`);
+  - STARTTLS required for SMTP in staging and production.
+- **Containers:**
+  - read-only root filesystems with tmpfs `/tmp` for the API, worker and AI service;
+  - all Linux capabilities dropped on ECS;
+  - memory limits and log rotation.
+- **Secrets:**
+  - single host: a root-only environment file generated with fresh random values;
+  - AWS: Secrets Manager references only. The task-definition renderer refuses
+    plain-text secrets.
+  - CD uses AWS OIDC, so no long-lived cloud keys are stored, and the staging host key is
+    pinned.
+- **Backups:**
+  - encrypted with age (the private key is offline) and checksummed;
+  - documents copied through rclone crypt;
+  - restores verified against a snapshot-consistent manifest, in CI on every build and in
+    the DR rehearsal.
+- **Exposure:** only 80/443 are public. Data services have no host ports, the MinIO
+  console is off, and operator tools are loopback-only.
+- **Residual:**
+  - the single-host stack uses MinIO root credentials for the app;
+  - the single-host RPO equals the backup interval (no WAL archiving);
+  - the AWS path is defined and tested as manifests but has not been deployed from this
+    repository.

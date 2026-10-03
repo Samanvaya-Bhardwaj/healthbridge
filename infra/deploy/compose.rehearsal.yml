@@ -1,0 +1,38 @@
+# Staging rehearsal overlay (local machine or CI only, never a real server):
+#
+#   docker compose -f infra/deploy/compose.prod.yml -f infra/deploy/compose.rehearsal.yml \
+#     --env-file rehearsal.env up -d --wait
+#
+# Runs the production stack unchanged except for:
+#   - Mailpit as the SMTP relay, speaking STARTTLS with the rehearsal certificate (staging
+#     requires TLS for SMTP, so the real code path is exercised);
+#   - the API/worker trusting the rehearsal's self-signed certificate (NODE_EXTRA_CA_CERTS).
+services:
+  mailpit:
+    image: axllent/mailpit:v1.29
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 'true'
+      MP_SMTP_TLS_CERT: /tls/fullchain.pem
+      MP_SMTP_TLS_KEY: /tls/privkey.pem
+      MP_SMTP_REQUIRE_STARTTLS: 'true'
+    volumes:
+      - ${HB_TLS_DIR:?}:/tls:ro
+    ports:
+      - '127.0.0.1:${HB_MAILPIT_UI_PORT:-18025}:8025'
+    networks: [private]
+
+  api:
+    environment:
+      NODE_EXTRA_CA_CERTS: /etc/healthbridge-ca/fullchain.pem
+    volumes:
+      - ${HB_TLS_DIR:?}:/etc/healthbridge-ca:ro
+    depends_on:
+      mailpit: { condition: service_started }
+
+  worker:
+    environment:
+      NODE_EXTRA_CA_CERTS: /etc/healthbridge-ca/fullchain.pem
+    volumes:
+      - ${HB_TLS_DIR:?}:/etc/healthbridge-ca:ro
+    depends_on:
+      mailpit: { condition: service_started }

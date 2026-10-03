@@ -168,6 +168,27 @@ jobs:
           npm ci
           npm exec -w e2e -- playwright install --with-deps chromium
           npm run test:e2e
+      - name: Backup and restore drill (encrypted dump must restore exactly)
+        run: |
+          set -euo pipefail
+          set -a; . ./.env; set +a
+          docker build -q -t healthbridge-backup:ci infra/deploy/backup
+          keys=$(mktemp -d) && chmod 777 "$keys"
+          docker run --rm --entrypoint sh -v "$keys:/keys" healthbridge-backup:ci             -c 'age-keygen -o /keys/identity.txt 2>/dev/null && chmod 644 /keys/identity.txt'
+          recipient=$(grep 'public key' "$keys/identity.txt" | cut -d' ' -f4)
+          run_backup() {
+            docker run --rm --network healthbridge_private -v hb-ci-backups:/backups               -v "$keys/identity.txt:/run/secrets/backup-identity.txt:ro"               -e PGHOST=postgres -e PGDATABASE="$POSTGRES_DB" -e PGUSER="$POSTGRES_USER"               -e PGPASSWORD="$POSTGRES_PASSWORD" -e S3_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID"               -e S3_SECRET_ACCESS_KEY="$S3_SECRET_ACCESS_KEY" -e S3_BUCKET_DOCUMENTS="$S3_BUCKET_DOCUMENTS"               -e BACKUP_AGE_RECIPIENT="$recipient" -e BACKUP_OBJECTS_PASSWORD=ci-objects-passphrase               healthbridge-backup:ci "$@"
+          }
+          run_backup backup
+          run_backup drill | tee drill.json
+          jq -e '.drill == "pass" and .manifestMatch' drill.json
+      - name: Production compose definition is valid
+        run: |
+          set -euo pipefail
+          node infra/deploy/make-env.mjs --env production --domain app.example.test             --age-recipient age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq             --version v0.0.0-ci > prod.env
+          sed -i 's/^SMTP_HOST=$/SMTP_HOST=smtp.example.test/' prod.env
+          docker compose -f infra/deploy/compose.prod.yml --env-file prod.env config --quiet
+          rm prod.env
       - name: Scan images (high+critical, fixable)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

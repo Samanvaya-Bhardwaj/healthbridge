@@ -11,13 +11,21 @@
 ## First run
 
 ```bash
-npm ci
-node scripts/generate-env.mjs        # .env with random secrets; remaps busy host ports
-docker compose up -d --build --wait  # full stack
+npm start            # .env (random secrets, free ports) + build + all services + demo data
 ```
 
-`generate-env` prints the web URL. It is `http://localhost:8080` unless that port is
-already in use, in which case it picks the next free port (e.g. 8081).
+`npm start` is a wrapper around the steps below; see [RUNNING.md](../RUNNING.md) for its
+options (`--video`, `--scanner`, `--observability`, `--no-build`, `--no-seed`). To do the
+same by hand:
+
+```bash
+node scripts/generate-env.mjs        # .env with random secrets; remaps busy host ports
+docker compose up -d --build --wait  # full stack
+npm run seed:demo -w backend         # synthetic demo accounts (needs `npm ci`)
+```
+
+The web URL is `http://localhost:8080`, unless that port is already in use. In that case
+the next free port is chosen (e.g. 8081).
 
 To use Claude instead of the offline fake LLM, set `LLM_PROVIDER=claude` and
 `ANTHROPIC_API_KEY=...` in `.env`, then run `docker compose up -d ai-service`.
