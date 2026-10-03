@@ -52,7 +52,7 @@ See [ARCHITECTURE](docs/ARCHITECTURE.md), [SECURITY](docs/SECURITY.md), [API](do
 You need Docker Desktop and Node.js 24.
 
 ```bash
-git clone https://github.com/Samanvaya-Bhardwaj/healthbridge.git && cd healthbridge
+git clone -b main https://github.com/Samanvaya-Bhardwaj/healthbridge.git && cd healthbridge
 npm start          # secrets, build, every service, demo data; prints URLs and sign-ins
 ```
 

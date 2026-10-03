@@ -21,7 +21,7 @@ included yet.
 ## 2. Run everything with one command
 
 ```bash
-git clone https://github.com/Samanvaya-Bhardwaj/healthbridge.git && cd healthbridge
+git clone -b main https://github.com/Samanvaya-Bhardwaj/healthbridge.git && cd healthbridge
 npm start
 ```
 
