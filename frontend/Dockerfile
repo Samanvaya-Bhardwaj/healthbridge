@@ -15,7 +15,7 @@ COPY frontend ./frontend
 RUN npm run build --workspace frontend
 
 # Unprivileged Nginx (runs as non-root, listens on 8080).
-FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 # Apply OS security updates published after the base image was built, then drop back
 # to the unprivileged nginx user (uid 101).
 USER root
