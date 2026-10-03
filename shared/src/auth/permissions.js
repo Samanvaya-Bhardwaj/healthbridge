@@ -55,6 +55,9 @@ export const PERMISSIONS = Object.freeze({
   // Document intelligence (M6)
   LAB_RESULTS_VERIFY: 'lab_results:verify',
 
+  // Timeline (M7)
+  RECORDS_EXPORT: 'records:export',
+
   // Administration
   USERS_READ: 'users:read',
   USERS_UPDATE: 'users:update',
@@ -96,6 +99,7 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'consents:read': 'List consents given (patient side) or received (doctor)',
   'access_log:read': 'See who accessed own or managed dependents’ records',
   'lab_results:verify': 'Verify AI-extracted lab values into the record',
+  'records:export': 'Export own or managed dependents’ health timeline',
   'users:read': 'Read user accounts (administration/support)',
   'users:update': 'Change user account status',
   'admin:users': 'Grant and revoke user roles',
@@ -140,6 +144,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.CONSENTS_MANAGE,
     P.CONSENTS_READ,
     P.ACCESS_LOG_READ,
+    P.RECORDS_EXPORT,
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,

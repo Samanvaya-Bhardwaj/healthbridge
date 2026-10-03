@@ -28,5 +28,6 @@ old one.
 | [0020](adr/0020-payments-webhook-authority-outbox-workers.md) | PaymentProvider/NotificationProvider, webhook-only payment authority, append-only ledger, outbox relay, BullMQ workers, DB-driven reminders, purpose-scoped system RLS | Accepted |
 | [0021](adr/0021-consent-medical-documents-secure-access.md) | Explicit scoped/expiring consent checked per request; medical documents behind quarantine → scan → promotion; DocumentStorage with presigned POST/GET; patient access log on the audit trail | Accepted |
 | [0022](adr/0022-document-intelligence.md) | Opt-in AI document analysis via scoped hand-off; LangGraph document agent without tools; grounded proposals and chunks in RLS-scoped `ai` tables; backend-validated metadata; doctor-verified lab values | Accepted |
+| [0023](adr/0023-medical-timeline-projection.md) | Medical timeline as an idempotent, rebuildable projection with provenance on every event; consent-scoped RLS; JSON export | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

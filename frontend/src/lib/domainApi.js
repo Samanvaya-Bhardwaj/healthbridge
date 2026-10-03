@@ -145,3 +145,12 @@ export const intelligenceApi = {
   setAiProcessing: (patientId, enabled) =>
     data(apiRequest(`/patients/${patientId}/ai-processing`, { method: 'PUT', body: { enabled } })),
 };
+
+/** Medical timeline (M7): a projection with provenance on every event. */
+export const timelineApi = {
+  list: (patientId, { cursor, types = [] } = {}) =>
+    apiRequest(
+      `/patients/${patientId}/timeline${qs({ cursor, limit: 30, types: types.length ? types.join(',') : undefined })}`,
+    ),
+  export: (patientId) => apiRequest(`/patients/${patientId}/timeline/export`),
+};

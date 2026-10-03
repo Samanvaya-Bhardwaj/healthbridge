@@ -128,6 +128,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
       const testDocuments = trx('medical_documents')
         .select('id')
         .whereIn('patient_id', testPatients.clone());
+      await trx('medical_events').whereIn('patient_id', testPatients.clone()).del();
       // M6 rows (AI artifacts are append-only for runtime roles; the owner cleans tests).
       await trx.raw('ALTER TABLE lab_results DISABLE TRIGGER lab_results_immutable');
       await trx('lab_results').whereIn('patient_id', testPatients.clone()).del();

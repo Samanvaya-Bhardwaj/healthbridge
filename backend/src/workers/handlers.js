@@ -19,6 +19,7 @@ export const MAINTENANCE_JOBS = Object.freeze({
   EXPIRE_HOLDS: 'expire-holds',
   SCHEDULE_REMINDERS: 'schedule-reminders',
   RECORDS_HOUSEKEEPING: 'records-housekeeping',
+  TIMELINE_BACKFILL: 'timeline-backfill',
 });
 
 /**
@@ -38,6 +39,7 @@ export function createJobProcessors(container, queues) {
     documentPipeline,
     consentService,
     intelligenceService,
+    timelineProjector,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -93,15 +95,23 @@ export function createJobProcessors(container, queues) {
         return intelligenceService.analyzeDocument(documentId, { requestId: job.data.requestId });
       },
     },
+    // M7: projection of appointments, documents and verified lab values.
+    [QUEUE_NAMES.TIMELINE]: {
+      concurrency: 4,
+      schemas: { '*': outboxJob },
+      handle: (job) => timelineProjector.handleEvent(job.data),
+    },
     [QUEUE_NAMES.MAINTENANCE]: {
       concurrency: 1,
       schemas: {
         [MAINTENANCE_JOBS.EXPIRE_HOLDS]: maintenanceJob,
         [MAINTENANCE_JOBS.SCHEDULE_REMINDERS]: maintenanceJob,
         [MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING]: maintenanceJob,
+        [MAINTENANCE_JOBS.TIMELINE_BACKFILL]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
+        if (job.name === MAINTENANCE_JOBS.TIMELINE_BACKFILL) return timelineProjector.backfill();
         if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
           return {
             consents: await consentService.expireDue(),
@@ -136,6 +146,12 @@ export async function registerSchedules(queues, workers) {
     MAINTENANCE_JOBS.SCHEDULE_REMINDERS,
     { every: workers.reminderSweepIntervalMs },
     { name: MAINTENANCE_JOBS.SCHEDULE_REMINDERS, data: {}, opts: { attempts: 1 } },
+  );
+  // One-off backfill for patients whose sources predate the projection (idempotent).
+  await maintenance.add(
+    MAINTENANCE_JOBS.TIMELINE_BACKFILL,
+    {},
+    { jobId: 'timeline-backfill-v1', attempts: 3 },
   );
   await maintenance.upsertJobScheduler(
     MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,

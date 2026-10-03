@@ -199,7 +199,12 @@ describe('queues and failure handling', () => {
   });
 
   it('routes financial events to payments and people-facing ones to notifications', () => {
-    expect(EVENT_ROUTES['appointment.cancelled']).toEqual(['payments', 'notifications']);
+    // M7 adds the timeline projection as a third consumer.
+    expect(EVENT_ROUTES['appointment.cancelled']).toEqual([
+      'payments',
+      'notifications',
+      'timeline',
+    ]);
     expect(EVENT_ROUTES['payment.refund_requested']).toEqual(['payments']);
     expect(outboxJobId('payments', 'e1')).toBe('payments-e1');
     expect(outboxJobId('payments', 'e1')).not.toContain(':');

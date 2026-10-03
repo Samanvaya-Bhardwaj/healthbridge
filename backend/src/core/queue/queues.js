@@ -6,7 +6,8 @@ import { Queue } from 'bullmq';
  *   payments       outbox events with financial effects (close/refund)
  *   appointments   appointment reminders
  *   maintenance    periodic sweeps (payment-hold expiry, reminders, consent expiry)
- *   documents      medical-document scanning and promotion (M5)
+ *   documents      medical-document scanning, promotion and AI analysis (M5, M6)
+ *   timeline       medical timeline projection (M7)
  * Redis is a delivery mechanism, never the source of truth: every job can be rebuilt
  * from PostgreSQL (outbox rows, reminder rows, holds).
  */
@@ -16,6 +17,7 @@ export const QUEUE_NAMES = Object.freeze({
   APPOINTMENTS: 'appointments',
   MAINTENANCE: 'maintenance',
   DOCUMENTS: 'documents',
+  TIMELINE: 'timeline',
 });
 export const ALL_QUEUES = Object.freeze(Object.values(QUEUE_NAMES));
 

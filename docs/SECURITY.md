@@ -276,3 +276,13 @@ Each layer is tested on its own:
   send only keys.
 - **Logging:** logs and `ai_runs` hold metadata only — counts, flags, tokens, cost,
   prompt version and input hash — never text, quotes or values.
+
+## Medical timeline (M7, ADR-0023)
+
+- The timeline is part of the medical record: `medical_records:read` plus consent.
+- RLS repeats the scope per event: a doctor sees only the document types their consent
+  covers, and only their own appointments.
+- Provenance is always shown. AI-derived dates and issuers are labelled, and unverified AI
+  values never appear.
+- Export is limited to the patient side and audited. The access log shows
+  `timeline.viewed` and `timeline.exported`.

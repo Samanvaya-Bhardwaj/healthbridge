@@ -224,6 +224,16 @@ routes → controllers → application services → domain (pure rules) → repo
 - Lab values become record data only when a consented treating doctor verifies them
   ([ADR-0022](adr/0022-document-intelligence.md)).
 
+### Medical timeline (M7)
+
+- `medical_events` is a provenance-labelled projection of appointments, documents and
+  doctor-verified lab values.
+- The `timeline` worker builds it idempotently from outbox events by re-reading the
+  sources; it can be rebuilt.
+- RLS limits doctors to what their consent (by document type) or their own appointments
+  cover.
+- Patients can export it as JSON ([ADR-0023](adr/0023-medical-timeline-projection.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
@@ -253,5 +263,5 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M6 complete (opt-in grounded document intelligence, chunk index, doctor-verified lab values).**
+Current status: **M7 complete (medical timeline with provenance and export).**
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

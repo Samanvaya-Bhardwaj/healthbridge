@@ -27,6 +27,13 @@ export const SECTIONS = {
     permission: P.MEDICAL_RECORDS_READ,
     description: 'Your reports and documents, checked for safety before they are stored.',
   },
+  timeline: {
+    key: 'timeline',
+    label: 'Timeline',
+    path: 'timeline',
+    permission: P.MEDICAL_RECORDS_READ,
+    description: 'Your visits, documents and verified results in one history.',
+  },
   doctors: {
     key: 'doctors',
     label: 'Doctors',
@@ -137,7 +144,15 @@ const S = SECTIONS;
 
 /** Navigation per role, in display order (as specified in the architecture). */
 export const ROLE_NAVIGATION = {
-  [ROLES.PATIENT]: [S.home, S.appointments, S.records, S.privacy, S.doctors, S.patientProfile],
+  [ROLES.PATIENT]: [
+    S.home,
+    S.appointments,
+    S.records,
+    S.timeline,
+    S.privacy,
+    S.doctors,
+    S.patientProfile,
+  ],
   [ROLES.DOCTOR]: [
     S.dashboard,
     S.appointments,

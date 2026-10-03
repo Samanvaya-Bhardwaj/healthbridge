@@ -157,6 +157,12 @@ export function createIntelligenceService({
         },
         { trx },
       );
+      await appendOutboxEvent(trx, {
+        aggregateType: 'medical_document',
+        aggregateId: row.id,
+        eventType: 'document.analyzed',
+        payload: { documentId: row.id, patientId: row.patient_id, version },
+      });
       domainMetrics.documentsAnalyzed.inc({ status: extraction.status });
       logger?.info({ documentId: row.id, status: extraction.status, version }, 'document analysed');
       return { outcome: 'promoted', version, status: extraction.status };
@@ -255,13 +261,16 @@ export function createIntelligenceService({
         throw new ConflictError('Some values are not part of this extraction.', 'unknown_field');
       }
       const created = [];
+      const createdIds = [];
       for (const key of fieldKeys) {
         if (verifiedKeys.has(key)) continue;
         const f = proposals.get(key);
         const numeric = Number(f.valueNumeric);
+        const labId = newId();
+        createdIds.push(labId);
         await trx('lab_results')
           .insert({
-            id: newId(),
+            id: labId,
             patient_id: row.patient_id,
             document_id: row.id,
             document_type: row.document_type,
@@ -295,6 +304,13 @@ export function createIntelligenceService({
           },
           { req, trx },
         );
+        await appendOutboxEvent(trx, {
+          aggregateType: 'medical_document',
+          aggregateId: row.id,
+          eventType: 'lab_result.verified',
+          payload: { documentId: row.id, patientId: row.patient_id, labResultIds: createdIds },
+          requestId: req?.id ?? null,
+        });
         domainMetrics.labResultsVerified.inc(created.length);
       }
       return { verified: created.length, alreadyVerified: fieldKeys.length - created.length };

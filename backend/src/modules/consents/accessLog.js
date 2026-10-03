@@ -22,6 +22,12 @@ const ACTIONS = [
   'document.download_authorized',
   'document.access_denied',
   'document.retired',
+  'document.ai_extracted',
+  'document.extraction_viewed',
+  'lab_result.verified',
+  'timeline.viewed',
+  'timeline.exported',
+  'patient.ai_processing_changed',
   'patients:read',
 ];
 const SELF_REASONS = new Set(['patient_self', 'guardian_dependent']);
@@ -38,6 +44,13 @@ const DESCRIBE = {
   'document.download_authorized': (a, e) => `${a} downloaded ${e.document}`,
   'document.access_denied': (a, e) => `${a} was denied access to ${e.document}`,
   'document.retired': (a, e) => `${a} removed ${e.document}`,
+  'document.ai_extracted': (_a, e) => `AI read ${e.document} and suggested values for review`,
+  'document.extraction_viewed': (a, e) => `${a} viewed the values suggested from ${e.document}`,
+  'lab_result.verified': (a, e) => `${a} verified lab values from ${e.document}`,
+  'timeline.viewed': (a) => `${a} viewed the health timeline`,
+  'timeline.exported': (a) => `${a} exported the health timeline`,
+  'patient.ai_processing_changed': (a, e) =>
+    `${a} turned AI document reading ${e.reason === 'enabled' ? 'on' : 'off'}`,
   'patients:read': (a) => `${a} viewed the profile`,
 };
 const REJECTION_LABELS = {
@@ -176,7 +189,10 @@ export function createAccessLogService({ knex, accessPolicy }) {
               row.resource_type === 'medical_document'
                 ? `“${title.get(row.resource_id) ?? 'a document'}”`
                 : 'the records',
-            reason: REJECTION_LABELS[row.reason] ?? 'not accepted',
+            reason:
+              row.action === 'patient.ai_processing_changed'
+                ? row.reason
+                : (REJECTION_LABELS[row.reason] ?? 'not accepted'),
           };
           return {
             occurredAt: row.occurred_at,

@@ -452,6 +452,13 @@ export function createDocumentService({
         },
         { req, trx },
       );
+      await appendOutboxEvent(trx, {
+        aggregateType: 'medical_document',
+        aggregateId: id,
+        eventType: 'document.retired',
+        payload: { documentId: id, patientId: row.patient_id },
+        requestId: req?.id ?? null,
+      });
       return toDocumentView({ ...row, status: 'retired', retired_at: now() });
     });
   }

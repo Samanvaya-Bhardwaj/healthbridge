@@ -22,6 +22,7 @@ import { BookAppointmentPage } from '../features/appointments/BookAppointmentPag
 import { PaymentPage } from '../features/appointments/PaymentPage.jsx';
 import { RecordsPage } from '../features/records/RecordsPage.jsx';
 import { PrivacyPage } from '../features/records/PrivacyPage.jsx';
+import { TimelinePage } from '../features/records/TimelinePage.jsx';
 import {
   DoctorRecordsPage,
   DoctorPatientRecordsPage,
@@ -43,6 +44,7 @@ const PAGES = [
   [SECTIONS.appointments, <AppointmentsPage key="appointments" />],
   [SECTIONS.records, <RecordsPage key="records" />],
   [SECTIONS.privacy, <PrivacyPage key="privacy" />],
+  [SECTIONS.timeline, <TimelinePage key="timeline" />],
   [SECTIONS.medicalRecords, <DoctorRecordsPage key="medical-records" />],
 ];
 

@@ -257,3 +257,10 @@ Responses never contain storage keys, credentials, permanent URLs or document co
 | GET | `/patients/:patientId/lab-results` | `medical_records:read` + consent | Verified values with source quote and verifier |
 
 Internal (AI service): `POST /v1/documents/analyze` (service token + `X-Patient-Scope`).
+
+## Endpoints (M7)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/patients/:patientId/timeline?cursor&limit&types` | `medical_records:read` + consent | Newest first: `{ id, type, occurredAt, datePrecision, title, status, provenance, provenanceLabel, actor, detail, source }`; `meta.nextCursor` |
+| GET | `/patients/:patientId/timeline/export` | `records:export` (patient side) | JSON attachment `healthbridge.timeline.v1` with provenance legend; audited |

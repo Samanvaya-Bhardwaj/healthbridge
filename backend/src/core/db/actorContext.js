@@ -18,6 +18,7 @@ export const SYSTEM_PURPOSES = Object.freeze([
   'notifications',
   'documents',
   'consents',
+  'timeline',
 ]);
 
 /**

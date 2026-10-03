@@ -22,6 +22,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261005000000_payments_outbox_workers` | `payments`, `payment_events`, `payment_refunds`, append-only `ledger_entries`, outbox relay columns, `notification_deliveries`, `appointment_reminders`, `dead_letter_jobs`, system-purpose RLS, audit category `financial`, `payments:*` / `operations:manage` |
 | `20261006000000_consents_medical_documents` | `consents`, `medical_documents` (key/lifecycle/immutability guards), `authz.has_consent` / `is_patient_side` / `document_ref`, system purposes `documents` and `consents`, document notification templates, `consents:*` / `access_log:read` |
 | `20261007000000_document_intelligence` | `extensions` schema (pgvector moved), `ai.ai_runs`/`ai_sources`/`document_extractions`/`document_chunks` (vector 1024, HNSW, tsvector) with per-role RLS, `ai.scope_patient_id()`, `document_metadata`, immutable `lab_results`, `patients.ai_document_processing`, `authz.ai_processing_enabled()`, `lab_results:verify` |
+| `20261008000000_medical_timeline` | `medical_events` projection (provenance, date precision, hidden), RLS (patient side / consent by document type / own appointments), `timeline` system purpose and read policies on sources, `records:export` |
 
 ## Identity, RBAC and audit (M1)
 
@@ -445,3 +446,17 @@ CHECK constraints tie both object keys to the row's patient and document.
 
 Neither runtime role may DELETE AI rows. pgvector lives in the `extensions` schema;
 `hb_ai` has no usage on `public`.
+
+## Medical timeline (M7)
+
+`medical_events` has unique `(source_type, source_id)`, index
+`(patient_id, occurred_at DESC, id DESC)` and the following RLS:
+
+- **SELECT:** the patient side; document and lab events with
+  `authz.has_consent(patient, 'medical_documents', document_type)`; appointment events for
+  `doctor_user_id = actor`.
+- **INSERT/UPDATE:** `timeline` system purpose only.
+- **DELETE:** no grant.
+
+The `timeline` purpose has read-only policies on `appointments`, `medical_documents`,
+`document_metadata` and `lab_results`.
