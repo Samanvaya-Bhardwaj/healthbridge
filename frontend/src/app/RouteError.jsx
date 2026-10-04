@@ -25,7 +25,7 @@ export function NotFound() {
       >
         <Compass className="h-6 w-6" />
       </span>
-      <p className="text-sm font-medium text-primary">404</p>
+      <p className="text-sm font-medium text-primary">Nothing here</p>
       <h1 className="mt-2 text-2xl font-semibold text-text">Page not found</h1>
       <p className="mt-3 text-text-muted">
         The page you are looking for does not exist or has moved. Use the menu, or start again from

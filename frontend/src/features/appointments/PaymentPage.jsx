@@ -5,7 +5,7 @@ import { paymentsApi, schedulingApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Button } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { MODE_LABELS, formatDateTime, formatFee, formatTime } from './format.js';
 import { openRazorpayCheckout } from './razorpayCheckout.js';
@@ -106,10 +106,22 @@ export function PaymentPage() {
     return (
       <div className="space-y-6">
         {back}
-        <Alert tone="success">
-          {a.paymentStatus === 'paid' ? 'Payment received — ' : ''}your appointment is confirmed.
+        <Alert tone="success" title="You’re booked">
+          {a.paymentStatus === 'paid' ? 'Payment received — ' : ''}your appointment is confirmed. A
+          confirmation is in your notifications.
         </Alert>
         <Card>{summary}</Card>
+        <Card>
+          <h2 className="text-base font-semibold text-text">What happens next</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            {a.mode === 'online'
+              ? 'On the day, open the appointment page: the waiting room opens 15 minutes before the start and you join the video call from there.'
+              : 'On the day, go to the clinic and check in at reception. Before then you can share your records with the doctor from the appointment page.'}
+          </p>
+          <ButtonLink as={Link} to={`/app/appointments/${a.id}`} className="mt-4">
+            Go to the appointment
+          </ButtonLink>
+        </Card>
       </div>
     );
   }

@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOCUMENT_TYPES } from '@healthbridge/shared';
 import { recordsApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Button } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
@@ -15,7 +16,6 @@ import { PatientSelect } from './PatientSelect.jsx';
 import { DocumentList } from './DocumentList.jsx';
 import { useDownload } from './useDownload.js';
 import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
-import { PatientPrescriptions } from '../consultations/Prescriptions.jsx';
 import { intelligenceApi } from '../../lib/domainApi.js';
 import {
   ACCEPT,
@@ -41,6 +41,7 @@ function UploadForm({ patientId, onUploaded }) {
   const [documentType, setDocumentType] = useState('lab_report');
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
+  const [done, setDone] = useState(null);
 
   const upload = useMutation({
     mutationFn: async () => {
@@ -59,7 +60,8 @@ function UploadForm({ patientId, onUploaded }) {
       await postToStorage(intent.upload, file, setProgress);
       return recordsApi.complete(intent.document.id);
     },
-    onSuccess: () => {
+    onSuccess: (document) => {
+      setDone(document?.title ?? 'Your document');
       setFile(null);
       setTitle('');
       setProgress(null);
@@ -83,6 +85,7 @@ function UploadForm({ patientId, onUploaded }) {
         className="mt-4 grid gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
+          setDone(null);
           if (file) upload.mutate();
         }}
       >
@@ -116,6 +119,12 @@ function UploadForm({ patientId, onUploaded }) {
         {error && (
           <Alert tone="error" className="sm:col-span-2">
             {error}
+          </Alert>
+        )}
+        {done && (
+          <Alert tone="success" className="sm:col-span-2">
+            “{done}” was uploaded. It shows as Processing while we check it for safety, then as
+            Available. Doctors see it only if you share your records with them.
           </Alert>
         )}
         <div className="sm:col-span-2">
@@ -167,6 +176,21 @@ function AiProcessingCard({ patientId }) {
   );
 }
 
+/** AI-suggested values for one document, loaded (and audited) only when opened. */
+function AiValues({ documentId }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="mt-2" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="cursor-pointer text-sm text-primary">Values suggested by AI</summary>
+      {open && (
+        <div className="mt-2">
+          <ExtractionPanel documentId={documentId} />
+        </div>
+      )}
+    </details>
+  );
+}
+
 /** Patient (and managing guardian) health records. */
 export function RecordsPage() {
   const queryClient = useQueryClient();
@@ -180,6 +204,13 @@ export function RecordsPage() {
       query.state.data?.some((d) => IN_PROGRESS.has(d.status)) ? 2_000 : false,
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['documents', patientId] });
+  // AI-suggested values exist only when the patient turned AI reading on.
+  const aiSetting = useQuery({
+    queryKey: ['ai-processing', patientId],
+    queryFn: () => intelligenceApi.aiProcessing(patientId),
+    enabled: Boolean(patientId),
+  });
+  const aiEnabled = Boolean(aiSetting.data?.enabled);
   const remove = useMutation({ mutationFn: recordsApi.retire, onSuccess: refresh });
   const download = useDownload();
   const { confirm, dialog } = useConfirm();
@@ -206,7 +237,6 @@ export function RecordsPage() {
         description="Upload reports and documents so your doctors can see your history. Files stay private: every upload is checked for safety, and doctors see it only when you give them access in Privacy & Access."
         actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
       />
-      <AiProcessingCard patientId={patientId} />
       <UploadForm patientId={patientId} onUploaded={refresh} />
       {download.isError && <Alert tone="error">{authErrorMessage(download.error)}</Alert>}
       {remove.isError && <Alert tone="error">{authErrorMessage(remove.error)}</Alert>}
@@ -227,14 +257,7 @@ export function RecordsPage() {
         )}
         {documents.data?.length > 0 && (
           <DocumentList
-            renderDetails={(d) => (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm text-primary">Extracted values</summary>
-                <div className="mt-2">
-                  <ExtractionPanel documentId={d.id} />
-                </div>
-              </details>
-            )}
+            renderDetails={(d) => aiEnabled && <AiValues documentId={d.id} />}
             documents={documents.data}
             download={download}
             onRemove={confirmRemove}
@@ -251,9 +274,16 @@ export function RecordsPage() {
         />
         <LabResults patientId={patientId} />
       </Card>
-      <Card>
-        <SectionHeader icon={Pill} title="Prescriptions" className="mb-3" />
-        <PatientPrescriptions patientId={patientId} />
+      <AiProcessingCard patientId={patientId} />
+      <Card className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeader
+          icon={Pill}
+          title="Prescriptions"
+          description="Prescriptions your doctors sign have their own page, ready to download."
+        />
+        <ButtonLink as={Link} to="/app/prescriptions" variant="secondary" icon={Pill}>
+          Open prescriptions
+        </ButtonLink>
       </Card>
     </div>
   );

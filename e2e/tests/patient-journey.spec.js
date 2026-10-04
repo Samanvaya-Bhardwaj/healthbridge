@@ -40,11 +40,11 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
 
   await test.step('ask Dr. Meera to join the care team', async () => {
     await nav(patient, 'My Doctors').click();
-    await patient.getByPlaceholder('Name or specialty').fill('Meera');
+    await patient.getByPlaceholder('Name or speciality').fill('Meera');
     await patient.getByRole('button', { name: 'Search' }).click();
     const row = patient.getByRole('listitem').filter({ hasText: 'Dr. Meera Iyer' });
     await row.getByRole('button', { name: 'Request' }).click();
-    await expect(patient.getByText(/request/i).first()).toBeVisible();
+    await expect(patient.getByText('Request pending')).toBeVisible();
   });
 
   await test.step('the doctor accepts (separate browser session)', async () => {
@@ -61,12 +61,18 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
   await test.step('book the first paid in-clinic slot (online consults are free in the demo)', async () => {
     await nav(patient, 'My Doctors').click();
     await patient.reload();
-    await patient.getByRole('link', { name: 'Book' }).first().click();
-    await expect(patient.getByRole('heading', { name: 'Book an appointment' })).toBeVisible();
-    await patient.getByRole('button', { name: 'In clinic' }).click();
-    await patient.getByRole('tabpanel').getByRole('button').first().click();
+    await patient.getByRole('link', { name: 'Book a consultation' }).first().click();
+    await expect(patient.getByRole('heading', { name: 'Book a consultation' })).toBeVisible();
+    // One step at a time: consultation type → date → time → reason → confirm and pay.
+    await patient.getByRole('radio', { name: /In clinic/ }).check();
+    await patient.getByRole('radiogroup', { name: 'Date' }).getByRole('radio').first().click();
+    await patient
+      .getByRole('button', { pressed: false })
+      .filter({ hasText: /\d:\d\d/ })
+      .first()
+      .click();
     await patient.getByLabel('Reason for visit').fill('Routine review (synthetic)');
-    await patient.getByRole('button', { name: 'Book appointment' }).click();
+    await patient.getByRole('button', { name: /^Book and pay/ }).click();
     await expect(patient.getByRole('heading', { name: 'Complete payment' })).toBeVisible();
   });
 
@@ -75,6 +81,12 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
     await patient.getByRole('button', { name: 'Simulate successful payment' }).click();
     // Confirmed only by the signed webhook (the browser never decides payment succeeded).
     await expect(patient.getByText(/confirmed/i).first()).toBeVisible({ timeout: 30_000 });
+    // The appointment page is the single place for the visit: state, payment, sharing.
+    await patient.getByRole('link', { name: 'Go to the appointment' }).click();
+    await expect(
+      patient.getByRole('heading', { name: 'You’re booked for a clinic visit' }),
+    ).toBeVisible();
+    await expect(patient.getByText('Paid')).toBeVisible();
     await patient.goto('/app/appointments');
     await expect(
       patient.getByRole('listitem').filter({ hasText: 'In clinic' }).getByText('Confirmed'),

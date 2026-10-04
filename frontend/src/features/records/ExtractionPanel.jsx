@@ -58,7 +58,7 @@ export function ExtractionPanel({ documentId, canVerify = false }) {
         <Badge tone="primary">AI-extracted</Badge>
         Suggestions read from the document. They become part of the record only when a doctor
         verifies them.
-        {x.needsReview && <Badge tone="warning">Needs clinician review</Badge>}
+        {x.needsReview && <Badge tone="warning">Needs review by a doctor</Badge>}
       </p>
       {x.injectionWarning && (
         <Alert tone="info">

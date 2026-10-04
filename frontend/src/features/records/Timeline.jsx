@@ -18,8 +18,11 @@ import {
   FlaskConical,
   HeartPulse,
   History,
+  Info,
   Pill,
+  Sparkles,
   Stethoscope,
+  UserRound,
 } from 'lucide-react';
 
 const TYPE_LABELS = {
@@ -37,14 +40,44 @@ const TYPE_ICONS = {
   prescription: Pill,
   follow_up: HeartPulse,
 };
-const PROVENANCE_TONES = {
-  doctor_verified: 'success',
-  system_recorded: 'neutral',
-  patient_reported: 'primary',
-  guardian_reported: 'primary',
-  doctor_reported: 'primary',
-  ai_extracted: 'warning',
+/** Where an entry came from: one tone and icon per kind, so it never relies on colour. */
+const PROVENANCE = {
+  patient_reported: { tone: 'info', icon: UserRound },
+  guardian_reported: { tone: 'info', icon: UserRound },
+  doctor_reported: { tone: 'primary', icon: Stethoscope },
+  doctor_verified: { tone: 'success', icon: BadgeCheck },
+  system_recorded: { tone: 'neutral', icon: Info },
+  ai_extracted: { tone: 'warning', icon: Sparkles },
 };
+const LEGEND = [
+  [
+    'patient_reported',
+    'Patient reported',
+    'Added by you (or a guardian). Not checked by a doctor.',
+  ],
+  ['doctor_reported', 'Doctor reported', 'Written or added by one of your doctors.'],
+  ['doctor_verified', 'Verified', 'Checked by a doctor against the original document.'],
+];
+
+function ProvenanceLegend() {
+  return (
+    <details className="rounded-xl border border-border px-4 py-3">
+      <summary className="cursor-pointer text-sm font-medium text-primary">
+        What the labels mean
+      </summary>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-3">
+        {LEGEND.map(([key, title, text]) => (
+          <li key={key} className="text-sm">
+            <Badge tone={PROVENANCE[key].tone} icon={PROVENANCE[key].icon}>
+              {title}
+            </Badge>
+            <p className="mt-1 text-text-muted">{text}</p>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 const formatWhen = (e) =>
   new Intl.DateTimeFormat('en-IN', {
@@ -61,7 +94,7 @@ function TimelineIcon({ type }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary"
+      className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary ring-4 ring-surface-raised"
     >
       <Icon className="h-4 w-4" />
     </span>
@@ -123,6 +156,7 @@ export function Timeline({ patientId, allowExport = false }) {
           </Button>
         )}
       </div>
+      <ProvenanceLegend />
       {exporter.isError && <Alert tone="error">{authErrorMessage(exporter.error)}</Alert>}
       {timeline.isPending && <LoadingState label="Loading timeline" rows={3} />}
       {timeline.isError &&
@@ -140,35 +174,46 @@ export function Timeline({ patientId, allowExport = false }) {
             : 'Appointments, uploaded documents, verified lab values, prescriptions and follow-ups appear here as they happen.'}
         </EmptyState>
       )}
-      <ol className="space-y-2">
+      <ol className="relative">
         {events.map((e, i) => {
           const month = monthOf(e.occurredAt);
           const header = i === 0 || month !== monthOf(events[i - 1].occurredAt);
+          const p = PROVENANCE[e.provenance] ?? PROVENANCE.system_recorded;
           return (
             <li key={e.id}>
               {header && (
-                <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-text-subtle">
+                <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-text-subtle first:mt-0">
                   {month}
                 </h3>
               )}
-              <div className="relative flex gap-3 rounded-xl border border-border bg-surface-raised p-3">
+              <div className="relative flex gap-3 pb-4">
+                {/* the rail */}
+                <span
+                  aria-hidden="true"
+                  className="absolute bottom-0 left-4 top-8 w-px bg-border"
+                />
                 <TimelineIcon type={e.type} />
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
+                <div
+                  className={`min-w-0 flex-1 rounded-xl border bg-surface-raised p-3 ${
+                    e.provenance === 'doctor_verified' ? 'border-success/40' : 'border-border'
+                  }`}
+                >
+                  <p className="text-xs text-text-muted">
+                    <time dateTime={e.occurredAt}>{formatWhen(e)}</time>
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm font-medium text-text">
                     {e.title}
                     {e.status && e.type !== 'document' && <StatusBadge status={e.status} />}
                   </p>
-                  <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                    <time dateTime={e.occurredAt}>{formatWhen(e)}</time>
-                    <Badge
-                      tone={PROVENANCE_TONES[e.provenance]}
-                      icon={e.provenance === 'doctor_verified' ? BadgeCheck : undefined}
-                    >
+                  <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                    <Badge tone={p.tone} icon={p.icon}>
                       {e.provenanceLabel}
                     </Badge>
                     {e.actor && <span>{e.actor}</span>}
                     {e.detail?.aiDerivedFields?.length > 0 && (
-                      <Badge tone="warning">Date/issuer read by AI</Badge>
+                      <Badge tone="warning" icon={Sparkles}>
+                        Date/issuer read by AI
+                      </Badge>
                     )}
                   </p>
                 </div>

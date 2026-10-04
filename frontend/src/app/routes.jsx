@@ -102,6 +102,10 @@ export const routes = [
             element: guarded(PERMISSIONS.APPOINTMENTS_READ, <ConsultationPage />),
           },
           {
+            path: 'appointments/:id',
+            element: guarded(PERMISSIONS.APPOINTMENTS_READ, <ConsultationPage />),
+          },
+          {
             path: 'appointments/:id/brief',
             element: guarded(PERMISSIONS.AI_ASSIST_USE, <BriefPage />),
           },

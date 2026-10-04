@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { consentsApi, recordsApi } from '../../lib/domainApi.js';
@@ -26,6 +27,21 @@ import { ShieldCheck } from 'lucide-react';
  * Doctor: patients who shared records. The list is just the doctor's own active consents;
  * every records request is still authorised by the server (consent checked per request).
  */
+/** Extracted values for one document, loaded (and audited) only when the doctor opens them. */
+function ReviewValues({ documentId }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="mt-2" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="cursor-pointer text-sm text-primary">Review extracted values</summary>
+      {open && (
+        <div className="mt-2">
+          <ExtractionPanel documentId={documentId} canVerify />
+        </div>
+      )}
+    </details>
+  );
+}
+
 export function DoctorRecordsPage() {
   const received = useQuery({ queryKey: ['consents', 'received'], queryFn: consentsApi.received });
   const active = (received.data ?? []).filter(
@@ -109,16 +125,7 @@ export function DoctorPatientRecordsPage() {
           <DocumentList
             documents={documents.data}
             download={download}
-            renderDetails={(d) => (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm text-primary">
-                  Review extracted values
-                </summary>
-                <div className="mt-2">
-                  <ExtractionPanel documentId={d.id} canVerify />
-                </div>
-              </details>
-            )}
+            renderDetails={(d) => <ReviewValues documentId={d.id} />}
           />
         </Card>
       )}

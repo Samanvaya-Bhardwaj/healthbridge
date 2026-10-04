@@ -209,7 +209,11 @@ export const ROLE_NAVIGATION = {
     as(S.records, { group: 'My health' }),
     as(S.prescriptions, { group: 'My health' }),
     as(S.timeline, { group: 'My health' }),
-    as(S.privacy, { group: 'My health' }),
+    as(S.notifications, {
+      group: 'Account',
+      description: 'Updates about your appointments, payments, records and check-ins.',
+    }),
+    as(S.privacy, { group: 'Account' }),
     as(S.patientProfile, { group: 'Account' }),
     as(S.account, { group: 'Account' }),
   ],

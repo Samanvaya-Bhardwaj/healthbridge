@@ -245,7 +245,7 @@ describe('consultation room', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Book an in-clinic visit' })).toHaveAttribute(
       'href',
-      '/app/appointments/book?doctorId=d1&mode=in_clinic',
+      '/app/appointments/book?doctorId=d1&patientId=p1&mode=in_clinic',
     );
     expect(screen.getByText('Synthetic sore throat')).toBeInTheDocument();
     expect(screen.getByText(/Paracetamol/)).toBeInTheDocument();

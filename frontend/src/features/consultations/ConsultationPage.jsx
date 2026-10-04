@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { BackLink } from '../../components/ui/BackLink.jsx';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MAX_PRESCRIPTION_ITEMS, MEDICATION_ROUTES } from '@healthbridge/shared';
 import { consultationApi } from '../../lib/domainApi.js';
@@ -17,15 +18,11 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { MODE_LABELS, formatDateTime } from '../appointments/format.js';
-import { PrescriptionCard } from './Prescriptions.jsx';
-import { VideoRoom } from './VideoRoom.jsx';
+import { PrescriptionList } from './Prescriptions.jsx';
+import { PatientAppointment } from './PatientAppointment.jsx';
+import { EmergencyGuidance, ErrorAlert, NoteView, VideoPanel } from './ConsultationParts.jsx';
+import { SOAP } from './soap.js';
 
-const SOAP = [
-  ['subjective', 'Subjective', 'What the patient reports'],
-  ['objective', 'Objective', 'Findings and observations'],
-  ['assessment', 'Assessment', 'Clinical impression'],
-  ['plan', 'Plan', 'Management, advice and follow-up'],
-];
 const OUTCOME_LABELS = {
   online_managed: 'Managed online',
   physical_visit_required: 'In-person visit needed',
@@ -51,95 +48,6 @@ function TextArea({ label, hint, value, onChange, rows = 3, maxLength = 4000 }) 
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />
-  );
-}
-
-function ErrorAlert({ error }) {
-  if (!error) return null;
-  const fieldErrors = error.errors?.map((e) => e.message) ?? [];
-  return (
-    <Alert tone="error">
-      {authErrorMessage(error)}
-      {fieldErrors.length > 0 && (
-        <ul className="mt-1 list-disc pl-5">
-          {fieldErrors.map((m) => (
-            <li key={m}>{m}</li>
-          ))}
-        </ul>
-      )}
-    </Alert>
-  );
-}
-
-// ── Shared pieces ───────────────────────────────────────────────────
-
-function EmergencyGuidance({ guidance }) {
-  return (
-    <div role="alert" className="rounded-xl border-2 border-danger bg-danger/10 p-5">
-      <h2 className="text-lg font-semibold text-danger">{guidance.title}</h2>
-      {guidance.lines.map((line) => (
-        <p key={line} className="mt-2 text-text">
-          {line}
-        </p>
-      ))}
-      <a
-        href="tel:112"
-        className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-danger px-4 py-2.5 text-sm font-medium text-white"
-      >
-        Call 112
-      </a>
-    </div>
-  );
-}
-
-function NoteView({ note }) {
-  return (
-    <div className="space-y-2">
-      <p className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-        <StatusBadge status={note.status} /> Version {note.version}
-        {note.signedAt && ` · signed ${formatDateTime(note.signedAt)}`}
-      </p>
-      {note.correctionReason && (
-        <p className="text-xs text-text-muted">Correction: {note.correctionReason}</p>
-      )}
-      <dl className="grid gap-2 sm:grid-cols-2">
-        {SOAP.filter(([key]) => note.note[key]).map(([key, label]) => (
-          <div key={key}>
-            <dt className="text-xs font-semibold uppercase text-text-subtle">{label}</dt>
-            <dd className="whitespace-pre-wrap text-sm text-text">{note.note[key]}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-function VideoPanel({ appointmentId }) {
-  const join = useMutation({ mutationFn: () => consultationApi.join(appointmentId) });
-  return (
-    <div className="rounded-lg border border-border bg-surface-muted p-4">
-      {!join.data ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-text">The video room is open.</p>
-          <Button onClick={() => join.mutate()} disabled={join.isPending}>
-            {join.isPending ? 'Joining…' : 'Join video'}
-          </Button>
-        </div>
-      ) : join.data.provider === 'mock' ? (
-        <div className="grid h-48 place-items-center rounded-lg bg-black/80 text-center text-sm text-white">
-          <div>
-            <p className="font-medium">Demo video room</p>
-            <p className="mt-1 text-white/70">
-              The mock provider issues a real, short-lived join token but carries no audio or video.
-              Start with live video (npm start -- --video) for real calls.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <VideoRoom url={join.data.url} token={join.data.token} onLeave={() => join.reset()} />
-      )}
-      <ErrorAlert error={join.error} />
-    </div>
   );
 }
 
@@ -379,11 +287,7 @@ function PrescriptionSection({ appointmentId, prescriptions, live, onSaved }) {
   });
   return (
     <div className="space-y-4">
-      {prescriptions
-        .filter((p) => p.status !== 'draft')
-        .map((rx) => (
-          <PrescriptionCard key={rx.id} rx={rx} />
-        ))}
+      <PrescriptionList prescriptions={prescriptions.filter((p) => p.status !== 'draft')} />
       {live && !current && (
         <>
           <PrescriptionBuilder
@@ -599,86 +503,14 @@ function DoctorView({ view, status, appointmentId, refresh }) {
   );
 }
 
-// ── Patient ─────────────────────────────────────────────────────────
-
-function PatientView({ view, status, appointmentId }) {
-  const c = view.consultation;
-  const outcome = c?.outcome;
-  const waiting = status?.waitingRoom;
-  const signed = view.notes.filter((n) => n.status === 'signed');
-  return (
-    <div className="space-y-4">
-      {status?.emergencyGuidance && <EmergencyGuidance guidance={status.emergencyGuidance} />}
-      {!c && view.appointment.mode === 'online' && (
-        <Card>
-          {waiting?.open ? (
-            <p className="text-sm text-text">
-              You are in the waiting room. Keep this page open — {view.appointment.doctorName} will
-              start the consultation shortly.
-            </p>
-          ) : (
-            <p className="text-sm text-text">
-              The waiting room opens at{' '}
-              {formatDateTime(waiting?.opensAt ?? view.appointment.startsAt)}.
-            </p>
-          )}
-        </Card>
-      )}
-      {c?.status === 'live' && c.video && <VideoPanel appointmentId={appointmentId} />}
-      {c?.status === 'live' && !c.video && (
-        <Alert tone="info">Your consultation is in progress at the clinic.</Alert>
-      )}
-      {outcome === 'online_managed' && (
-        <Alert tone="success" title="Consultation complete">
-          Your doctor managed this consultation online.
-          {c.outcomeDetail?.followUpOn && ` Suggested follow-up: ${c.outcomeDetail.followUpOn}.`}
-        </Alert>
-      )}
-      {outcome === 'physical_visit_required' && (
-        <Card>
-          <h2 className="text-base font-semibold text-text">
-            Your doctor would like to see you in person
-          </h2>
-          {c.outcomeDetail?.visitNote && (
-            <p className="mt-2 text-sm text-text">{c.outcomeDetail.visitNote}</p>
-          )}
-          <ButtonLink
-            as={Link}
-            className="mt-3"
-            icon={Building2}
-            to={`/app/appointments/book?doctorId=${view.appointment.doctorId}&mode=in_clinic`}
-          >
-            Book an in-clinic visit
-          </ButtonLink>
-        </Card>
-      )}
-      {signed.length > 0 && (
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-text">Consultation summary</h2>
-          <div className="space-y-4">
-            {view.notes.map((n) => (
-              <NoteView key={n.id} note={n} />
-            ))}
-          </div>
-        </Card>
-      )}
-      {view.prescriptions.length > 0 && (
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-text">Prescriptions</h2>
-          <div className="space-y-3">
-            {view.prescriptions.map((rx) => (
-              <PrescriptionCard key={rx.id} rx={rx} />
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-/** Consultation room for the patient side and the appointment's doctor (ADR-0025). */
+/**
+ * One appointment (ADR-0025). The patient side gets the full appointment page (state,
+ * payment, sharing, waiting room, summary); the appointment's doctor gets the
+ * consultation room.
+ */
 export function ConsultationPage() {
   const { id } = useParams();
+  const location = useLocation();
   const queryClient = useQueryClient();
   // Live state without clinical content (waiting room, start, outcome), polled. The full
   // (audited) view is re-read only when the consultation state changes.
@@ -709,22 +541,29 @@ export function ConsultationPage() {
     queryClient.invalidateQueries({ queryKey: ['consultation-status', id] });
   };
   const a = view.data?.appointment;
+  if (party === 'patient') {
+    return (
+      <div className="space-y-6">
+        <BackLink to="/app/appointments">Appointments</BackLink>
+        <PatientAppointment
+          view={view.data}
+          status={status.data}
+          appointmentId={id}
+          notice={location.state?.notice}
+        />
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
-      <Link
-        to="/app/appointments"
-        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-hover"
-      >
-        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-        Appointments
-      </Link>
-      {view.isPending && <LoadingState label="Loading consultation" rows={3} />}
+      <BackLink to="/app/appointments">{party === 'doctor' ? 'Schedule' : 'Appointments'}</BackLink>
+      {view.isPending && <LoadingState label="Loading appointment" rows={3} />}
       {view.isError && <Alert tone="error">{authErrorMessage(view.error)}</Alert>}
       {a && (
         <>
           <PageHeader
             icon={a.mode === 'online' ? Video : Building2}
-            eyebrow={party === 'doctor' ? 'Clinical work' : 'My care'}
+            eyebrow="Clinical work"
             title="Consultation"
             description={`${formatDateTime(a.startsAt)} · ${MODE_LABELS[a.mode]} · ${a.doctorName}${
               a.clinicName ? ` · ${a.clinicName}` : ''
@@ -735,16 +574,7 @@ export function ConsultationPage() {
               {view.data.consultation?.status === 'live' && <StatusBadge status="live" />}
             </div>
           </PageHeader>
-          {party === 'doctor' ? (
-            <DoctorView
-              view={view.data}
-              status={status.data}
-              appointmentId={id}
-              refresh={refresh}
-            />
-          ) : (
-            <PatientView view={view.data} status={status.data} appointmentId={id} />
-          )}
+          <DoctorView view={view.data} status={status.data} appointmentId={id} refresh={refresh} />
         </>
       )}
     </div>

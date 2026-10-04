@@ -116,7 +116,7 @@ describe('health records', () => {
     await userEvent.type(screen.getByLabelText(/^Name/), 'Synthetic CBC');
     await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
 
-    expect(await screen.findByText('Waiting for the safety check')).toBeInTheDocument();
+    expect(await screen.findByText(/Processing: checking the file for safety/)).toBeInTheDocument();
     const intent = calls.find((c) => c.key.endsWith('/upload-intent'));
     const body = JSON.parse(intent.init.body);
     expect(body).toMatchObject({
@@ -187,7 +187,7 @@ describe('privacy and access', () => {
     expect(
       await screen.findByText('Dr. Meera Iyer downloaded “Synthetic CBC”'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/View documents · Ongoing care/)).toBeInTheDocument();
+    expect(screen.getByText('Can see your documents, for ongoing care.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Revoke' }));
     // Revoking asks first: it blocks the doctor's very next request.
     const dialog = await screen.findByRole('dialog', { name: 'Revoke Dr. Meera Iyer’s access?' });

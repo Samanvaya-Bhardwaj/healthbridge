@@ -66,7 +66,28 @@ describe('booking', () => {
           },
         }),
       'POST /api/v1/appointments': () => json(201, { data: { id: 'a1', status: 'confirmed' } }),
-      'GET /api/v1/appointments?scope=upcoming': () => json(200, { data: [] }),
+      // After booking, the patient lands on the new appointment's page.
+      'GET /api/v1/appointments/a1/consultation': () =>
+        json(200, {
+          data: {
+            party: 'patient',
+            appointment: {
+              id: 'a1',
+              status: 'confirmed',
+              mode: 'online',
+              startsAt: slots[1].startsAt,
+              endsAt: slots[1].startsAt,
+              doctorName: 'Dr. Meera Iyer',
+              clinicName: null,
+              patientId: PATIENT,
+              doctorId: DOCTOR,
+            },
+            consultation: null,
+            waitingRoom: { open: false, opensAt: slots[1].startsAt, patientPresent: false },
+            notes: [],
+            prescriptions: [],
+          },
+        }),
     };
     const calls = signedIn(makeUser(['PATIENT']), routesMap);
     // Slot query has dynamic dates: route by prefix.
@@ -77,7 +98,10 @@ describe('booking', () => {
         : originalFetch(url, init);
 
     const router = renderAt(`/app/appointments/book?doctorId=${DOCTOR}&patientId=${PATIENT}`);
-    expect(await screen.findByText(/Dr. Meera Iyer/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Dr. Meera Iyer/)).length).toBeGreaterThan(0);
+    // One step at a time: the only mode with free times (online) is pre-selected.
+    expect(screen.getByRole('radio', { name: /Online/ })).toBeChecked();
+    expect(screen.getByRole('radiogroup', { name: 'Date' })).toBeInTheDocument();
     const ue = userEvent.setup();
     const times = await screen.findAllByRole('button', { pressed: false, name: /\d/ });
     await ue.click(times.find((b) => /9:15|09:15/.test(b.textContent)) ?? times[1]);
@@ -87,7 +111,8 @@ describe('booking', () => {
     await ue.click(bookButton);
 
     await screen.findByText('Appointment booked.');
-    expect(router.state.location.pathname).toBe('/app/appointments');
+    expect(router.state.location.pathname).toBe('/app/appointments/a1');
+    expect(screen.getByRole('heading', { name: 'You’re booked' })).toBeInTheDocument();
     const booking = routeStartingWith(calls, 'POST /api/v1/appointments');
     expect(booking.init.headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
     expect(JSON.parse(booking.init.body)).toMatchObject({
@@ -96,11 +121,11 @@ describe('booking', () => {
       mode: 'online',
       reason: 'Follow-up on blood sugar',
     });
-  });
+  }, 15_000); // a five-step flow with typing; slow on loaded CI machines
 });
 
 describe('patient appointments', () => {
-  it('shows upcoming appointments with cancel and reschedule', async () => {
+  it('shows upcoming appointments with details and a confirmed cancel', async () => {
     const calls = signedIn(makeUser(['PATIENT']), {
       'GET /api/v1/appointments?scope=upcoming': () =>
         json(200, {
@@ -121,9 +146,10 @@ describe('patient appointments', () => {
     });
     renderAt('/app/appointments');
     const item = (await screen.findByText(/Ref AB12CD34/)).closest('section');
-    expect(within(item).getByRole('link', { name: 'Reschedule' })).toHaveAttribute(
+    // Rescheduling and everything else about the visit live on its own page.
+    expect(within(item).getByRole('link', { name: /^Details/ })).toHaveAttribute(
       'href',
-      `/app/appointments/book?rescheduleId=a1&doctorId=${DOCTOR}&mode=online`,
+      '/app/appointments/a1',
     );
     const user = userEvent.setup();
     // Cancelling asks first; "Keep it" closes without calling the API.

@@ -178,18 +178,19 @@ export function RadioGroup({
   onChange,
   error,
   hint,
+  inline = false,
   className = '',
 }) {
   const ids = useFieldIds(hint, error);
   return (
-    <fieldset className={className} aria-describedby={ids.describedBy}>
+    <fieldset className={`min-w-0 ${className}`} aria-describedby={ids.describedBy}>
       <legend className="text-sm font-medium text-text">{legend}</legend>
       {hint && (
         <HelperText id={ids.hintId} className="mt-1">
           {hint}
         </HelperText>
       )}
-      <div className="mt-2 space-y-2">
+      <div className={inline ? 'mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4' : 'mt-2 space-y-2'}>
         {options.map((o) => (
           <label
             key={o.value}

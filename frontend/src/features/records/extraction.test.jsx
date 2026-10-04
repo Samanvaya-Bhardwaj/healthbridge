@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { App } from '../../app/App.jsx';
@@ -87,7 +87,9 @@ describe('AI-extracted values', () => {
     expect(screen.getByText('AI-extracted')).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText('Verify WBC'));
     await userEvent.click(screen.getByRole('button', { name: 'Verify selected (1)' }));
-    expect(await screen.findByText('Verified')).toBeInTheDocument();
+    // The value row now carries the "Verified" mark (the timeline legend also says "Verified").
+    const row = screen.getByText('“WBC: 11.8 10^3/uL (ref 4.0-11.0)”').closest('tr');
+    expect(await within(row).findByText('Verified')).toBeInTheDocument();
     const call = calls.find((c) => c.key.endsWith('/lab-results/verify'));
     expect(JSON.parse(call.init.body)).toEqual({ fieldKeys: ['lab-1-wbc'] });
   });

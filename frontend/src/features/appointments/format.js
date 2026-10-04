@@ -40,3 +40,6 @@ export function groupByDay(items, key = 'startsAt') {
   }
   return [...groups.entries()];
 }
+
+/** A calendar date (YYYY-MM-DD) as a long local date, without time-zone shifts. */
+export const formatDateOnly = (isoDate) => formatDay(`${String(isoDate).slice(0, 10)}T00:00:00`);

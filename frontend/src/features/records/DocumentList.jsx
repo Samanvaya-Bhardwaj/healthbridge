@@ -2,7 +2,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { formatDateTime } from '../appointments/format.js';
 import { DOCUMENT_TYPE_LABELS, REJECTION_LABELS, STATUS_HINTS, formatBytes } from './upload.js';
-import { Download, FileText, FlaskConical, ScanLine } from 'lucide-react';
+import { Download, FileText, FlaskConical, ScanLine, ShieldCheck } from 'lucide-react';
 
 /** Document metadata list; download goes through `useDownload` (short-lived URLs). */
 export function DocumentList({ documents, onRemove, removing, download, renderDetails }) {
@@ -34,12 +34,21 @@ export function DocumentList({ documents, onRemove, removing, download, renderDe
                   {formatBytes(d.sizeBytes)}
                   {d.uploadedBy?.name && ` · uploaded by ${d.uploadedBy.name}`}
                 </p>
-                {d.status !== 'available' && (
-                  <p className="mt-0.5 text-sm text-text-subtle">
-                    {d.status === 'rejected'
-                      ? (REJECTION_LABELS[d.rejectionReason] ?? 'Not accepted.')
-                      : STATUS_HINTS[d.status]}
+                {d.status === 'available' ? (
+                  <p className="mt-0.5 flex items-center gap-1 text-sm text-success">
+                    <ShieldCheck aria-hidden="true" className="h-4 w-4" />
+                    {STATUS_HINTS.available}
                   </p>
+                ) : d.status === 'rejected' ? (
+                  <p className="mt-0.5 text-sm text-danger">
+                    {REJECTION_LABELS[d.rejectionReason] ?? 'The file was not accepted.'}{' '}
+                    <span className="text-text-muted">
+                      Nothing from it was added to your record. You can upload the file again or
+                      choose another one.
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-sm text-text-muted">{STATUS_HINTS[d.status]}</p>
                 )}
               </div>
             </div>

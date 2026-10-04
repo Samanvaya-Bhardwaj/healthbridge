@@ -25,15 +25,9 @@ import { ButtonLink } from '../../components/ui/Button.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { ApiError } from '../../lib/apiClient.js';
-import {
-  adminApi,
-  careApi,
-  doctorsApi,
-  followUpApi,
-  patientsApi,
-  schedulingApi,
-} from '../../lib/domainApi.js';
-import { MODE_LABELS, formatDateTime, formatTime } from '../appointments/format.js';
+import { adminApi, doctorsApi, followUpApi, schedulingApi } from '../../lib/domainApi.js';
+import { PatientHome } from './PatientHome.jsx';
+import { MODE_LABELS, formatTime } from '../appointments/format.js';
 
 const todayRange = () => {
   const from = new Date();
@@ -92,159 +86,6 @@ function SectionLinks({ user, exclude = [] }) {
         );
       })}
     </ul>
-  );
-}
-
-// ── Patient ──────────────────────────────────────────────────────────
-
-function Step({ done, title, children, action }) {
-  return (
-    <li className="flex gap-3 py-3">
-      {done ? (
-        <CheckCircle2 aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-      ) : (
-        <Circle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-text-subtle" />
-      )}
-      <div className="min-w-0 flex-1">
-        <p className={`font-medium ${done ? 'text-text-muted line-through' : 'text-text'}`}>
-          {title}
-          <span className="sr-only">{done ? ' (done)' : ' (to do)'}</span>
-        </p>
-        {!done && <p className="mt-0.5 text-sm text-text-muted">{children}</p>}
-      </div>
-      {!done && action}
-    </li>
-  );
-}
-
-function PatientHome({ user, firstName }) {
-  const profile = useQuery({ queryKey: ['patients', 'me'], queryFn: patientsApi.me, retry: false });
-  const hasProfile = Boolean(profile.data);
-  const missing = profile.error instanceof ApiError && profile.error.status === 404;
-  const care = useQuery({
-    queryKey: ['care', profile.data?.id],
-    queryFn: () => careApi.list(profile.data.id),
-    enabled: hasProfile,
-  });
-  const upcoming = useQuery({
-    queryKey: ['appointments', undefined, 'upcoming'],
-    queryFn: () => schedulingApi.mine({ scope: 'upcoming' }),
-    enabled: hasProfile,
-  });
-  const hasDoctor = care.data?.some((r) => r.status === 'active') ?? false;
-  const hasBooking = (upcoming.data?.length ?? 0) > 0;
-  const loading = profile.isPending || (hasProfile && (care.isPending || upcoming.isPending));
-  const allDone = hasProfile && hasDoctor && hasBooking;
-
-  return (
-    <div className="space-y-8">
-      <PageHeader
-        eyebrow={ROLE_LABELS.PATIENT}
-        title={`Welcome, ${firstName}`}
-        description="Stay in touch with the doctors you trust. Consult online first, and visit only when your doctor says you need to."
-      />
-      {loading ? (
-        <LoadingState label="Loading your home page" rows={2} />
-      ) : (
-        <>
-          {!allDone && (
-            <Card>
-              <SectionHeader
-                title="Getting started"
-                description="Three steps to your first consultation."
-              />
-              <ol className="mt-2 divide-y divide-border">
-                <Step
-                  done={hasProfile}
-                  title="Create your health profile"
-                  action={
-                    <ButtonLink as={Link} to="/app/profile" size="sm" icon={UserRound}>
-                      Create
-                    </ButtonLink>
-                  }
-                >
-                  Your basic details. Doctors see them only after you add them to your care team.
-                </Step>
-                <Step
-                  done={hasDoctor}
-                  title="Add your doctor"
-                  action={
-                    hasProfile && (
-                      <ButtonLink as={Link} to="/app/doctors" size="sm" icon={Stethoscope}>
-                        Find
-                      </ButtonLink>
-                    )
-                  }
-                >
-                  Search for your family doctor and send a request; they accept it.
-                </Step>
-                <Step
-                  done={hasBooking}
-                  title="Book a consultation"
-                  action={
-                    hasDoctor && (
-                      <ButtonLink as={Link} to="/app/doctors" size="sm" icon={CalendarDays}>
-                        Book
-                      </ButtonLink>
-                    )
-                  }
-                >
-                  Choose online or in-clinic and a time that suits you.
-                </Step>
-              </ol>
-              {missing && <p className="mt-2 text-sm text-text-subtle">Start with step 1.</p>}
-            </Card>
-          )}
-          {hasProfile && (
-            <section aria-labelledby="upcoming-heading" className="space-y-3">
-              <SectionHeader
-                id="upcoming-heading"
-                icon={CalendarDays}
-                title="Upcoming appointments"
-                actions={
-                  hasBooking && (
-                    <ButtonLink as={Link} to="/app/appointments" variant="subtle" size="sm">
-                      All appointments
-                    </ButtonLink>
-                  )
-                }
-              />
-              {hasBooking ? (
-                <ul className="space-y-2">
-                  {upcoming.data.slice(0, 3).map((a) => (
-                    <li key={a.id}>
-                      <Link
-                        to="/app/appointments"
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 hover:border-primary/40"
-                      >
-                        <span>
-                          <span className="block font-medium text-text">
-                            {formatDateTime(a.startsAt)}
-                          </span>
-                          <span className="block text-sm text-text-muted">
-                            {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
-                          </span>
-                        </span>
-                        <StatusBadge status={a.status} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState compact icon={CalendarDays} title="No upcoming appointments">
-                  When you book a consultation, it appears here.
-                </EmptyState>
-              )}
-            </section>
-          )}
-        </>
-      )}
-      <EmergencyNote />
-      <section aria-labelledby="sections-heading" className="space-y-3">
-        <SectionHeader id="sections-heading" title="Everything in one place" />
-        <SectionLinks user={user} />
-      </section>
-    </div>
   );
 }
 
@@ -573,5 +414,5 @@ export function RoleHome() {
   if (role === 'CLINIC_ADMIN') return <ClinicAdminHome user={user} firstName={firstName} />;
   if (role === 'PLATFORM_ADMIN') return <AdminHome user={user} firstName={firstName} />;
   if (role === 'SUPPORT') return <SupportHome user={user} firstName={firstName} />;
-  return <PatientHome user={user} firstName={firstName} />;
+  return <PatientHome firstName={firstName} />;
 }

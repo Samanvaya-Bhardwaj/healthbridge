@@ -7,12 +7,12 @@ import { ApiError } from '../../lib/apiClient.js';
 import { applyFieldErrors, authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Button } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { PatientProfileForm } from './PatientProfileForm.jsx';
 import { useAuth } from '../auth/authContext.js';
-import { UserRound } from 'lucide-react';
+import { Stethoscope, UserRound } from 'lucide-react';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 
 const RELATIONSHIP_OPTIONS = GUARDIAN_RELATIONSHIP_TYPES.map((v) => ({
@@ -133,7 +133,11 @@ export function ProfilePage() {
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 1,
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['patients', 'me'] });
-  const create = useSave(patientsApi.createMe, refresh);
+  const [justCreated, setJustCreated] = useState(false);
+  const create = useSave(patientsApi.createMe, () => {
+    setJustCreated(true);
+    refresh();
+  });
   const update = useSave(patientsApi.updateMe, refresh);
   const missing = profile.error instanceof ApiError && profile.error.status === 404;
 
@@ -174,6 +178,16 @@ export function ProfilePage() {
         )}
         {profile.data && (
           <>
+            {justCreated && !update.message && (
+              <Alert tone="success" title="Your health profile is ready" className="mb-6">
+                Next, add your doctor: find them among verified doctors and send a request.
+                <span className="mt-3 block">
+                  <ButtonLink as={Link} to="/app/doctors" size="sm" icon={Stethoscope}>
+                    Find a doctor
+                  </ButtonLink>
+                </span>
+              </Alert>
+            )}
             {update.message && (
               <Alert tone={update.message.tone} className="mb-6">
                 {update.message.text}

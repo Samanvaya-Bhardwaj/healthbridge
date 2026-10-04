@@ -17,6 +17,7 @@ import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import {
   Building2,
   CalendarClock,
+  CreditCard,
   CalendarDays,
   ClipboardList,
   Sparkles,
@@ -38,6 +39,42 @@ const weekRange = () => {
   from.setHours(0, 0, 0, 0);
   return { from: from.toISOString(), to: new Date(from.getTime() + 8 * 86_400_000).toISOString() };
 };
+
+/** The one thing the patient can do next for an appointment, in plain words. */
+function nextAction(a) {
+  const detail = `/app/appointments/${a.id}`;
+  switch (a.status) {
+    case 'pending_payment':
+      return {
+        to: `/app/appointments/${a.id}/pay`,
+        label: `Pay ${formatFee(a.feePaise)}`,
+        icon: CreditCard,
+        primary: true,
+        hint: 'Pay to confirm this booking.',
+      };
+    case 'in_consultation':
+      return {
+        to: detail,
+        label: 'Join consultation',
+        icon: Video,
+        primary: true,
+        hint: 'Your doctor has started the consultation.',
+      };
+    case 'confirmed':
+      return a.mode === 'online'
+        ? { hint: 'Join from the appointment page; the waiting room opens 15 minutes before.' }
+        : { hint: 'Check in at the clinic reception when you arrive.' };
+    case 'completed':
+      return {
+        to: detail,
+        label: 'Visit summary',
+        icon: ClipboardList,
+        hint: 'Summary, prescription and follow-up.',
+      };
+    default:
+      return {};
+  }
+}
 
 // ── Patient ────────────────────────────────────────────────────────
 
@@ -119,79 +156,78 @@ function PatientAppointments() {
           </EmptyState>
         ))}
       <ul className="space-y-3">
-        {list.data?.map((a) => (
-          <li key={a.id}>
-            <Card>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="flex min-w-0 gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary"
-                  >
-                    {a.mode === 'online' ? (
-                      <Video className="h-5 w-5" />
-                    ) : (
-                      <Building2 className="h-5 w-5" />
-                    )}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 font-medium text-text">
-                      {formatDateTime(a.startsAt)} <StatusBadge status={a.status} />
-                      {a.paymentStatus && a.paymentStatus !== 'pending' && (
-                        <span className="text-xs font-normal text-text-muted">
-                          Payment: <StatusBadge status={a.paymentStatus} />
-                        </span>
+        {list.data?.map((a) => {
+          const next = nextAction(a);
+          return (
+            <li key={a.id}>
+              <Card className="transition-colors hover:border-primary/40">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex min-w-0 gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary"
+                    >
+                      {a.mode === 'online' ? (
+                        <Video className="h-5 w-5" />
+                      ) : (
+                        <Building2 className="h-5 w-5" />
                       )}
-                    </p>
-                    <p className="mt-1 text-sm text-text-muted">
-                      {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
-                      {a.clinic && ` · ${a.clinic.name}`} · Ref {a.reference}
-                    </p>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-2 font-medium text-text">
+                        <Link
+                          to={`/app/appointments/${a.id}`}
+                          className="hover:text-primary focus-visible:outline-offset-4"
+                        >
+                          {formatDateTime(a.startsAt)}
+                        </Link>
+                        <StatusBadge status={a.status} />
+                        {a.paymentStatus && a.paymentStatus !== 'pending' && (
+                          <StatusBadge status={a.paymentStatus} />
+                        )}
+                      </p>
+                      <p className="mt-1 text-sm text-text-muted">
+                        {a.doctor?.professionalName} · {MODE_LABELS[a.mode]}
+                        {a.clinic && ` · ${a.clinic.name}`} · Ref {a.reference}
+                      </p>
+                      {next.hint && <p className="mt-1 text-sm text-text">{next.hint}</p>}
+                    </div>
                   </div>
-                </div>
-                {(a.status === 'in_consultation' ||
-                  a.status === 'completed' ||
-                  (a.status === 'confirmed' && a.mode === 'online')) && (
-                  <ButtonLink
-                    as={Link}
-                    to={`/app/appointments/${a.id}/consultation`}
-                    variant={a.status === 'in_consultation' ? 'primary' : 'secondary'}
-                    icon={a.status === 'completed' ? ClipboardList : Video}
-                  >
-                    {a.status === 'completed'
-                      ? 'Visit summary'
-                      : a.status === 'in_consultation'
-                        ? 'Join consultation'
-                        : 'Waiting room'}
-                  </ButtonLink>
-                )}
-                {['confirmed', 'pending_payment'].includes(a.status) && scope === 'upcoming' && (
                   <div className="flex flex-wrap gap-2">
-                    {a.status === 'pending_payment' && (
-                      <ButtonLink as={Link} to={`/app/appointments/${a.id}/pay`}>
-                        Pay {formatFee(a.feePaise)}
+                    {next.to && (
+                      <ButtonLink
+                        as={Link}
+                        to={next.to}
+                        icon={next.icon}
+                        variant={next.primary ? 'primary' : 'secondary'}
+                      >
+                        {next.label}
                       </ButtonLink>
                     )}
                     <ButtonLink
                       as={Link}
-                      to={`/app/appointments/book?rescheduleId=${a.id}&doctorId=${a.doctorId}&mode=${a.mode}`}
-                      variant="secondary"
-                    >
-                      Reschedule
-                    </ButtonLink>
-                    <Button
+                      to={`/app/appointments/${a.id}`}
                       variant="ghost"
-                      onClick={() => confirmCancel(a)}
-                      disabled={cancel.isPending}
+                      aria-label={`Details for ${formatDateTime(a.startsAt)}`}
                     >
-                      Cancel
-                    </Button>
+                      Details
+                    </ButtonLink>
+                    {['confirmed', 'pending_payment'].includes(a.status) &&
+                      scope === 'upcoming' && (
+                        <Button
+                          variant="ghost"
+                          onClick={() => confirmCancel(a)}
+                          disabled={cancel.isPending}
+                        >
+                          Cancel
+                        </Button>
+                      )}
                   </div>
-                )}
-              </div>
-            </Card>
-          </li>
-        ))}
+                </div>
+              </Card>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

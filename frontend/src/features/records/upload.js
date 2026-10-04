@@ -8,12 +8,13 @@ export const DOCUMENT_TYPE_LABELS = {
   other: 'Other',
 };
 
+/** What each document state means, in the words a patient would use. */
 export const STATUS_HINTS = {
   pending_upload: 'Uploading…',
-  quarantined: 'Waiting for the safety check',
-  scanning: 'Safety check in progress',
-  available: 'Available',
-  rejected: 'Not accepted',
+  quarantined: 'Processing: checking the file for safety. This usually takes under a minute.',
+  scanning: 'Processing: checking the file for safety. This usually takes under a minute.',
+  available: 'Secure: passed the safety check.',
+  rejected: 'Rejected',
   retired: 'Removed',
 };
 

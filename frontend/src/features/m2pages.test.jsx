@@ -102,10 +102,10 @@ describe('my doctors', () => {
     });
     renderAt('/app/doctors');
     const invited = (await screen.findByText('Dr. Meera Iyer')).closest('li');
-    expect(within(invited).getByText('Invited')).toBeInTheDocument();
-    expect(within(invited).getByText(/get access only if you accept/)).toBeInTheDocument();
+    expect(within(invited).getByText('Invitation')).toBeInTheDocument();
+    expect(within(invited).getByText(/Nothing is shared unless you accept/)).toBeInTheDocument();
     const active = screen.getByText('Dr. Rahul Menon').closest('li');
-    expect(within(active).getByRole('button', { name: 'Pause access' })).toBeInTheDocument();
+    expect(within(active).getByRole('button', { name: 'Pause' })).toBeInTheDocument();
 
     await userEvent.setup().click(within(invited).getByRole('button', { name: 'Accept' }));
     expect(calls.some((c) => c.key === 'POST /api/v1/care-relationships/r1/accept')).toBe(true);
