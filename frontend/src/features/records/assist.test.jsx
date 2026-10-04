@@ -71,7 +71,7 @@ describe('doctor AI assistance', () => {
     render(<App router={router} queryClient={createQueryClient()} />);
     expect(await screen.findByText('Recent verified lab values')).toBeInTheDocument();
     expect(screen.getByText('F1 · Verified lab value: WBC')).toBeInTheDocument();
-    expect(screen.getByText('AI-generated')).toBeInTheDocument();
+    expect(screen.getByText('AI-generated · not a clinical opinion')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
     expect(calls.some((c) => c.key === 'POST /api/v1/briefs/b1/feedback')).toBe(true);
   });
@@ -91,6 +91,8 @@ describe('doctor AI assistance', () => {
       initialEntries: [`/app/medical-records/${PATIENT}`],
     });
     render(<App router={router} queryClient={createQueryClient()} />);
+    // Asking AI is its own tab, separate from the source records.
+    await userEvent.click(await screen.findByRole('tab', { name: 'Ask AI' }));
     await userEvent.type(await screen.findByLabelText(/Ask about these records/), 'Any MRI?');
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(await screen.findByText(FALLBACK)).toBeInTheDocument();

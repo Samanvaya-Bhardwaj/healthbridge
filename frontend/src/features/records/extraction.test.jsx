@@ -82,6 +82,7 @@ describe('AI-extracted values', () => {
     });
     render(<App router={router} queryClient={createQueryClient()} />);
 
+    await userEvent.click(await screen.findByRole('tab', { name: 'Documents' }));
     await userEvent.click(await screen.findByText('Review extracted values'));
     expect(await screen.findByText('“WBC: 11.8 10^3/uL (ref 4.0-11.0)”')).toBeInTheDocument();
     expect(screen.getByText('AI-extracted')).toBeInTheDocument();

@@ -12,6 +12,7 @@ import { TextField } from '../../components/ui/TextField.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { BackLink } from '../../components/ui/BackLink.jsx';
 import { RefreshCw, Sparkles } from 'lucide-react';
+import { formatDateTime } from '../appointments/format.js';
 
 const AI_NOTICE =
   'AI-generated from the shared records. Every sentence cites its source — check the sources before relying on it. It does not diagnose or recommend treatment.';
@@ -105,7 +106,7 @@ export function BriefPage() {
   const b = brief.data;
   return (
     <div className="space-y-6">
-      <BackLink to="/app/appointments">Schedule</BackLink>
+      <BackLink to={`/app/appointments/${id}/consultation`}>Appointment</BackLink>
       <PageHeader
         icon={Sparkles}
         eyebrow="Clinical work · AI-assisted"
@@ -135,9 +136,13 @@ export function BriefPage() {
         </Alert>
       )}
       {b && (
-        <Card>
-          <p className="mb-4 flex items-center gap-2 text-xs text-text-muted">
-            <Badge tone="primary">AI-generated</Badge> {AI_NOTICE}
+        <Card className="border-2 border-dashed border-primary/30">
+          <p className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-primary-soft px-3 py-2 text-xs text-text">
+            <Badge tone="primary" icon={Sparkles}>
+              AI-generated · not a clinical opinion
+            </Badge>
+            {AI_NOTICE}
+            {b.createdAt && ` Prepared ${formatDateTime(b.createdAt)}.`}
           </p>
           {b.sections.length === 0 ? (
             <p className="text-sm font-medium text-text">{b.message}</p>

@@ -1,13 +1,36 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { consentsApi, recordsApi } from '../../lib/domainApi.js';
+import {
+  consentsApi,
+  doctorsApi,
+  followUpApi,
+  recordsApi,
+  schedulingApi,
+} from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
-import { EmptyState } from '../../components/ui/EmptyState.jsx';
-import { formatDateTime } from '../appointments/format.js';
+import {
+  ConsentRequiredNotice,
+  EmptyState,
+  LoadingState,
+} from '../../components/ui/EmptyState.jsx';
+import { StatusBadge } from '../../components/ui/Badge.jsx';
+import { Tabs } from '../../components/ui/Tabs.jsx';
+import { SectionHeader } from '../../components/ui/Typography.jsx';
+import {
+  CalendarDays,
+  ClipboardList,
+  FlaskConical,
+  HeartPulse,
+  History,
+  Pill,
+  Sparkles,
+} from 'lucide-react';
+import { ACTIVE, ageFrom, useSharedRecords } from '../doctors/doctorWork.js';
+import { MODE_LABELS, formatDateOnly, formatDateTime } from '../appointments/format.js';
 import { DocumentList } from './DocumentList.jsx';
 import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
 import { PatientPrescriptions } from '../consultations/Prescriptions.jsx';
@@ -91,66 +114,200 @@ export function DoctorRecordsPage() {
   );
 }
 
+const RECORD_TABS = [
+  ['overview', 'Overview', ClipboardList],
+  ['documents', 'Documents', FileText],
+  ['timeline', 'Timeline', History],
+  ['ask', 'Ask AI', Sparkles],
+];
+
+function UpcomingWithPatient({ patientId }) {
+  const [range] = useState(() => {
+    const from = new Date();
+    return {
+      from: from.toISOString(),
+      to: new Date(from.getTime() + 62 * 86_400_000).toISOString(),
+    };
+  });
+  const upcoming = useQuery({
+    queryKey: ['doctor-schedule', 'upcoming62'],
+    queryFn: () => schedulingApi.doctorSchedule(range.from, range.to),
+  });
+  const mine = (upcoming.data ?? []).filter(
+    (a) => a.patientId === patientId && ACTIVE.includes(a.status),
+  );
+  if (!mine.length) return null;
+  return (
+    <Card>
+      <SectionHeader icon={CalendarDays} title="Upcoming consultations" />
+      <ul className="mt-2 divide-y divide-border">
+        {mine.map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+            <span className="text-sm text-text">
+              <span className="font-medium">{formatDateTime(a.startsAt)}</span> ·{' '}
+              {MODE_LABELS[a.mode]}
+            </span>
+            <span className="flex flex-wrap gap-2">
+              <ButtonLink
+                as={Link}
+                to={`/app/appointments/${a.id}/brief`}
+                size="sm"
+                variant="ghost"
+                icon={Sparkles}
+              >
+                AI brief
+              </ButtonLink>
+              <ButtonLink
+                as={Link}
+                to={`/app/appointments/${a.id}/consultation`}
+                size="sm"
+                variant="secondary"
+              >
+                Open appointment
+              </ButtonLink>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function FollowUpsForPatient({ patientId }) {
+  const list = useQuery({
+    queryKey: ['doctor-follow-ups', 'all'],
+    queryFn: () => followUpApi.forDoctor(),
+  });
+  const mine = (list.data ?? []).filter((f) => f.patientId === patientId);
+  return (
+    <Card>
+      <SectionHeader
+        icon={HeartPulse}
+        title="Follow-ups"
+        actions={
+          <ButtonLink as={Link} to="/app/follow-ups" variant="subtle" size="sm">
+            All follow-ups
+          </ButtonLink>
+        }
+      />
+      {list.isSuccess && mine.length === 0 && (
+        <p className="mt-2 text-sm text-text-muted">No follow-ups with this patient.</p>
+      )}
+      <ul className="mt-2 divide-y divide-border">
+        {mine.map((f) => (
+          <li key={f.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+            <Link to={`/app/follow-ups?open=${f.id}`} className="text-text hover:text-primary">
+              Due {formatDateOnly(f.dueOn)}
+            </Link>
+            <StatusBadge status={f.status} />
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function DoctorPatientRecordsPage() {
   const { patientId } = useParams();
+  const [params, setParams] = useSearchParams();
+  const tab = RECORD_TABS.some(([k]) => k === params.get('tab')) ? params.get('tab') : 'overview';
+  const shared = useSharedRecords();
+  const consent = shared.byPatient.get(patientId);
+  const patients = useQuery({
+    queryKey: ['doctors', 'patients'],
+    queryFn: () => doctorsApi.myPatients(),
+  });
+  const rel = (patients.data ?? []).find((r) => r.patient?.id === patientId);
+  const name = rel?.patient.fullName ?? consent?.patientName ?? 'Patient';
+  const age = ageFrom(rel?.patient.dateOfBirth);
   const documents = useQuery({
     queryKey: ['documents', patientId],
     queryFn: () => recordsApi.list(patientId),
     retry: false,
   });
   const download = useDownload();
+  const noConsent = documents.error?.code === 'consent_required';
   return (
     <div className="space-y-6">
       <BackLink to="/app/medical-records">Patient Records</BackLink>
       <PageHeader
         icon={FolderOpen}
-        eyebrow="Patients"
-        title="Shared records"
-        description="Documents, verified lab values, prescriptions and timeline this patient has shared with you. Access ends when they revoke it or it expires."
+        eyebrow="Patient record"
+        title={name}
+        description={
+          consent
+            ? `${age !== null ? `${age} years · ` : ''}Shared with you: ${consent.scopes
+                .map((sc) => SCOPE_LABELS[sc])
+                .join(
+                  ', ',
+                )} · until ${formatDateTime(consent.expiresAt)}. Access ends at once if the patient revokes it.`
+            : 'Only what this patient has shared with you is shown.'
+        }
       />
-      {documents.isPending && <Skeleton className="h-24 w-full" />}
-      {documents.isError && (
-        <Alert tone="error">
-          {documents.error?.code === 'consent_required'
-            ? 'This patient has not given you access to their documents, or the access has ended.'
-            : authErrorMessage(documents.error)}
-        </Alert>
+      {documents.isPending && <LoadingState label="Loading shared records" rows={2} />}
+      {noConsent && (
+        <ConsentRequiredNotice>
+          This patient has not given you access to their documents, or the access has ended. Only
+          the patient can share their records.
+        </ConsentRequiredNotice>
+      )}
+      {documents.isError && !noConsent && (
+        <Alert tone="error">{authErrorMessage(documents.error)}</Alert>
       )}
       {download.isError && <Alert tone="error">{authErrorMessage(download.error)}</Alert>}
-      {documents.data?.length === 0 && (
-        <EmptyState title="No documents">Nothing has been shared yet.</EmptyState>
-      )}
-      {documents.data?.length > 0 && (
-        <Card>
-          <DocumentList
-            documents={documents.data}
-            download={download}
-            renderDetails={(d) => <ReviewValues documentId={d.id} />}
+      <UpcomingWithPatient patientId={patientId} />
+      {documents.isSuccess && (
+        <>
+          <Tabs
+            label="Patient record"
+            value={tab}
+            onChange={(t) => setParams(t === 'overview' ? {} : { tab: t }, { replace: true })}
+            tabs={RECORD_TABS}
           />
-        </Card>
-      )}
-      {documents.isSuccess && (
-        <Card>
-          <h2 className="mb-2 text-sm font-semibold text-text">Verified lab values</h2>
-          <LabResults patientId={patientId} />
-        </Card>
-      )}
-      {documents.isSuccess && (
-        <Card>
-          <h2 className="mb-2 text-sm font-semibold text-text">Prescriptions</h2>
-          <PatientPrescriptions patientId={patientId} />
-        </Card>
-      )}
-      {documents.isSuccess && (
-        <Card>
-          <AskRecords patientId={patientId} />
-        </Card>
-      )}
-      {documents.isSuccess && (
-        <Card>
-          <h2 className="mb-2 text-sm font-semibold text-text">Timeline</h2>
-          <Timeline patientId={patientId} />
-        </Card>
+          {tab === 'overview' && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <SectionHeader
+                  icon={FlaskConical}
+                  title="Verified lab values"
+                  description="Values a doctor has checked against the source document."
+                  className="mb-3"
+                />
+                <LabResults patientId={patientId} />
+              </Card>
+              <FollowUpsForPatient patientId={patientId} />
+              <Card className="lg:col-span-2">
+                <SectionHeader icon={Pill} title="Previous prescriptions" className="mb-3" />
+                <PatientPrescriptions patientId={patientId} audience="doctor" />
+              </Card>
+            </div>
+          )}
+          {tab === 'documents' && (
+            <Card>
+              {documents.data.length === 0 ? (
+                <EmptyState compact icon={FileText} title="No documents shared">
+                  The patient has not uploaded documents, or none of the shared kinds.
+                </EmptyState>
+              ) : (
+                <DocumentList
+                  documents={documents.data}
+                  download={download}
+                  renderDetails={(d) => <ReviewValues documentId={d.id} />}
+                />
+              )}
+            </Card>
+          )}
+          {tab === 'timeline' && (
+            <Card>
+              <Timeline patientId={patientId} />
+            </Card>
+          )}
+          {tab === 'ask' && (
+            <Card>
+              <AskRecords patientId={patientId} />
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from 'react-router';
 import { BackLink } from '../../components/ui/BackLink.jsx';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MAX_PRESCRIPTION_ITEMS, MEDICATION_ROUTES } from '@healthbridge/shared';
-import { consultationApi } from '../../lib/domainApi.js';
+import { consultationApi, doctorsApi, followUpApi, schedulingApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge, StatusBadge } from '../../components/ui/Badge.jsx';
@@ -12,13 +12,28 @@ import { TextAreaField } from '../../components/ui/Fields.jsx';
 import { LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
-import { ArrowLeft, Building2, FileSignature, PenLine, Video } from 'lucide-react';
+import {
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  FileSignature,
+  FolderOpen,
+  Lock,
+  PenLine,
+  Play,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  Video,
+} from 'lucide-react';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import { ageFrom, coversDocuments, useSharedRecords } from '../doctors/doctorWork.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
-import { MODE_LABELS, formatDateTime } from '../appointments/format.js';
-import { PrescriptionList } from './Prescriptions.jsx';
+import { MODE_LABELS, formatDateOnly, formatDateTime } from '../appointments/format.js';
+import { PrescriptionCard, PrescriptionList } from './Prescriptions.jsx';
 import { PatientAppointment } from './PatientAppointment.jsx';
 import { EmergencyGuidance, ErrorAlert, NoteView, VideoPanel } from './ConsultationParts.jsx';
 import { SOAP } from './soap.js';
@@ -300,9 +315,11 @@ function PrescriptionSection({ appointmentId, prescriptions, live, onSaved }) {
           />
           {draft && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-muted p-3">
+              <div className="w-full">
+                <PrescriptionCard rx={draft} />
+              </div>
               <p className="text-sm text-text">
-                Draft {draft.reference} with {draft.items.length} medicine
-                {draft.items.length === 1 ? '' : 's'} saved.
+                The draft is saved. Patients see it only after you sign it.
               </p>
               <Button
                 icon={FileSignature}
@@ -421,6 +438,149 @@ function OutcomePanel({ appointmentId, hasSignedNote, onSaved }) {
   );
 }
 
+/** Where the consultation stands: start → signed note → prescription → outcome. */
+function Progress({ c, hasSignedNote, hasSignedRx }) {
+  const steps = [
+    ['Started', Boolean(c)],
+    ['Note signed', hasSignedNote],
+    ['Prescription', hasSignedRx, 'optional'],
+    ['Outcome recorded', Boolean(c?.outcome)],
+  ];
+  return (
+    <ol className="flex flex-wrap gap-2" aria-label="Consultation progress">
+      {steps.map(([label, done, hint], i) => (
+        <li
+          key={label}
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+            done ? 'border-success/40 bg-success/10 text-success' : 'border-border text-text-muted'
+          }`}
+        >
+          {done ? (
+            <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
+          ) : (
+            <span aria-hidden="true">{i + 1}.</span>
+          )}
+          {label}
+          {hint && !done && <span className="font-normal">({hint})</span>}
+          <span className="sr-only">{done ? ' (done)' : ' (to do)'}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Patient context beside the consultation: who, why, what is shared, what is open. */
+function PatientContext({ view, appointmentId }) {
+  const patientId = view.appointment.patientId;
+  const shared = useSharedRecords();
+  const consent = shared.byPatient.get(patientId);
+  const patients = useQuery({
+    queryKey: ['doctors', 'patients'],
+    queryFn: () => doctorsApi.myPatients(),
+  });
+  const followUps = useQuery({
+    queryKey: ['doctor-follow-ups', 'open'],
+    queryFn: () => followUpApi.forDoctor('open'),
+  });
+  // The visit reason is read (and audited) only when the doctor asks for it.
+  const reason = useMutation({ mutationFn: () => schedulingApi.get(appointmentId) });
+  const rel = (patients.data ?? []).find((r) => r.patient?.id === patientId);
+  const name = rel?.patient.fullName ?? consent?.patientName ?? 'Patient';
+  const age = ageFrom(rel?.patient.dateOfBirth);
+  const open = (followUps.data ?? []).filter((f) => f.patientId === patientId);
+  const docs = coversDocuments(consent);
+  return (
+    <Card className="space-y-4 lg:sticky lg:top-6">
+      <PersonIdentity
+        name={name}
+        tone="neutral"
+        detail={age !== null ? `${age} years` : undefined}
+      />
+      <div className="text-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle">
+          Reason for visit
+        </p>
+        {reason.data ? (
+          <p className="mt-1 whitespace-pre-wrap text-text">{reason.data.reason || '—'}</p>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-1"
+            onClick={() => reason.mutate()}
+            loading={reason.isPending}
+          >
+            Show reason
+          </Button>
+        )}
+      </div>
+      <div className="text-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle">Records</p>
+        {consent ? (
+          <p className="mt-1 flex items-start gap-1.5 text-text">
+            <ShieldCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span>
+              Shared until {formatDateTime(consent.expiresAt)}
+              {!docs && ' (profile only)'}
+            </span>
+          </p>
+        ) : (
+          <p className="mt-1 flex items-start gap-1.5 text-text-muted">
+            <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            Not shared. Only the patient can share their records.
+          </p>
+        )}
+        {docs && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <ButtonLink
+              as={Link}
+              to={`/app/medical-records/${patientId}`}
+              target="_blank"
+              rel="noopener"
+              size="sm"
+              variant="secondary"
+              icon={FolderOpen}
+            >
+              Records
+            </ButtonLink>
+            <ButtonLink
+              as={Link}
+              to={`/app/appointments/${appointmentId}/brief`}
+              target="_blank"
+              rel="noopener"
+              size="sm"
+              variant="secondary"
+              icon={Sparkles}
+            >
+              AI brief
+            </ButtonLink>
+          </div>
+        )}
+        {docs && (
+          <p className="mt-1 text-xs text-text-subtle">
+            Opens in a new tab; the call keeps running.
+          </p>
+        )}
+      </div>
+      {open.length > 0 && (
+        <div className="text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle">
+            Open follow-ups
+          </p>
+          <ul className="mt-1 space-y-1">
+            {open.map((f) => (
+              <li key={f.id} className="flex items-center justify-between gap-2">
+                <span className="text-text">Due {formatDateOnly(f.dueOn)}</span>
+                <StatusBadge status={f.status} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function DoctorView({ view, status, appointmentId, refresh }) {
   const start = useMutation({
     mutationFn: () => consultationApi.start(appointmentId),
@@ -430,75 +590,119 @@ function DoctorView({ view, status, appointmentId, refresh }) {
   const live = c?.status === 'live';
   const draft = view.notes.find((n) => n.status === 'draft');
   const current = view.notes.find((n) => n.status === 'signed');
+  const earlier = view.notes.filter((n) => n.status !== 'draft' && n.status !== 'signed');
+  const hasSignedRx = view.prescriptions.some((p) => p.status === 'signed');
   const canStart = ['confirmed', 'checked_in'].includes(view.appointment.status);
+  const present = status?.waitingRoom.patientPresent;
   return (
-    <div className="space-y-4">
-      {!c && (
-        <Card>
-          <p className="text-sm text-text">
-            {view.appointment.mode === 'online'
-              ? status?.waitingRoom.patientPresent
-                ? 'The patient is in the waiting room.'
-                : 'The patient has not joined the waiting room yet.'
-              : 'Start once the patient has checked in at the clinic.'}
-          </p>
-          <ErrorAlert error={start.error} />
-          {canStart && (
-            <Button className="mt-3" onClick={() => start.mutate()} disabled={start.isPending}>
-              Start consultation
-            </Button>
-          )}
-        </Card>
-      )}
-      {live && c.video && <VideoPanel appointmentId={appointmentId} />}
-      {c && (
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-text">Consultation note (SOAP)</h2>
-          {live && !current ? (
-            <NoteEditor
-              key={draft?.id ?? 'new'}
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-w-0 space-y-4">
+        <Progress c={c} hasSignedNote={Boolean(current)} hasSignedRx={hasSignedRx} />
+        {!c && (
+          <Card>
+            <p className="flex items-center gap-2 text-sm text-text">
+              {view.appointment.mode === 'online' ? (
+                present ? (
+                  <>
+                    <UserCheck aria-hidden="true" className="h-4 w-4 text-success" />
+                    The patient is in the waiting room.
+                  </>
+                ) : (
+                  'The patient has not joined the waiting room yet. You can start when you are ready.'
+                )
+              ) : view.appointment.status === 'checked_in' ? (
+                'The patient has checked in at the clinic.'
+              ) : (
+                'Start once the patient has checked in at the clinic.'
+              )}
+            </p>
+            <ErrorAlert error={start.error} />
+            {canStart && (
+              <Button
+                className="mt-3"
+                icon={Play}
+                onClick={() => start.mutate()}
+                loading={start.isPending}
+              >
+                Start consultation
+              </Button>
+            )}
+          </Card>
+        )}
+        {live && c.video && <VideoPanel appointmentId={appointmentId} />}
+        {c && (
+          <Card>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-text">Consultation note</h2>
+              {current ? (
+                <Badge tone="success" icon={Lock}>
+                  Signed · locked
+                </Badge>
+              ) : live ? (
+                <Badge tone="warning">Draft · not in the record until signed</Badge>
+              ) : null}
+            </div>
+            {live && !current ? (
+              <NoteEditor
+                key={draft?.id ?? 'new'}
+                appointmentId={appointmentId}
+                draft={draft}
+                onSaved={refresh}
+              />
+            ) : null}
+            {current && (
+              <div className="space-y-3">
+                <NoteView note={current} />
+                <NoteCorrection key={current.id} note={current} onSaved={refresh} />
+              </div>
+            )}
+            {earlier.length > 0 && (
+              <details className="mt-4 border-t border-border pt-3">
+                <summary className="cursor-pointer text-sm text-text-muted">
+                  Earlier versions ({earlier.length})
+                </summary>
+                <div className="mt-3 space-y-4 opacity-80">
+                  {earlier.map((n) => (
+                    <NoteView key={n.id} note={n} />
+                  ))}
+                </div>
+              </details>
+            )}
+            {!live && !current && !earlier.length && (
+              <p className="text-sm text-text-muted">No note was signed.</p>
+            )}
+          </Card>
+        )}
+        {c && (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-text">Prescription</h2>
+            <PrescriptionSection
               appointmentId={appointmentId}
-              draft={draft}
+              prescriptions={view.prescriptions}
+              live={live}
               onSaved={refresh}
             />
-          ) : null}
-          <div className="space-y-4">
-            {view.notes
-              .filter((n) => n.status !== 'draft')
-              .map((n) => (
-                <NoteView key={n.id} note={n} />
-              ))}
-            {current && <NoteCorrection key={current.id} note={current} onSaved={refresh} />}
-          </div>
-        </Card>
-      )}
-      {c && (
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-text">Prescription</h2>
-          <PrescriptionSection
-            appointmentId={appointmentId}
-            prescriptions={view.prescriptions}
-            live={live}
-            onSaved={refresh}
-          />
-        </Card>
-      )}
-      {live && (
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-text">End the consultation</h2>
-          <OutcomePanel
-            appointmentId={appointmentId}
-            hasSignedNote={Boolean(current)}
-            onSaved={refresh}
-          />
-        </Card>
-      )}
-      {c?.outcome && (
-        <Alert tone={c.outcome === 'emergency_escalation' ? 'error' : 'success'}>
-          Outcome recorded: {OUTCOME_LABELS[c.outcome]}
-          {c.outcomeDetail?.followUpOn && ` · follow-up on ${c.outcomeDetail.followUpOn}`}
-        </Alert>
-      )}
+          </Card>
+        )}
+        {live && (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-text">End the consultation</h2>
+            <OutcomePanel
+              appointmentId={appointmentId}
+              hasSignedNote={Boolean(current)}
+              onSaved={refresh}
+            />
+          </Card>
+        )}
+        {c?.outcome && (
+          <Alert tone={c.outcome === 'emergency_escalation' ? 'error' : 'success'}>
+            Outcome recorded: {OUTCOME_LABELS[c.outcome]}
+            {c.outcomeDetail?.followUpOn &&
+              ` · follow-up on ${formatDateOnly(c.outcomeDetail.followUpOn)}`}
+          </Alert>
+        )}
+      </div>
+      <PatientContext view={view} appointmentId={appointmentId} />
     </div>
   );
 }

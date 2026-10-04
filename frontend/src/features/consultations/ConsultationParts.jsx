@@ -54,7 +54,10 @@ export function NoteView({ note, patient = false }) {
         {note.signedAt && ` · signed ${formatDateTime(note.signedAt)}`}
       </p>
       {note.correctionReason && (
-        <p className="text-xs text-text-muted">Correction: {note.correctionReason}</p>
+        <p className="rounded-lg bg-surface-muted px-3 py-2 text-sm text-text">
+          <span className="font-medium">Corrects version {note.version - 1}:</span>{' '}
+          {note.correctionReason}
+        </p>
       )}
       <dl className="grid gap-2 sm:grid-cols-2">
         {SOAP.filter(([key]) => note.note[key]).map(([key, label]) => (

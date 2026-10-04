@@ -7,17 +7,22 @@ import {
   doctorProfileSchema,
   doctorProfileUpdateSchema,
 } from '@healthbridge/shared';
-import { doctorsApi, clinicsApi } from '../../lib/domainApi.js';
+import { doctorsApi, clinicsApi, schedulingApi } from '../../lib/domainApi.js';
 import { ApiError } from '../../lib/apiClient.js';
 import { applyFieldErrors, authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Button } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
-import { ClipboardList } from 'lucide-react';
-import { PageHeader } from '../../components/ui/Typography.jsx';
+import { Building2, CalendarClock, ClipboardList, Eye } from 'lucide-react';
+import { Link } from 'react-router';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import { AvailabilitySummary, DoctorCredentials } from '../care/DoctorInfo.jsx';
+import { useDoctorProfile, useDoctorSlots } from '../care/doctorInfo.js';
+import { MODE_LABELS, formatFee } from '../appointments/format.js';
+import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
 
 const LOCKED = new Set(['pending', 'under_review', 'verified']);
@@ -93,8 +98,13 @@ function DoctorForm({ profile, onSaved }) {
     },
   });
 
+  const extraQualifications = profile?.qualifications?.slice(1) ?? [];
   const onSubmit = async (values) => {
     setMessage(null);
+    // The form edits the primary qualification; any others are kept, never dropped.
+    if (values.qualifications) {
+      values = { ...values, qualifications: [values.qualifications[0], ...extraQualifications] };
+    }
     try {
       if (profile) await doctorsApi.updateMe(values);
       else await doctorsApi.createMe(values);
@@ -137,6 +147,13 @@ function DoctorForm({ profile, onSaved }) {
         {f('degree', 'Degree')}
         {f('institution', 'Institution')}
         {f('qualificationYear', 'Year', { type: 'number' })}
+        {extraQualifications.length > 0 && (
+          <p className="text-sm text-text-muted sm:col-span-3">
+            Also on your profile:{' '}
+            {extraQualifications.map((q) => `${q.degree}, ${q.institution} (${q.year})`).join('; ')}
+            . These are kept when you save.
+          </p>
+        )}
       </fieldset>
       <div>
         <label htmlFor="doctor-bio" className="block text-sm font-medium text-text">
@@ -203,7 +220,11 @@ function Clinics() {
   });
   return (
     <Card>
-      <h2 className="text-base font-semibold text-text">Clinics</h2>
+      <SectionHeader
+        icon={Building2}
+        title="Clinic membership"
+        description="In-clinic hours can be published only at clinics where you are an active member. A clinic administrator invites you."
+      />
       {clinics.data?.length === 0 && (
         <p className="mt-2 text-sm text-text-muted">You are not a member of any clinic yet.</p>
       )}
@@ -233,6 +254,80 @@ function Clinics() {
   );
 }
 
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function PublicPreview({ profile }) {
+  const verified = profile.verificationStatus === 'verified';
+  const publicProfile = useDoctorProfile(profile.id, { enabled: verified });
+  const slots = useDoctorSlots(profile.id, { enabled: verified });
+  const rules = useQuery({
+    queryKey: ['availability'],
+    queryFn: schedulingApi.rules,
+    enabled: verified,
+    retry: false,
+  });
+  const doctor = publicProfile.data ?? profile;
+  return (
+    <Card>
+      <SectionHeader
+        icon={Eye}
+        title="How patients see you"
+        description={
+          verified
+            ? 'This is your profile as patients see it when they search for a doctor.'
+            : 'Patients will see this once your registration is verified. Until then you are not listed.'
+        }
+        actions={
+          verified && (
+            <ButtonLink
+              as={Link}
+              to="/app/appointments?tab=availability"
+              variant="secondary"
+              size="sm"
+              icon={CalendarClock}
+            >
+              Edit hours
+            </ButtonLink>
+          )
+        }
+      />
+      <div className="mt-4 space-y-5">
+        <PersonIdentity
+          name={doctor.professionalName}
+          verified={verified}
+          detail={doctor.primarySpecialization}
+          size="lg"
+        />
+        <DoctorCredentials doctor={doctor} />
+        {verified && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
+              Consultation types, fees and next free times
+            </p>
+            <AvailabilitySummary slots={slots} />
+            {rules.data && (
+              <p className="mt-2 text-sm text-text-muted">
+                Weekly hours:{' '}
+                {rules.data.length
+                  ? [...rules.data]
+                      .sort(
+                        (x, y) => x.weekday - y.weekday || x.startTime.localeCompare(y.startTime),
+                      )
+                      .map(
+                        (r) =>
+                          `${WEEKDAYS[r.weekday - 1]} ${r.startTime}–${r.endTime} ${MODE_LABELS[r.mode].toLowerCase()} (${formatFee(r.feePaise)})`,
+                      )
+                      .join(' · ')
+                  : 'none published yet, so patients can’t book you.'}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function DoctorProfilePage() {
   const queryClient = useQueryClient();
   const profile = useQuery({ queryKey: ['doctors', 'me'], queryFn: doctorsApi.me, retry: false });
@@ -248,7 +343,13 @@ export function DoctorProfilePage() {
       />
       {profile.isPending && <Skeleton className="h-40 w-full" />}
       {profile.data && <Verification profile={profile.data} onChange={refresh} />}
+      {profile.data && <PublicPreview profile={profile.data} />}
       <Card>
+        <SectionHeader
+          icon={ClipboardList}
+          title={profile.data ? 'Edit your details' : 'Create your professional profile'}
+          className="mb-5"
+        />
         {(profile.data || missing) && (
           <DoctorForm
             key={profile.data?.updatedAt ?? 'new'}

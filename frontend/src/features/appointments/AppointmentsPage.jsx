@@ -25,6 +25,7 @@ import {
   Video,
 } from 'lucide-react';
 import { AvailabilityManager } from './AvailabilityManager.jsx';
+import { Legend, WeekAgenda, WeekGrid } from './WeekGrid.jsx';
 import {
   MODE_LABELS,
   formatDateTime,
@@ -307,6 +308,8 @@ function ScheduleItem({ a, now, onAction, pending }) {
   );
 }
 
+const GONE = ['cancelled', 'expired'];
+
 function DoctorSchedule() {
   const queryClient = useQueryClient();
   const [range] = useState(weekRange);
@@ -356,8 +359,8 @@ function DoctorSchedule() {
       {schedule.isPending && <LoadingState label="Loading schedule" rows={2} />}
       {schedule.data?.length === 0 && (
         <EmptyState icon={CalendarDays} title="No appointments in the next week">
-          New bookings appear here as patients book from your availability. Check the Availability
-          tab to make sure your hours are up to date.
+          New bookings appear here as patients book from your published hours. Check “Hours & time
+          off” to make sure they are up to date.
         </EmptyState>
       )}
       {days.map(([key, items]) => (
@@ -367,42 +370,144 @@ function DoctorSchedule() {
             {formatDay(items[0].startsAt)}
           </h2>
           <ul className="mt-2 divide-y divide-border">
-            {items.map((a) => (
-              <ScheduleItem
-                key={a.id}
-                a={a}
-                now={now}
-                pending={act.isPending}
-                onAction={onAction}
-              />
-            ))}
+            {items
+              .filter((a) => !GONE.includes(a.status))
+              .map((a) => (
+                <ScheduleItem
+                  key={a.id}
+                  a={a}
+                  now={now}
+                  pending={act.isPending}
+                  onAction={onAction}
+                />
+              ))}
           </ul>
+          {items.some((a) => GONE.includes(a.status)) && (
+            <details className="mt-2 border-t border-border pt-2">
+              <summary className="cursor-pointer text-sm text-text-muted">
+                Cancelled or released ({items.filter((a) => GONE.includes(a.status)).length})
+              </summary>
+              <ul className="mt-1 divide-y divide-border opacity-80">
+                {items
+                  .filter((a) => GONE.includes(a.status))
+                  .map((a) => (
+                    <ScheduleItem key={a.id} a={a} now={now} pending onAction={onAction} />
+                  ))}
+              </ul>
+            </details>
+          )}
         </Card>
       ))}
     </div>
   );
 }
 
+const DAY_MS = 86_400_000;
+const mondayOf = (d) => {
+  const m = new Date(d);
+  m.setHours(0, 0, 0, 0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+};
+
+function DoctorWeek() {
+  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
+  const weekEnd = new Date(weekStart.getTime() + 7 * DAY_MS);
+  const appts = useQuery({
+    queryKey: ['doctor-schedule', 'week', weekStart.toISOString()],
+    queryFn: () => schedulingApi.doctorSchedule(weekStart.toISOString(), weekEnd.toISOString()),
+  });
+  const rules = useQuery({ queryKey: ['availability'], queryFn: schedulingApi.rules });
+  const timeOff = useQuery({ queryKey: ['time-off'], queryFn: schedulingApi.timeOff });
+  const data = {
+    weekStart,
+    rules: rules.data ?? [],
+    appointments: appts.data ?? [],
+    timeOff: timeOff.data ?? [],
+  };
+  const fmt = (d) => new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(d);
+  const booked = (appts.data ?? []).filter((a) =>
+    ['confirmed', 'checked_in', 'in_consultation', 'completed'].includes(a.status),
+  ).length;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label="Previous week"
+            onClick={() => setWeekStart(new Date(weekStart.getTime() - 7 * DAY_MS))}
+          >
+            ‹
+          </Button>
+          <h2 className="min-w-40 text-center text-base font-semibold text-text">
+            {fmt(weekStart)} – {fmt(new Date(weekEnd.getTime() - DAY_MS))}
+          </h2>
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label="Next week"
+            onClick={() => setWeekStart(new Date(weekStart.getTime() + 7 * DAY_MS))}
+          >
+            ›
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setWeekStart(mondayOf(new Date()))}>
+            This week
+          </Button>
+        </div>
+        <p className="text-sm text-text-muted">
+          {appts.isSuccess ? `${booked} booked this week` : 'Loading…'}
+        </p>
+      </div>
+      <div className="mt-4">
+        <Legend />
+      </div>
+      {(appts.isError || rules.isError) && (
+        <Alert tone="error" className="mt-4">
+          {authErrorMessage(appts.error ?? rules.error)}
+        </Alert>
+      )}
+      <div className="mt-4 hidden md:block">
+        <WeekGrid {...data} />
+      </div>
+      <div className="mt-4 md:hidden">
+        <WeekAgenda {...data} />
+      </div>
+      <p className="mt-3 text-xs text-text-subtle">
+        Open any appointment to see the patient and start the consultation. Change hours or add time
+        off under “Hours &amp; time off”.
+      </p>
+    </Card>
+  );
+}
+
+const DOCTOR_TABS = ['week', 'list', 'availability'];
+
 function DoctorAppointments() {
-  const [tab, setTab] = useState('schedule');
+  const [params, setParams] = useSearchParams();
+  const tab = DOCTOR_TABS.includes(params.get('tab')) ? params.get('tab') : 'week';
   return (
     <div className="space-y-6">
       <PageHeader
         icon={CalendarDays}
         eyebrow="Clinical work"
         title="Schedule"
-        description="Your appointments for the next week, and the hours when patients can book you."
+        description="Your week at a glance: published hours, booked consultations, payment holds and time off."
       />
       <Tabs
-        label="Appointments"
+        label="Schedule"
         value={tab}
-        onChange={setTab}
+        onChange={(t) => setParams(t === 'week' ? {} : { tab: t }, { replace: true })}
         tabs={[
-          ['schedule', 'Appointments', CalendarDays],
-          ['availability', 'Availability', CalendarClock],
+          ['week', 'Week', CalendarDays],
+          ['list', 'Appointments', ClipboardList],
+          ['availability', 'Hours & time off', CalendarClock],
         ]}
       />
-      {tab === 'schedule' ? <DoctorSchedule /> : <AvailabilityManager />}
+      {tab === 'week' && <DoctorWeek />}
+      {tab === 'list' && <DoctorSchedule />}
+      {tab === 'availability' && <AvailabilityManager />}
     </div>
   );
 }

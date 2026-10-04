@@ -16,8 +16,9 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
-import { Frown, HeartPulse, Meh, Phone, Smile } from 'lucide-react';
-import { Link } from 'react-router';
+import { AlertTriangle, CheckCircle2, Frown, HeartPulse, Meh, Phone, Smile } from 'lucide-react';
+import { Tabs } from '../../components/ui/Tabs.jsx';
+import { Link, useSearchParams } from 'react-router';
 import { ButtonLink } from '../../components/ui/Button.jsx';
 import { TextAreaField } from '../../components/ui/Fields.jsx';
 import { MissingProfileNotice } from '../patients/MissingProfileNotice.jsx';
@@ -33,7 +34,7 @@ const STATUS_LABELS = {
   scheduled: 'Scheduled',
   awaiting_response: 'Waiting for answer',
   responded: 'Answered',
-  needs_attention: 'Needs review',
+  needs_attention: 'Needs attention',
   urgent: 'Urgent',
   closed: 'Closed',
   cancelled: 'Cancelled',
@@ -327,7 +328,10 @@ function ScheduleForm({ onDone }) {
           label="Patient"
           placeholder="Choose a patient"
           value={patientId}
-          options={active.map((r) => ({ value: r.patient.id, label: r.patient.displayName }))}
+          options={active.map((r) => ({
+            value: r.patient.id,
+            label: r.patient.fullName ?? r.patient.displayName,
+          }))}
           onChange={(e) => setPatientId(e.target.value)}
         />
         <TextField
@@ -399,14 +403,50 @@ function FollowUpDetail({ id, onChanged }) {
   );
 }
 
+/** Doctor's buckets, most urgent first. */
+const DOCTOR_BUCKETS = [
+  ['urgent', 'Urgent', ['urgent']],
+  ['attention', 'Needs attention', ['needs_attention']],
+  ['answered', 'Answered', ['responded']],
+  ['waiting', 'Waiting for patient', ['scheduled', 'awaiting_response']],
+  ['closed', 'Closed', ['closed', 'cancelled']],
+];
+const BUCKET_HELP = {
+  urgent: 'The patient reported a warning sign and was shown emergency guidance immediately.',
+  attention:
+    'Answers the fixed rules flagged for your review (for example, feeling worse, or no answer after reminders).',
+  answered: 'Answered with nothing flagged. Review and close.',
+  waiting: 'Not due yet, or waiting for the patient to answer.',
+  closed: 'Reviewed and closed, or cancelled.',
+};
+
 function DoctorFollowUps() {
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState('open');
-  const [openId, setOpenId] = useState(null);
+  const [params] = useSearchParams();
+  const [openId, setOpenId] = useState(() => params.get('open'));
+  const [scheduling, setScheduling] = useState(false);
   const list = useQuery({
-    queryKey: ['doctor-follow-ups', filter],
-    queryFn: () => followUpApi.forDoctor(filter === 'all' ? undefined : filter),
+    queryKey: ['doctor-follow-ups', 'all'],
+    queryFn: () => followUpApi.forDoctor(),
   });
+  const items = list.data ?? [];
+  const counts = Object.fromEntries(
+    DOCTOR_BUCKETS.map(([key, , statuses]) => [
+      key,
+      items.filter((f) => statuses.includes(f.status)).length,
+    ]),
+  );
+  const target = items.find((f) => f.id === openId);
+  const firstWithItems = DOCTOR_BUCKETS.find(([key]) => counts[key] > 0)?.[0] ?? 'urgent';
+  const [chosen, setBucket] = useState(null);
+  const bucket =
+    chosen ??
+    (target && DOCTOR_BUCKETS.find(([, , st]) => st.includes(target.status))?.[0]) ??
+    firstWithItems;
+  const statuses = DOCTOR_BUCKETS.find(([key]) => key === bucket)[2];
+  const shown = items
+    .filter((f) => statuses.includes(f.status))
+    .sort((x, y) => x.dueOn.localeCompare(y.dueOn));
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['doctor-follow-ups'] });
     queryClient.invalidateQueries({ queryKey: ['follow-up'] });
@@ -417,39 +457,70 @@ function DoctorFollowUps() {
         icon={HeartPulse}
         eyebrow="Clinical work"
         title="Follow-ups"
-        description="Check-ins after consultations. Urgent answers come first; warning signs are escalated by fixed rules, never by AI."
+        description="Check-ins after consultations, urgent first. Warning signs are escalated by fixed rules, never by AI."
+        actions={
+          <Button variant="secondary" onClick={() => setScheduling((v) => !v)}>
+            {scheduling ? 'Close' : 'Schedule a check-in'}
+          </Button>
+        }
       />
-      <ScheduleForm onDone={refresh} />
-      <SelectField
-        className="max-w-xs"
-        label="Show"
-        value={filter}
-        options={[
-          { value: 'open', label: 'Open' },
-          { value: 'urgent', label: 'Urgent' },
-          { value: 'needs_attention', label: 'Needs review' },
-          { value: 'all', label: 'All' },
-        ]}
-        onChange={(e) => setFilter(e.target.value)}
+      {scheduling && <ScheduleForm onDone={refresh} />}
+      <Tabs
+        label="Follow-ups"
+        value={bucket}
+        onChange={setBucket}
+        tabs={DOCTOR_BUCKETS.map(([key, label]) => [
+          key,
+          `${label}${counts[key] ? ` (${counts[key]})` : ''}`,
+          key === 'urgent' ? AlertTriangle : undefined,
+        ])}
       />
-      {list.isPending && <Skeleton className="h-24 w-full" />}
+      <p className="text-sm text-text-muted">{BUCKET_HELP[bucket]}</p>
+      {list.isPending && <LoadingState label="Loading follow-ups" rows={2} />}
       {list.isError && <Alert tone="error">{authErrorMessage(list.error)}</Alert>}
-      {list.data?.length === 0 && <EmptyState title="No follow-ups">Nothing to review.</EmptyState>}
+      {list.isSuccess && shown.length === 0 && (
+        <EmptyState compact icon={CheckCircle2} title="Nothing here">
+          {bucket === 'urgent'
+            ? 'No urgent check-ins. Urgent answers appear here first.'
+            : 'No follow-ups in this group.'}
+        </EmptyState>
+      )}
       <ul className="space-y-3">
-        {list.data?.map((f) => (
+        {shown.map((f) => (
           <li key={f.id}>
-            <Card>
+            <Card className={f.status === 'urgent' ? 'border-danger/50' : ''}>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
-                  {f.patientName ?? 'Patient'} · due {f.dueOn}
-                  <Badge tone={ESCALATION_TONES[f.escalation.level]}>
-                    {STATUS_LABELS[f.status]}
-                  </Badge>
-                  {f.escalation.reasons.includes('no_response') && <StatusBadge status="pending" />}
-                </p>
-                <Button variant="ghost" onClick={() => setOpenId(openId === f.id ? null : f.id)}>
-                  {openId === f.id ? 'Hide' : 'Review'}
-                </Button>
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 font-medium text-text">
+                    {f.patientName ?? 'Patient'}
+                    <StatusBadge status={f.status} label={STATUS_LABELS[f.status]} />
+                    {f.escalation.reasons.includes('no_response') && (
+                      <Badge tone="warning">No answer after reminders</Badge>
+                    )}
+                  </p>
+                  <p className="text-sm text-text-muted">
+                    Due {formatDateOnly(f.dueOn)}
+                    {f.respondedAt && ` · answered ${formatDateTime(f.respondedAt)}`}
+                  </p>
+                </div>
+                <span className="flex flex-wrap gap-2">
+                  <ButtonLink
+                    as={Link}
+                    to={`/app/medical-records/${f.patientId}`}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    Patient record
+                  </ButtonLink>
+                  <Button
+                    variant={openId === f.id ? 'ghost' : 'secondary'}
+                    size="sm"
+                    aria-expanded={openId === f.id}
+                    onClick={() => setOpenId(openId === f.id ? null : f.id)}
+                  >
+                    {openId === f.id ? 'Hide' : 'Review'}
+                  </Button>
+                </span>
               </div>
               {openId === f.id && <FollowUpDetail id={f.id} onChanged={refresh} />}
             </Card>

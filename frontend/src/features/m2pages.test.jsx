@@ -158,7 +158,9 @@ describe('doctor workspace', () => {
     renderAt('/app/patients');
     const request = (await screen.findByText('Vikram')).closest('li');
     expect(within(request).getByRole('button', { name: 'Accept' })).toBeInTheDocument();
-    const myPatients = screen.getByRole('heading', { name: 'My patients' }).closest('section');
+    const myPatients = screen
+      .getByRole('heading', { name: /Care team patients/ })
+      .closest('section');
     expect(myPatients).toHaveTextContent('Asha Rao');
   });
 });

@@ -94,7 +94,7 @@ describe('follow-ups', () => {
   it('doctor reviews an urgent check-in with the labelled AI summary', async () => {
     signedIn(['DOCTOR'], {
       'GET /api/v1/doctors/me/patients': () => json(200, { data: [] }),
-      'GET /api/v1/doctors/me/follow-ups?status=open': () =>
+      'GET /api/v1/doctors/me/follow-ups': () =>
         json(200, {
           data: [followUp({ status: 'urgent', escalation: { level: 'urgent', reasons: [] } })],
         }),
@@ -117,7 +117,12 @@ describe('follow-ups', () => {
         }),
     });
     open('/app/follow-ups');
-    expect(await screen.findByText(/Asha Rao · due 2026-10-12/)).toBeInTheDocument();
+    // Urgent check-ins are shown first, with the due date in words.
+    expect(await screen.findByRole('tab', { name: /Urgent \(1\)/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByText(/Due Monday, 12 October/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(await screen.findByText('Warning signs: Difficulty breathing')).toBeInTheDocument();
     expect(screen.getByText('AI-generated')).toBeInTheDocument();

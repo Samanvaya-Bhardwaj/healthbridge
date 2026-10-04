@@ -112,7 +112,7 @@ describe('consultation room', () => {
     expect(await screen.findByText('The patient is in the waiting room.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Start consultation' }));
     expect(calls.some((c) => c.key === `POST ${BASE}/start`)).toBe(true);
-    expect(await screen.findByText('Consultation note (SOAP)')).toBeInTheDocument();
+    expect(await screen.findByText('Consultation note')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Join video' })).toBeInTheDocument();
     // Outcome C needs explicit confirmation.
     await userEvent.click(screen.getByLabelText('Emergency care advised'));

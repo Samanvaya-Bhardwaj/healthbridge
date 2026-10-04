@@ -25,8 +25,9 @@ import { ButtonLink } from '../../components/ui/Button.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { ApiError } from '../../lib/apiClient.js';
-import { adminApi, doctorsApi, followUpApi, schedulingApi } from '../../lib/domainApi.js';
+import { adminApi, schedulingApi } from '../../lib/domainApi.js';
 import { PatientHome } from './PatientHome.jsx';
+import { DoctorToday } from './DoctorToday.jsx';
 import { MODE_LABELS, formatTime } from '../appointments/format.js';
 
 const todayRange = () => {
@@ -86,167 +87,6 @@ function SectionLinks({ user, exclude = [] }) {
         );
       })}
     </ul>
-  );
-}
-
-// ── Doctor ───────────────────────────────────────────────────────────
-
-const ATTENTION = ['urgent', 'needs_attention', 'responded'];
-
-function DoctorHome({ user, firstName }) {
-  const range = todayRange();
-  const today = useQuery({
-    queryKey: ['doctor-today', range.from],
-    queryFn: () => schedulingApi.doctorSchedule(range.from, range.to),
-  });
-  const followUps = useQuery({
-    queryKey: ['follow-ups', 'doctor', 'open'],
-    queryFn: () => followUpApi.forDoctor('open'),
-  });
-  const patients = useQuery({
-    queryKey: ['doctor-patients'],
-    queryFn: () => doctorsApi.myPatients(),
-  });
-  const attention = (followUps.data ?? []).filter((f) => ATTENTION.includes(f.status));
-  const requests = (patients.data ?? []).filter((r) => r.status === 'pending');
-  const visits = (today.data ?? []).filter((a) => !['cancelled', 'expired'].includes(a.status));
-
-  return (
-    <div className="space-y-8">
-      <PageHeader
-        icon={Activity}
-        eyebrow={longDate()}
-        title="Today"
-        description={`Hello, ${firstName}. Your consultations for today, and patients who need your attention.`}
-        actions={
-          <ButtonLink as={Link} to="/app/appointments" variant="secondary" icon={CalendarDays}>
-            Full schedule
-          </ButtonLink>
-        }
-      />
-
-      <section aria-labelledby="today-heading" className="space-y-3">
-        <SectionHeader id="today-heading" icon={CalendarDays} title="Today’s consultations" />
-        {today.isPending ? (
-          <LoadingState label="Loading today’s schedule" rows={2} />
-        ) : visits.length === 0 ? (
-          <EmptyState
-            compact
-            icon={CalendarDays}
-            title="No consultations today"
-            action={
-              <ButtonLink as={Link} to="/app/appointments" variant="secondary" size="sm">
-                Check availability
-              </ButtonLink>
-            }
-          >
-            Patients book from your availability. Make sure your hours are up to date.
-          </EmptyState>
-        ) : (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-surface-raised">
-            {visits.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="w-14 shrink-0 text-sm font-semibold tabular-nums text-text">
-                    {formatTime(a.startsAt)}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-text">
-                      {a.patient?.fullName ?? `Ref ${a.reference}`}
-                    </span>
-                    <span className="block text-sm text-text-subtle">
-                      {MODE_LABELS[a.mode]}
-                      {a.clinic && ` · ${a.clinic.name}`}
-                    </span>
-                  </span>
-                  <StatusBadge status={a.status} />
-                </div>
-                {['confirmed', 'checked_in', 'in_consultation', 'completed'].includes(a.status) && (
-                  <ButtonLink
-                    as={Link}
-                    to={`/app/appointments/${a.id}/consultation`}
-                    variant={a.status === 'completed' ? 'subtle' : 'secondary'}
-                    size="sm"
-                  >
-                    {a.status === 'completed' ? 'Summary' : 'Open consultation'}
-                  </ButtonLink>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section aria-labelledby="attention-heading" className="space-y-3">
-          <SectionHeader
-            id="attention-heading"
-            icon={HeartPulse}
-            title="Follow-ups needing review"
-            actions={
-              <ButtonLink as={Link} to="/app/follow-ups" variant="subtle" size="sm">
-                All follow-ups
-              </ButtonLink>
-            }
-          />
-          {followUps.isPending ? (
-            <LoadingState label="Loading follow-ups" rows={1} />
-          ) : attention.length === 0 ? (
-            <EmptyState compact icon={CheckCircle2} title="Nothing needs review">
-              Answered check-ins and alerts appear here, urgent first.
-            </EmptyState>
-          ) : (
-            <ul className="space-y-2">
-              {attention.slice(0, 5).map((f) => (
-                <li key={f.id}>
-                  <Link
-                    to="/app/follow-ups"
-                    className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 hover:border-primary/40"
-                  >
-                    <span className="font-medium text-text">{f.patientName}</span>
-                    <StatusBadge status={f.status} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section aria-labelledby="requests-heading" className="space-y-3">
-          <SectionHeader
-            id="requests-heading"
-            icon={UsersRound}
-            title="New patient requests"
-            actions={
-              <ButtonLink as={Link} to="/app/patients" variant="subtle" size="sm">
-                My patients
-              </ButtonLink>
-            }
-          />
-          {patients.isPending ? (
-            <LoadingState label="Loading requests" rows={1} />
-          ) : requests.length === 0 ? (
-            <EmptyState compact icon={UsersRound} title="No new requests">
-              Patients who ask you to join their care team appear here.
-            </EmptyState>
-          ) : (
-            <Alert
-              tone="info"
-              title={`${requests.length} patient${requests.length === 1 ? '' : 's'} asked you to join their care team`}
-              action={
-                <ButtonLink as={Link} to="/app/patients" size="sm">
-                  Review requests
-                </ButtonLink>
-              }
-            />
-          )}
-        </section>
-      </div>
-      <EmergencyNote />
-      <SectionLinks user={user} exclude={['appointments', 'followUps', 'patients']} />
-    </div>
   );
 }
 
@@ -410,7 +250,7 @@ export function RoleHome() {
   const { user } = useAuth();
   const role = primaryRole(user.roles);
   const firstName = user.fullName.split(' ')[0];
-  if (role === 'DOCTOR') return <DoctorHome user={user} firstName={firstName} />;
+  if (role === 'DOCTOR') return <DoctorToday firstName={firstName} />;
   if (role === 'CLINIC_ADMIN') return <ClinicAdminHome user={user} firstName={firstName} />;
   if (role === 'PLATFORM_ADMIN') return <AdminHome user={user} firstName={firstName} />;
   if (role === 'SUPPORT') return <SupportHome user={user} firstName={firstName} />;

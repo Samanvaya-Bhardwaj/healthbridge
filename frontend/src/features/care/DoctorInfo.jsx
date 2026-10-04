@@ -5,15 +5,24 @@ import { AVAILABILITY_DAYS, MODE_ICONS, feeText, summariseSlots } from './doctor
 /** "Who is this doctor, and why trust the profile?" — only what the doctor's profile holds. */
 export function DoctorCredentials({ doctor }) {
   if (!doctor) return null;
+  const verified = doctor.verified ?? doctor.verificationStatus === 'verified';
   const specialities = [doctor.primarySpecialization, ...(doctor.additionalSpecializations ?? [])];
   return (
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
       <div className="sm:col-span-2">
         <dt className="sr-only">Verification</dt>
-        <dd className="flex items-start gap-2 rounded-lg bg-primary-soft px-3 py-2 text-primary">
+        <dd
+          className={`flex items-start gap-2 rounded-lg px-3 py-2 ${
+            verified ? 'bg-primary-soft text-primary' : 'bg-surface-muted text-text-muted'
+          }`}
+        >
           <BadgeCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <span className="font-medium">Registration verified by HealthBridge.</span>{' '}
+            <span className="font-medium">
+              {verified
+                ? 'Registration verified by HealthBridge.'
+                : 'Registration not verified yet.'}
+            </span>{' '}
             <span className="text-text">
               {doctor.registrationCouncil} · Reg. no. {doctor.registrationNumber}
             </span>
