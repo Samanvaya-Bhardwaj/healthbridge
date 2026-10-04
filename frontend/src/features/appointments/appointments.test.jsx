@@ -183,7 +183,15 @@ describe('clinic schedule board', () => {
         [CLINIC]: ['appointments:read', 'appointments:manage', 'clinic:manage'],
       },
     };
-    signedIn(clinicAdmin, {});
+    const calls = signedIn(clinicAdmin, {
+      // The clinic sees payment state only: no reason, no patient identity.
+      'GET /api/v1/appointments/a9': () =>
+        json(200, { data: { id: 'a9', paymentStatus: 'paid', feePaise: 50_000 } }),
+      'POST /api/v1/appointments/a9/refunds': () =>
+        json(202, {
+          data: { id: 'rf1', amountPaise: 20_000, status: 'pending', reason: 'goodwill' },
+        }),
+    });
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (url, init) =>
       String(url).startsWith(`/api/v1/clinics/${CLINIC}/appointments`)
@@ -193,9 +201,12 @@ describe('clinic schedule board', () => {
                 {
                   id: 'a9',
                   reference: 'ZZ99YY88',
+                  doctorId: 'd1',
                   status: 'confirmed',
                   mode: 'in_clinic',
-                  startsAt: inTwoDays(17),
+                  feePaise: 50_000,
+                  startsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+                  endsAt: new Date(Date.now() + 50 * 60_000).toISOString(),
                   doctor: { professionalName: 'Dr. Meera Iyer' },
                 },
               ],
@@ -206,6 +217,23 @@ describe('clinic schedule board', () => {
     const row = (await screen.findByText(/Ref ZZ99YY88/)).closest('li');
     expect(within(row).getByText(/Dr. Meera Iyer/)).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'Check in' })).toBeInTheDocument();
-    expect(screen.getByText(/visible only to the patient and their doctor/)).toBeInTheDocument();
+    expect(within(row).getByText('Not arrived yet')).toBeInTheDocument();
+    expect(await within(row).findByText('Paid ₹500.00')).toBeInTheDocument();
+    // The role boundary is stated on the page.
+    expect(screen.getByText(/Patient names, visit reasons, notes/)).toBeInTheDocument();
+
+    // A partial goodwill refund, explained and confirmed before it is sent.
+    const user = userEvent.setup();
+    await user.click(within(row).getByRole('button', { name: 'Refund' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Refund Ref ZZ99YY88?' });
+    await user.click(within(dialog).getByLabelText('A specific amount'));
+    await user.type(within(dialog).getByLabelText('Amount (₹)'), '200');
+    await user.click(within(dialog).getByRole('button', { name: 'Refund ₹200.00' }));
+    expect(
+      await within(dialog).findByText(/₹200.00 will go back to the patient/),
+    ).toBeInTheDocument();
+    const refund = calls.find((c) => c.key === 'POST /api/v1/appointments/a9/refunds');
+    expect(JSON.parse(refund.init.body)).toEqual({ reasonCode: 'goodwill', amountPaise: 20_000 });
+    expect(refund.init.headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

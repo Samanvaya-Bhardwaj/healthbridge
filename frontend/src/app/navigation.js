@@ -237,7 +237,11 @@ export const ROLE_NAVIGATION = {
       group: 'Clinic',
       description: 'Every appointment at your clinic, day by day.',
     }),
-    as(S.clinic, { group: 'Clinic' }),
+    as(S.clinic, {
+      label: 'Doctors & team',
+      group: 'Clinic',
+      description: 'Clinic details, the doctors practising here and membership.',
+    }),
     as(S.account, { group: 'Account' }),
   ],
   [ROLES.PLATFORM_ADMIN]: [

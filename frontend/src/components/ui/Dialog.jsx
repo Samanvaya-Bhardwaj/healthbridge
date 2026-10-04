@@ -63,7 +63,7 @@ export function Dialog({ open, title, description, onClose, children, footer, to
           aria-labelledby={titleId}
           aria-describedby={description ? descId : undefined}
           onKeyDown={onKeyDown}
-          className="w-full max-w-md rounded-2xl border border-border bg-surface-raised p-6 shadow-overlay"
+          className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface-raised p-6 shadow-overlay"
         >
           <div className="flex gap-3">
             {tone === 'warning' && (

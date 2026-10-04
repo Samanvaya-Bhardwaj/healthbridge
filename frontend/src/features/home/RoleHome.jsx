@@ -25,22 +25,11 @@ import { ButtonLink } from '../../components/ui/Button.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { ApiError } from '../../lib/apiClient.js';
-import { adminApi, schedulingApi } from '../../lib/domainApi.js';
+import { adminApi } from '../../lib/domainApi.js';
 import { PatientHome } from './PatientHome.jsx';
 import { DoctorToday } from './DoctorToday.jsx';
-import { MODE_LABELS, formatTime } from '../appointments/format.js';
-
-const todayRange = () => {
-  const from = new Date();
-  from.setHours(0, 0, 0, 0);
-  const to = new Date(from);
-  to.setDate(to.getDate() + 1);
-  return { from: from.toISOString(), to: to.toISOString() };
-};
-const longDate = () =>
-  new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(
-    new Date(),
-  );
+import { ClinicOverview } from '../clinics/ClinicOverview.jsx';
+import { adminClinicIds } from '../clinics/clinicWork.js';
 
 /** In a medical emergency, HealthBridge is never the right first step. */
 function EmergencyNote() {
@@ -87,71 +76,6 @@ function SectionLinks({ user, exclude = [] }) {
         );
       })}
     </ul>
-  );
-}
-
-// ── Clinic admin ─────────────────────────────────────────────────────
-
-function ClinicAdminHome({ user, firstName }) {
-  const clinicId = (user.clinicRoles ?? []).find((g) => g.role === 'CLINIC_ADMIN')?.clinicId;
-  const range = todayRange();
-  const today = useQuery({
-    queryKey: ['clinic-today', clinicId, range.from],
-    queryFn: () => schedulingApi.clinicSchedule(clinicId, range.from, range.to),
-    enabled: Boolean(clinicId),
-  });
-  const visits = (today.data ?? []).filter((a) => !['cancelled', 'expired'].includes(a.status));
-  return (
-    <div className="space-y-8">
-      <PageHeader
-        icon={LayoutDashboard}
-        eyebrow={longDate()}
-        title="Clinic overview"
-        description={`Hello, ${firstName}. Today’s visits at your clinic and the team behind them.`}
-        actions={
-          <ButtonLink as={Link} to="/app/appointments" variant="secondary" icon={CalendarDays}>
-            Clinic schedule
-          </ButtonLink>
-        }
-      />
-      <section aria-labelledby="clinic-today" className="space-y-3">
-        <SectionHeader id="clinic-today" icon={CalendarDays} title="Today at the clinic" />
-        {!clinicId ? (
-          <EmptyState compact title="No clinic assigned">
-            A platform administrator appoints clinic administrators to a clinic.
-          </EmptyState>
-        ) : today.isPending ? (
-          <LoadingState label="Loading today’s visits" rows={2} />
-        ) : visits.length === 0 ? (
-          <EmptyState compact icon={CalendarDays} title="No visits today">
-            Appointments booked with your clinic’s doctors appear here.
-          </EmptyState>
-        ) : (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-surface-raised">
-            {visits.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="w-14 text-sm font-semibold tabular-nums text-text">
-                    {formatTime(a.startsAt)}
-                  </span>
-                  <span>
-                    <span className="block font-medium text-text">
-                      {a.doctor?.professionalName ?? 'Doctor'}
-                    </span>
-                    <span className="block text-sm text-text-subtle">{MODE_LABELS[a.mode]}</span>
-                  </span>
-                </span>
-                <StatusBadge status={a.status} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <SectionLinks user={user} exclude={['appointments']} />
-    </div>
   );
 }
 
@@ -251,7 +175,8 @@ export function RoleHome() {
   const role = primaryRole(user.roles);
   const firstName = user.fullName.split(' ')[0];
   if (role === 'DOCTOR') return <DoctorToday firstName={firstName} />;
-  if (role === 'CLINIC_ADMIN') return <ClinicAdminHome user={user} firstName={firstName} />;
+  if (role === 'CLINIC_ADMIN')
+    return <ClinicOverview clinicId={adminClinicIds(user)[0]} firstName={firstName} />;
   if (role === 'PLATFORM_ADMIN') return <AdminHome user={user} firstName={firstName} />;
   if (role === 'SUPPORT') return <SupportHome user={user} firstName={firstName} />;
   return <PatientHome firstName={firstName} />;

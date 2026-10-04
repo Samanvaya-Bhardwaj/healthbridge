@@ -112,6 +112,15 @@ export const paymentsApi = {
   checkout: (appointmentId) =>
     data(apiRequest(`/appointments/${appointmentId}/payment`, { method: 'POST', body: {} })),
   get: (appointmentId) => data(apiRequest(`/appointments/${appointmentId}/payment`)),
+  /** Doctor or clinic: money back to the patient. The key makes retries safe. */
+  refund: (appointmentId, body, idempotencyKey) =>
+    data(
+      apiRequest(`/appointments/${appointmentId}/refunds`, {
+        method: 'POST',
+        body,
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    ),
   /** Development/test only (fake provider): asks the server to emit a signed test webhook. */
   simulate: (appointmentId, outcome) =>
     data(

@@ -108,7 +108,8 @@ function Visit({ a, consent, now, featured = false }) {
   } else if (
     a.status === 'confirmed' &&
     a.mode === 'in_clinic' &&
-    now >= new Date(a.startsAt).getTime() - 60 * 60_000
+    now >= new Date(a.startsAt).getTime() - 60 * 60_000 &&
+    now < new Date(a.endsAt).getTime()
   ) {
     primary = (
       <Button

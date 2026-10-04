@@ -26,6 +26,9 @@ import {
 } from 'lucide-react';
 import { AvailabilityManager } from './AvailabilityManager.jsx';
 import { Legend, WeekAgenda, WeekGrid } from './WeekGrid.jsx';
+import { ClinicVisitRow, OperationsBoundary } from '../clinics/ClinicVisits.jsx';
+import { DAY_MS as ONE_DAY, dayStart, useClinicDay } from '../clinics/clinicWork.js';
+import { SelectField } from '../../components/ui/Fields.jsx';
 import {
   MODE_LABELS,
   formatDateTime,
@@ -246,7 +249,9 @@ function ScheduleItem({ a, now, onAction, pending }) {
     actions.push(['complete', 'Complete']);
   if (a.status === 'confirmed' && now >= start.getTime() + 15 * 60_000)
     actions.push(['no-show', 'No-show']);
-  if (['confirmed', 'pending_payment'].includes(a.status)) actions.push(['cancel', 'Cancel']);
+  // The server refuses cancellation once the appointment has started.
+  if (['confirmed', 'pending_payment'].includes(a.status) && !started)
+    actions.push(['cancel', 'Cancel']);
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-3">
       <div>
@@ -514,76 +519,94 @@ function DoctorAppointments() {
 
 // ── Clinic administrator ──────────────────────────────────────────
 
+const CLINIC_FILTERS = [
+  ['all', 'All'],
+  ['upcoming', 'To come'],
+  ['arrived', 'Checked in'],
+  ['done', 'Completed'],
+  ['cancelled', 'Cancelled'],
+];
+const matchesFilter = (a, f) =>
+  f === 'all' ||
+  (f === 'upcoming' && ['pending_payment', 'confirmed'].includes(a.status)) ||
+  (f === 'arrived' && ['checked_in', 'in_consultation'].includes(a.status)) ||
+  (f === 'done' && ['completed', 'no_show'].includes(a.status)) ||
+  (f === 'cancelled' && ['cancelled', 'expired'].includes(a.status));
+
 function ClinicBoard({ clinicId }) {
-  const queryClient = useQueryClient();
-  const [range] = useState(weekRange);
-  const board = useQuery({
-    queryKey: ['clinic-board', clinicId],
-    queryFn: () => schedulingApi.clinicSchedule(clinicId, range.from, range.to),
-  });
-  const act = useMutation({
-    mutationFn: ({ id, action }) =>
-      action === 'cancel'
-        ? schedulingApi.cancel(id, 'clinic_closed')
-        : schedulingApi.action(id, action),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clinic-board', clinicId] }),
-  });
-  const { confirm, dialog } = useConfirm();
-  const cancelVisit = async (a) => {
-    const ok = await confirm({
-      title: 'Cancel this appointment?',
-      description: `Ref ${a.reference} with ${a.doctor?.professionalName ?? 'the doctor'}. The patient is notified and any payment is refunded in full.`,
-      confirmLabel: 'Cancel appointment',
-      cancelLabel: 'Keep it',
-      destructive: true,
-      tone: 'warning',
-    });
-    if (ok) act.mutate({ id: a.id, action: 'cancel' });
+  const [now] = useState(() => Date.now());
+  const [day, setDay] = useState(() => dayStart(now));
+  const [doctor, setDoctor] = useState('');
+  const [filter, setFilter] = useState('all');
+  const board = useClinicDay(clinicId, day);
+  const all = [...(board.data ?? [])].sort((x, y) => x.startsAt.localeCompare(y.startsAt));
+  const doctors = [...new Map(all.map((a) => [a.doctorId, a.doctor?.professionalName])).entries()];
+  const shown = all.filter((a) => (!doctor || a.doctorId === doctor) && matchesFilter(a, filter));
+  const isToday = day.getTime() === dayStart(now).getTime();
+  const move = (days) => {
+    setDay(new Date(day.getTime() + days * ONE_DAY));
+    setDoctor('');
   };
   return (
     <Card>
-      {dialog}
-      {act.isError && (
-        <Alert tone="error" className="mb-4">
-          {authErrorMessage(act.error)}
-        </Alert>
-      )}
-      {board.isPending && <LoadingState label="Loading clinic schedule" rows={2} />}
-      {board.data?.length === 0 && (
-        <EmptyState compact icon={CalendarDays} title="No appointments in the next week">
-          Visits booked with your clinic’s doctors appear here.
-        </EmptyState>
-      )}
-      <ul className="divide-y divide-border">
-        {board.data?.map((a) => (
-          <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <PersonIdentity
-                name={a.doctor?.professionalName ?? 'Doctor'}
-                detail={`${formatDateTime(a.startsAt)} · ${MODE_LABELS[a.mode]} · Ref ${a.reference}`}
-                size="sm"
-              />
-              <StatusBadge status={a.status} />
-            </div>
-            <div className="flex gap-2">
-              {a.status === 'confirmed' && a.mode === 'in_clinic' && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => act.mutate({ id: a.id, action: 'check-in' })}
-                >
-                  Check in
-                </Button>
-              )}
-              {['confirmed', 'pending_payment'].includes(a.status) && (
-                <Button variant="ghost" size="sm" onClick={() => cancelVisit(a)}>
-                  Cancel
-                </Button>
-              )}
-            </div>
-          </li>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" aria-label="Previous day" onClick={() => move(-1)}>
+            ‹
+          </Button>
+          <h2 className="min-w-48 text-center text-base font-semibold text-text">
+            {isToday ? 'Today, ' : ''}
+            {formatDay(day.toISOString())}
+          </h2>
+          <Button variant="secondary" size="sm" aria-label="Next day" onClick={() => move(1)}>
+            ›
+          </Button>
+          {!isToday && (
+            <Button variant="ghost" size="sm" onClick={() => setDay(dayStart(now))}>
+              Today
+            </Button>
+          )}
+        </div>
+        <SelectField
+          label="Doctor"
+          className="min-w-52"
+          value={doctor}
+          placeholder="All doctors"
+          onChange={(e) => setDoctor(e.target.value)}
+          options={doctors.map(([id, name]) => ({ value: id, label: name ?? 'Doctor' }))}
+        />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Show">
+        {CLINIC_FILTERS.map(([key, label]) => (
+          <Button
+            key={key}
+            size="sm"
+            variant={filter === key ? 'primary' : 'secondary'}
+            aria-pressed={filter === key}
+            onClick={() => setFilter(key)}
+          >
+            {label} ({all.filter((a) => matchesFilter(a, key)).length})
+          </Button>
         ))}
-      </ul>
+      </div>
+      <div className="mt-4">
+        {board.isPending && <LoadingState label="Loading clinic schedule" rows={3} />}
+        {board.isError && <Alert tone="error">{authErrorMessage(board.error)}</Alert>}
+        {board.isSuccess && shown.length === 0 && (
+          <EmptyState compact icon={CalendarDays} title="No appointments to show">
+            {all.length
+              ? 'Nothing matches these filters. Choose “All” to see every appointment that day.'
+              : 'No appointments are booked with your clinic’s doctors on this day.'}
+          </EmptyState>
+        )}
+        {shown.length > 0 && (
+          <ul className="divide-y divide-border rounded-xl border border-border">
+            {shown.map((a) => (
+              <ClinicVisitRow key={a.id} a={a} now={now} />
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }
@@ -595,8 +618,14 @@ function ClinicAppointments({ clinicIds }) {
         icon={CalendarDays}
         eyebrow="Clinic"
         title="Clinic schedule"
-        description="Every appointment at your clinic for the next week. Patients identify themselves at the desk with their booking reference; patient details and visit reasons are visible only to the patient and their doctor."
+        description="Every appointment with your clinic’s doctors, day by day: check patients in, follow payments and handle refunds or cancellations."
       />
+      <OperationsBoundary compact />
+      {clinicIds.length === 0 && (
+        <EmptyState icon={CalendarDays} title="No clinic assigned yet">
+          A HealthBridge platform administrator appoints clinic administrators to a clinic.
+        </EmptyState>
+      )}
       {clinicIds.map((id) => (
         <ClinicBoard key={id} clinicId={id} />
       ))}
