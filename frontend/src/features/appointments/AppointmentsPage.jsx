@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/authContext.js';
 import { primaryRole } from '../../app/navigation.js';
 import { schedulingApi } from '../../lib/domainApi.js';
@@ -37,6 +37,8 @@ import {
   formatTime,
   groupByDay,
 } from './format.js';
+import { LoadError } from '../../components/ui/LoadError.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const weekRange = () => {
   const from = new Date();
@@ -92,7 +94,7 @@ function PatientAppointments() {
     queryKey: ['appointments', patientId, scope],
     queryFn: () => schedulingApi.mine({ patientId, scope }),
   });
-  const cancel = useMutation({
+  const cancel = useSafeMutation({
     mutationFn: (id) => schedulingApi.cancel(id, 'patient_request'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
   });
@@ -324,7 +326,7 @@ function DoctorSchedule() {
     queryKey: ['doctor-schedule'],
     queryFn: () => schedulingApi.doctorSchedule(range.from, range.to),
   });
-  const act = useMutation({
+  const act = useSafeMutation({
     mutationFn: ({ id, action }) =>
       action === 'cancel'
         ? schedulingApi.cancel(id, 'doctor_unavailable')
@@ -361,6 +363,7 @@ function DoctorSchedule() {
     <div className="space-y-4">
       {dialog}
       {act.isError && <Alert tone="error">{authErrorMessage(act.error)}</Alert>}
+      <LoadError queries={[schedule]} what="your schedule" />
       {schedule.isPending && <LoadingState label="Loading schedule" rows={2} />}
       {schedule.data?.length === 0 && (
         <EmptyState icon={CalendarDays} title="No appointments in the next week">

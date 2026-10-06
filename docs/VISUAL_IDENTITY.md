@@ -8,7 +8,7 @@ Two points (patient and doctor) joined by a bridge arc, with a small medical cro
 
 ## Colour
 
-Tokens live in `styles/index.css` and switch automatically for dark mode. Every text pairing meets WCAG AA.
+Tokens live in `styles/index.css` and switch automatically for dark mode. Every text pairing meets WCAG AA, including state colours on their own tinted backgrounds (checked with axe-core).
 
 | Token | Light | Use |
 |---|---|---|
@@ -18,10 +18,10 @@ Tokens live in `styles/index.css` and switch automatically for dark mode. Every 
 | `border` | `#e4dfd3` | Structure; shadows are almost absent |
 | `text` / `text-muted` / `text-subtle` | `#15302b` / `#4a5d57` / `#5f706a` | Deep green-black ink, warm greys |
 | `primary` | `#146c63` | Care and action: the one main action of an area |
-| `success` | `#2d7a4f` | Confirmed, paid, available, signed |
-| `warning` | `#8f5a0b` | Pending, waiting, needs review |
-| `attention` | `#ad4f27` (clay) | Needs a look, not an emergency |
-| `danger` | `#b1352c` | Errors, urgent, rejected, failed |
+| `success` | `#236841` | Confirmed, paid, available, signed |
+| `warning` | `#82520a` | Pending, waiting, needs review |
+| `attention` | `#974522` (clay) | Needs a look, not an emergency |
+| `danger` | `#a63229` | Errors, urgent, rejected, failed |
 | `info` | `#2e6491` | Neutral information |
 | `ai` / `ai-soft` | `#5a55a6` / `#efeefa` | AI assistance only |
 

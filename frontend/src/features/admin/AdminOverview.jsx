@@ -105,7 +105,7 @@ export function AdminOverview({ firstName }) {
 
       <section aria-labelledby="work-heading" className="space-y-3">
         <SectionHeader id="work-heading" title="Waiting for you" />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Work
             icon={BadgeCheck}
             label="Doctor applications to review"
@@ -142,7 +142,7 @@ export function AdminOverview({ firstName }) {
           title="Checks and lookups"
           description="These open on demand: looking at accounts and the audit trail is itself recorded."
         />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Shortcut
             icon={Users}
             to="/app/admin/users"

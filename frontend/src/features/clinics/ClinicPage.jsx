@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, Search, ShieldCheck, Stethoscope, UserPlus, UsersRound } from 'lucide-react';
 import { useAuth } from '../auth/authContext.js';
 import { clinicsApi, doctorsApi, schedulingApi } from '../../lib/domainApi.js';
@@ -16,6 +16,7 @@ import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { formatDateTime } from '../appointments/format.js';
 import { OperationsBoundary } from './ClinicVisits.jsx';
 import { ACTIVE, DAY_MS, adminClinicIds, dayStart } from './clinicWork.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const MEMBER_STATES = {
   invited: {
@@ -56,7 +57,7 @@ function ClinicDetails({ clinic }) {
         </Alert>
       )}
       {c && (
-        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+        <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-text-muted">Name</dt>
             <dd className="flex flex-wrap items-center gap-2 font-medium text-text">
@@ -130,9 +131,11 @@ function PractisingDoctors({ clinicId }) {
                 <p className="mt-1 text-text-muted">
                   {week.isPending
                     ? '…'
-                    : visits.length
-                      ? `${visits.length} visit${visits.length === 1 ? '' : 's'} in the next 7 days · next ${formatDateTime(visits[0].startsAt)}`
-                      : 'No visits booked in the next 7 days'}
+                    : week.isError
+                      ? 'Visits couldn’t be loaded just now'
+                      : visits.length
+                        ? `${visits.length} visit${visits.length === 1 ? '' : 's'} in the next 7 days · next ${formatDateTime(visits[0].startsAt)}`
+                        : 'No visits booked in the next 7 days'}
                 </p>
               </div>
             </li>
@@ -149,7 +152,7 @@ function PractisingDoctors({ clinicId }) {
 
 function Membership({ clinicId, members, onChanged }) {
   const { user } = useAuth();
-  const end = useMutation({
+  const end = useSafeMutation({
     mutationFn: (id) => clinicsApi.endMembership(clinicId, id),
     onSuccess: onChanged,
   });
@@ -200,7 +203,7 @@ function Membership({ clinicId, members, onChanged }) {
         title="Membership"
         description="Who belongs to this clinic, and in what role."
       />
-      <ol className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <ol className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {STEPS.map(([title, text], i) => (
           <li key={title} className="rounded-lg bg-surface-muted p-3 text-sm">
             <p className="font-medium text-text">
@@ -276,8 +279,10 @@ function Membership({ clinicId, members, onChanged }) {
 function InviteDoctor({ clinicId, onInvited }) {
   const [q, setQ] = useState('');
   const [message, setMessage] = useState(null);
-  const search = useMutation({ mutationFn: async () => (await doctorsApi.directory({ q })).data });
-  const invite = useMutation({
+  const search = useSafeMutation({
+    mutationFn: async () => (await doctorsApi.directory({ q })).data,
+  });
+  const invite = useSafeMutation({
     mutationFn: (doctor) => clinicsApi.inviteDoctor(clinicId, doctor.id),
     onSuccess: (_m, doctor) => {
       setMessage({

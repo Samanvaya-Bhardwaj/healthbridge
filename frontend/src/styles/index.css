@@ -27,10 +27,10 @@
   --hb-primary-contrast: #ffffff;
   --hb-focus: #1b8a7e;
   /* Semantic states. */
-  --hb-success: #2d7a4f;
-  --hb-warning: #8f5a0b;
-  --hb-attention: #ad4f27;
-  --hb-danger: #b1352c;
+  --hb-success: #236841;
+  --hb-warning: #82520a;
+  --hb-attention: #974522;
+  --hb-danger: #a63229;
   --hb-info: #2e6491;
   /* AI assistance: deliberately not the brand colour. */
   --hb-ai: #5a55a6;
@@ -112,6 +112,11 @@
   :focus-visible {
     outline: 2px solid var(--hb-focus);
     outline-offset: 2px;
+  }
+  /* Headings focused after navigation (useRouteFocus) are not controls: no ring. */
+  [data-route-focus]:focus,
+  [data-route-focus]:focus-visible {
+    outline: none;
   }
   ::selection {
     background: var(--hb-primary-soft);

@@ -79,7 +79,12 @@ describe('registration', () => {
     expect(res.status).toBe(400);
     const paths = res.body.errors.map((e) => e.path);
     expect(paths).toEqual(expect.arrayContaining(['body.acceptTerms']));
-    expect(JSON.stringify(res.body.errors)).toMatch(/Unrecognized key/);
+    // The unknown field (role) is rejected, in plain language rather than validator wording.
+    expect(res.body.errors).toEqual(
+      expect.arrayContaining([
+        { path: 'body', message: 'Something unexpected was sent. Reload the page and try again.' },
+      ]),
+    );
   });
 });
 

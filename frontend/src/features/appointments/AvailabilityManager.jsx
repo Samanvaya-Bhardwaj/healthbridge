@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TIME_OFF_REASONS } from '@healthbridge/shared';
 import { Building2, CalendarOff, CalendarPlus, Clock, Trash2, Video } from 'lucide-react';
 import { doctorsApi, schedulingApi } from '../../lib/domainApi.js';
@@ -14,6 +14,8 @@ import { SectionHeader } from '../../components/ui/Typography.jsx';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { MODE_LABELS, formatDateOnly, formatDateTime, formatFee, localDate } from './format.js';
 import { overlappingRules, toMin } from './weekModel.js';
+import { LoadError } from '../../components/ui/LoadError.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const SLOT_LENGTHS = [10, 15, 20, 30, 45, 60];
@@ -89,7 +91,7 @@ function RuleForm({ rules, clinics, onSaved }) {
         .join(', ')}. You can’t be in two places at once.`,
   ].filter(Boolean);
 
-  const save = useMutation({
+  const save = useSafeMutation({
     mutationFn: async () => {
       const outcome = [];
       // One rule per day: the server keeps its own overlap check for each.
@@ -133,7 +135,7 @@ function RuleForm({ rules, clinics, onSaved }) {
     >
       <fieldset className="min-w-0">
         <legend className="text-sm font-medium text-text">Consultation type</legend>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {['online', 'in_clinic'].map((m) => {
             const Icon = m === 'online' ? Video : Building2;
             return (
@@ -177,7 +179,6 @@ function RuleForm({ rules, clinics, onSaved }) {
                 key={d}
                 type="button"
                 aria-pressed={on}
-                aria-label={d}
                 onClick={() => toggleDay(i + 1)}
                 className={`min-h-11 min-w-14 rounded-lg border px-3 text-sm font-medium ${
                   on
@@ -186,12 +187,13 @@ function RuleForm({ rules, clinics, onSaved }) {
                 }`}
               >
                 {d.slice(0, 3)}
+                <span className="sr-only">{d.slice(3)}</span>
               </button>
             );
           })}
         </div>
       </fieldset>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TextField label="From" type="time" value={form.startTime} onChange={set('startTime')} />
         <TextField label="Until" type="time" value={form.endTime} onChange={set('endTime')} />
         <SelectField
@@ -266,7 +268,7 @@ function RuleForm({ rules, clinics, onSaved }) {
 }
 
 function WeeklyHours({ rules, clinics, upcoming, onChanged }) {
-  const archive = useMutation({ mutationFn: schedulingApi.archiveRule, onSuccess: onChanged });
+  const archive = useSafeMutation({ mutationFn: schedulingApi.archiveRule, onSuccess: onChanged });
   const { confirm, dialog } = useConfirm();
   const clinicName = (id) => clinics.find((m) => m.clinicId === id)?.clinic.name;
   const remove = async (r) => {
@@ -377,7 +379,7 @@ function TimeOff({ upcoming }) {
         : [],
     [valid, upcoming, form.startsAt, form.endsAt],
   );
-  const add = useMutation({
+  const add = useSafeMutation({
     mutationFn: () =>
       schedulingApi.addTimeOff({
         startsAt: new Date(form.startsAt).toISOString(),
@@ -396,7 +398,7 @@ function TimeOff({ upcoming }) {
     },
     onError: (e) => setMessage({ tone: 'error', text: authErrorMessage(e) }),
   });
-  const remove = useMutation({ mutationFn: schedulingApi.removeTimeOff, onSuccess: refresh });
+  const remove = useSafeMutation({ mutationFn: schedulingApi.removeTimeOff, onSuccess: refresh });
   const submit = async () => {
     if (clashes.length) {
       const ok = await confirm({
@@ -419,7 +421,7 @@ function TimeOff({ upcoming }) {
         description="Leave, conferences or clinic closures. Patients can’t book you during time off."
       />
       <form
-        className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
         onSubmit={(e) => {
           e.preventDefault();
           if (valid) submit();
@@ -480,6 +482,7 @@ function TimeOff({ upcoming }) {
           {message.text}
         </Alert>
       )}
+      <LoadError queries={[list]} what="your time off" className="mt-3" />
       {list.data?.length === 0 && (
         <p className="mt-4 text-sm text-text-muted">No upcoming time off.</p>
       )}

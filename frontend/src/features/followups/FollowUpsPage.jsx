@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FOLLOW_UP_RED_FLAGS } from '@healthbridge/shared';
 import { useAuth } from '../auth/authContext.js';
 import { primaryRole } from '../../app/navigation.js';
@@ -32,6 +32,7 @@ import { ButtonLink } from '../../components/ui/Button.jsx';
 import { TextAreaField } from '../../components/ui/Fields.jsx';
 import { MissingProfileNotice } from '../patients/MissingProfileNotice.jsx';
 import { formatDateOnly, formatDateTime } from '../appointments/format.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const OVERALL = [
   ['better', 'Better'],
@@ -76,7 +77,7 @@ function CheckInForm({ followUp, onDone }) {
   const [overall, setOverall] = useState('');
   const [redFlags, setRedFlags] = useState([]);
   const [note, setNote] = useState('');
-  const respond = useMutation({
+  const respond = useSafeMutation({
     mutationFn: () => followUpApi.respond(followUp.id, { overall, redFlags, note }),
     onSuccess: onDone,
   });
@@ -129,7 +130,7 @@ function CheckInForm({ followUp, onDone }) {
         <p className="text-sm text-text-muted">
           These can be signs of an emergency. Tick any that apply; leave all unticked if none do.
         </p>
-        <div className="mt-2 grid gap-1 sm:grid-cols-2">
+        <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
           {Object.entries(FOLLOW_UP_RED_FLAGS).map(([code, label]) => (
             <label key={code} className="flex min-h-11 items-center gap-2 text-sm text-text">
               <input
@@ -321,7 +322,7 @@ function ScheduleForm({ onDone }) {
   const active = (patients.data ?? []).filter((r) => r.status === 'active');
   const [patientId, setPatientId] = useState('');
   const [dueOn, setDueOn] = useState('');
-  const schedule = useMutation({
+  const schedule = useSafeMutation({
     mutationFn: () => followUpApi.schedule(patientId, { dueOn }),
     onSuccess: () => {
       setDueOn('');
@@ -363,7 +364,10 @@ function ScheduleForm({ onDone }) {
 
 function FollowUpDetail({ id, onChanged }) {
   const detail = useQuery({ queryKey: ['follow-up', id], queryFn: () => followUpApi.get(id) });
-  const close = useMutation({ mutationFn: () => followUpApi.close(id, ''), onSuccess: onChanged });
+  const close = useSafeMutation({
+    mutationFn: () => followUpApi.close(id, ''),
+    onSuccess: onChanged,
+  });
   const f = detail.data;
   if (detail.isPending) return <Skeleton className="h-16 w-full" />;
   if (detail.isError) return <Alert tone="error">{authErrorMessage(detail.error)}</Alert>;

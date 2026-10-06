@@ -9,6 +9,7 @@ import { navigationFor, primaryRole } from '../navigation.js';
 import { NotificationBell } from '../../features/notifications/Inbox.jsx';
 import { Avatar } from '../../components/ui/Identity.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
+import { useRouteFocus } from '../useRouteFocus.js';
 
 const linkClass = ({ isActive }) =>
   `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${
@@ -153,6 +154,9 @@ export function AppLayout() {
   const items = navigationFor(user);
   const role = primaryRole(user.roles);
 
+  const mainRef = useRef(null);
+  useRouteFocus(mainRef);
+
   // RequireAuth redirects to sign-in once the session state becomes anonymous.
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -220,7 +224,12 @@ export function AppLayout() {
         <nav aria-label="Main" className="hidden w-64 shrink-0 px-3 py-8 md:block">
           <NavList items={items} idPrefix="nav" />
         </nav>
-        <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-10">
+        <main
+          id="main"
+          ref={mainRef}
+          tabIndex={-1}
+          className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6 md:px-8 md:py-10"
+        >
           <Outlet />
         </main>
       </div>

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { CalendarDays, Download, FilePen, FileSignature, History, Pill } from 'lucide-react';
 import { consultationApi } from '../../lib/domainApi.js';
@@ -12,6 +12,7 @@ import {
   LoadingState,
 } from '../../components/ui/EmptyState.jsx';
 import { formatDateTime } from '../appointments/format.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 /**
  * How each prescription state looks. A signed prescription is the authoritative,
@@ -46,7 +47,7 @@ const LOOK = {
 export function PrescriptionCard({ rx }) {
   const look = LOOK[rx.status] ?? LOOK.superseded;
   const Icon = look.icon;
-  const download = useMutation({
+  const download = useSafeMutation({
     mutationFn: () => consultationApi.pdfUrl(rx.id),
     onSuccess: ({ url }) => window.location.assign(url),
   });

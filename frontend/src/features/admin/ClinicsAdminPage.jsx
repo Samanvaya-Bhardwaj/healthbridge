@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, Plus, Power, Search, UserCog, UsersRound } from 'lucide-react';
 import { ROLE_LABELS } from '@healthbridge/shared';
 import { adminApi, clinicsApi } from '../../lib/domainApi.js';
@@ -14,6 +14,7 @@ import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { PlatformBoundary } from './AdminParts.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const EMPTY = {
   name: '',
@@ -41,7 +42,7 @@ function CreateClinic({ onCreated }) {
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState(null);
-  const create = useMutation({
+  const create = useSafeMutation({
     mutationFn: () =>
       adminApi.createClinic(
         Object.fromEntries(Object.entries(form).filter(([, v]) => v.trim() !== '')),
@@ -84,7 +85,7 @@ function CreateClinic({ onCreated }) {
       )}
       {open && (
         <form
-          className="mt-4 grid gap-4 sm:grid-cols-2"
+          className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
             setMessage(null);
@@ -148,8 +149,8 @@ function AppointAdmin({ clinic, onAppointed }) {
   const [q, setQ] = useState('');
   const [message, setMessage] = useState(null);
   const { confirm, dialog } = useConfirm();
-  const users = useMutation({ mutationFn: () => adminApi.findUsers(q) });
-  const appoint = useMutation({
+  const users = useSafeMutation({ mutationFn: () => adminApi.findUsers(q) });
+  const appoint = useSafeMutation({
     mutationFn: (user) => adminApi.appointClinicAdmin(clinic.id, user.id),
     onSuccess: (_d, user) => {
       setMessage({
@@ -225,7 +226,7 @@ function ClinicCard({ clinic, onChanged }) {
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState(null);
   const { confirm, dialog } = useConfirm();
-  const status = useMutation({
+  const status = useSafeMutation({
     mutationFn: (next) => adminApi.setClinicStatus(clinic.id, next),
     onSuccess: onChanged,
   });

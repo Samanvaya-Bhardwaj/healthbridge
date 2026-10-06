@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { careApi, doctorsApi, followUpApi, schedulingApi } from '../../lib/domainApi.js';
 import { ACTIVE, ageFrom, coversDocuments, useSharedRecords } from './doctorWork.js';
@@ -18,11 +18,12 @@ import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { SectionHeader } from '../../components/ui/Typography.jsx';
 import { CalendarDays, FolderOpen, Lock, ShieldCheck, UserPlus } from 'lucide-react';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 function InvitePatient({ onDone }) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState(null);
-  const invite = useMutation({
+  const invite = useSafeMutation({
     mutationFn: () => careApi.invite({ email }),
     onSuccess: (result) => {
       setMessage({ tone: 'success', text: result.message });
@@ -160,7 +161,7 @@ export function DoctorPatientsPage() {
     queryFn: () => followUpApi.forDoctor('open'),
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['doctors', 'patients'] });
-  const act = useMutation({
+  const act = useSafeMutation({
     mutationFn: ({ id, action }) => careApi.act(id, action),
     onSuccess: refresh,
   });
@@ -235,8 +236,18 @@ export function DoctorPatientsPage() {
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <PersonIdentity name={r.patient.displayName} tone="neutral" />
                 <div className="flex gap-2">
-                  <Button onClick={() => act.mutate({ id: r.id, action: 'accept' })}>Accept</Button>
-                  <Button variant="secondary" onClick={() => confirmDecline(r)}>
+                  <Button
+                    onClick={() => act.mutate({ id: r.id, action: 'accept' })}
+                    disabled={act.isPending}
+                    loading={act.isPending && act.variables?.id === r.id}
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => confirmDecline(r)}
+                    disabled={act.isPending}
+                  >
                     Decline
                   </Button>
                 </div>
@@ -286,6 +297,8 @@ export function DoctorPatientsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => act.mutate({ id: r.id, action: 'withdraw' })}
+                      disabled={act.isPending}
+                      loading={act.isPending && act.variables?.id === r.id}
                     >
                       Withdraw
                     </Button>

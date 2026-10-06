@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { timelineApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
@@ -24,6 +24,7 @@ import {
   Stethoscope,
   UserRound,
 } from 'lucide-react';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const TYPE_LABELS = {
   appointment: 'Appointments',
@@ -65,7 +66,7 @@ function ProvenanceLegend() {
       <summary className="cursor-pointer text-sm font-medium text-primary">
         What the labels mean
       </summary>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-3">
+      <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {LEGEND.map(([key, title, text]) => (
           <li key={key} className="text-sm">
             <Badge tone={PROVENANCE[key].tone} icon={PROVENANCE[key].icon}>
@@ -112,7 +113,7 @@ export function Timeline({ patientId, allowExport = false }) {
     enabled: Boolean(patientId),
     retry: false,
   });
-  const exporter = useMutation({
+  const exporter = useSafeMutation({
     mutationFn: () => timelineApi.export(patientId),
     onSuccess: (body) => {
       const url = URL.createObjectURL(

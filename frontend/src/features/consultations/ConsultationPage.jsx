@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { BackLink } from '../../components/ui/BackLink.jsx';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MAX_PRESCRIPTION_ITEMS, MEDICATION_ROUTES } from '@healthbridge/shared';
 import { consultationApi, doctorsApi, followUpApi, schedulingApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -37,6 +37,7 @@ import { PrescriptionCard, PrescriptionList } from './Prescriptions.jsx';
 import { PatientAppointment } from './PatientAppointment.jsx';
 import { EmergencyGuidance, ErrorAlert, NoteView, VideoPanel } from './ConsultationParts.jsx';
 import { SOAP } from './soap.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const OUTCOME_LABELS = {
   online_managed: 'Managed online',
@@ -72,12 +73,12 @@ function NoteEditor({ appointmentId, draft, onSaved }) {
   const [note, setNote] = useState(
     () => draft?.note ?? { subjective: '', objective: '', assessment: '', plan: '' },
   );
-  const save = useMutation({
+  const save = useSafeMutation({
     mutationFn: () => consultationApi.saveNote(appointmentId, note),
     onSuccess: onSaved,
   });
   const { confirm, dialog } = useConfirm();
-  const sign = useMutation({
+  const sign = useSafeMutation({
     mutationFn: async () => {
       await consultationApi.saveNote(appointmentId, note);
       return consultationApi.signNote(appointmentId);
@@ -131,7 +132,7 @@ function NoteCorrection({ note, onSaved }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(note.note);
   const [reason, setReason] = useState('');
-  const correct = useMutation({
+  const correct = useSafeMutation({
     mutationFn: () => consultationApi.correctNote(note.id, { note: draft, reason }),
     onSuccess: (data) => {
       setOpen(false);
@@ -194,7 +195,7 @@ function PrescriptionBuilder({ initial, submitLabel, needsReason, onSubmit, pend
       {items.map((item, index) => (
         <fieldset key={index} className="rounded-lg border border-border p-3">
           <legend className="px-1 text-sm font-medium text-text">Medicine {index + 1}</legend>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <TextField
               label="Medicine"
               value={item.drugName}
@@ -284,16 +285,16 @@ function PrescriptionSection({ appointmentId, prescriptions, live, onSaved }) {
   const draft = prescriptions.find((p) => p.status === 'draft');
   const current = prescriptions.find((p) => p.status === 'signed');
   const [correcting, setCorrecting] = useState(false);
-  const save = useMutation({
+  const save = useSafeMutation({
     mutationFn: (body) => consultationApi.saveDraft(appointmentId, body),
     onSuccess: () => onSaved(),
   });
-  const sign = useMutation({
+  const sign = useSafeMutation({
     mutationFn: (id) => consultationApi.signPrescription(id),
     onSuccess: () => onSaved(),
   });
   const { confirm, dialog } = useConfirm();
-  const correct = useMutation({
+  const correct = useSafeMutation({
     mutationFn: (body) => consultationApi.correctPrescription(current.id, body),
     onSuccess: () => {
       setCorrecting(false);
@@ -369,7 +370,7 @@ function OutcomePanel({ appointmentId, hasSignedNote, onSaved }) {
   const [followUpOn, setFollowUpOn] = useState('');
   const [visitNote, setVisitNote] = useState('');
   const [confirm, setConfirm] = useState(false);
-  const record = useMutation({
+  const record = useSafeMutation({
     mutationFn: () =>
       consultationApi.outcome(
         appointmentId,
@@ -483,7 +484,7 @@ function PatientContext({ view, appointmentId }) {
     queryFn: () => followUpApi.forDoctor('open'),
   });
   // The visit reason is read (and audited) only when the doctor asks for it.
-  const reason = useMutation({ mutationFn: () => schedulingApi.get(appointmentId) });
+  const reason = useSafeMutation({ mutationFn: () => schedulingApi.get(appointmentId) });
   const rel = (patients.data ?? []).find((r) => r.patient?.id === patientId);
   const name = rel?.patient.fullName ?? consent?.patientName ?? 'Patient';
   const age = ageFrom(rel?.patient.dateOfBirth);
@@ -582,7 +583,7 @@ function PatientContext({ view, appointmentId }) {
 }
 
 function DoctorView({ view, status, appointmentId, refresh }) {
-  const start = useMutation({
+  const start = useSafeMutation({
     mutationFn: () => consultationApi.start(appointmentId),
     onSuccess: refresh,
   });
@@ -595,7 +596,7 @@ function DoctorView({ view, status, appointmentId, refresh }) {
   const canStart = ['confirmed', 'checked_in'].includes(view.appointment.status);
   const present = status?.waitingRoom.patientPresent;
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0 space-y-4">
         <Progress c={c} hasSignedNote={Boolean(current)} hasSignedRx={hasSignedRx} />
         {!c && (
@@ -749,6 +750,12 @@ export function ConsultationPage() {
     return (
       <div className="space-y-6">
         <BackLink to="/app/appointments">Appointments</BackLink>
+        {status.isError && (
+          <Alert tone="warning" title="Your connection looks unstable.">
+            We’re still trying to reach the consultation room every few seconds. You don’t need to
+            reload; this message disappears once the connection is back.
+          </Alert>
+        )}
         <PatientAppointment
           view={view.data}
           status={status.data}
@@ -763,6 +770,12 @@ export function ConsultationPage() {
       <BackLink to="/app/appointments">{party === 'doctor' ? 'Schedule' : 'Appointments'}</BackLink>
       {view.isPending && <LoadingState label="Loading appointment" rows={3} />}
       {view.isError && <Alert tone="error">{authErrorMessage(view.error)}</Alert>}
+      {status.isError && (
+        <Alert tone="warning" title="Your connection looks unstable.">
+          We’re still trying to reach the consultation room every few seconds. You don’t need to
+          reload; this message disappears once the connection is back.
+        </Alert>
+      )}
       {a && (
         <>
           <PageHeader

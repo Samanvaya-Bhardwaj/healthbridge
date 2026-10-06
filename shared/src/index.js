@@ -1,4 +1,9 @@
 // Shared constants and schemas: single definitions used by both frontend and backend.
+import { z } from 'zod';
+import { plainValidationMessage } from './validationMessages.js';
+
+// Plain-language validation wording everywhere schemas are used (forms and API errors).
+z.config({ customError: plainValidationMessage });
 
 export const API_VERSION = 'v1';
 export const API_BASE_PATH = `/api/${API_VERSION}`;
@@ -31,3 +36,4 @@ export * from './domain/payments.js';
 export * from './domain/records.js';
 export * from './domain/consultations.js';
 export * from './domain/followups.js';
+export { plainValidationMessage } from './validationMessages.js';

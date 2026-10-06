@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { changePasswordSchema, ROLE_LABELS } from '@healthbridge/shared';
@@ -13,6 +13,7 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { KeyRound } from 'lucide-react';
 import { PageHeader } from '../../components/ui/Typography.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const formatDate = (value) =>
   new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -44,8 +45,8 @@ function SessionsCard() {
   const queryClient = useQueryClient();
   const sessions = useQuery({ queryKey: ['auth', 'sessions'], queryFn: authApi.fetchSessions });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['auth', 'sessions'] });
-  const revoke = useMutation({ mutationFn: authApi.revokeSession, onSuccess: invalidate });
-  const revokeOthers = useMutation({
+  const revoke = useSafeMutation({ mutationFn: authApi.revokeSession, onSuccess: invalidate });
+  const revokeOthers = useSafeMutation({
     mutationFn: authApi.revokeOtherSessions,
     onSuccess: invalidate,
   });
@@ -181,7 +182,7 @@ function ChangePasswordCard() {
 /** Email confirmation state; the confirmation link is sent by email (M11). */
 function EmailStatus() {
   const account = useQuery({ queryKey: ['account'], queryFn: authApi.fetchAccount });
-  const resend = useMutation({ mutationFn: authApi.resendEmailVerification });
+  const resend = useSafeMutation({ mutationFn: authApi.resendEmailVerification });
   if (!account.data) return null;
   if (account.data.emailVerifiedAt) {
     return <p className="mt-1 text-xs text-success">Confirmed</p>;
@@ -217,15 +218,17 @@ export function AccountPage() {
       />
       <Card>
         <h2 className="text-base font-semibold text-text">Account</h2>
-        <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
+        <dl className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-text-subtle">Name</dt>
             <dd className="mt-1 font-medium text-text">{user.fullName}</dd>
           </div>
           <div>
             <dt className="text-text-subtle">Email</dt>
-            <dd className="mt-1 font-medium text-text">{user.email}</dd>
-            <EmailStatus />
+            <dd className="mt-1 font-medium text-text">
+              {user.email}
+              <EmailStatus />
+            </dd>
           </div>
           <div>
             <dt className="text-text-subtle">Roles</dt>

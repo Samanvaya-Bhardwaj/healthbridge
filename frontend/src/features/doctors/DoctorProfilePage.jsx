@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -24,6 +24,7 @@ import { useDoctorProfile, useDoctorSlots } from '../care/doctorInfo.js';
 import { MODE_LABELS, formatFee } from '../appointments/format.js';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const LOCKED = new Set(['pending', 'under_review', 'verified']);
 const VERIFICATION_HELP = {
@@ -122,14 +123,14 @@ function DoctorForm({ profile, onSaved }) {
   return (
     <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {message && <Alert tone={message.tone}>{message.text}</Alert>}
-      <fieldset className="grid gap-5 sm:grid-cols-2">
+      <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-semibold text-text">Professional details</legend>
         {f('professionalName', 'Name as shown to patients', { placeholder: 'Dr. …' })}
         {f('primarySpecialization', 'Specialization')}
         {f('yearsOfExperience', 'Years of experience', { type: 'number', min: 0 })}
         {f('languages', 'Languages (comma-separated)')}
       </fieldset>
-      <fieldset className="grid gap-5 sm:grid-cols-3">
+      <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <legend className="mb-2 text-sm font-semibold text-text">
           Medical registration{' '}
           {locked && (
@@ -142,7 +143,7 @@ function DoctorForm({ profile, onSaved }) {
         {f('registrationCouncil', 'Medical council', { disabled: locked })}
         {f('registrationYear', 'Year of registration', { type: 'number', disabled: locked })}
       </fieldset>
-      <fieldset className="grid gap-5 sm:grid-cols-3">
+      <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <legend className="mb-2 text-sm font-semibold text-text">Primary qualification</legend>
         {f('degree', 'Degree')}
         {f('institution', 'Institution')}
@@ -173,7 +174,10 @@ function Verification({ profile, onChange }) {
     queryKey: ['doctors', 'verification'],
     queryFn: doctorsApi.verificationHistory,
   });
-  const submit = useMutation({ mutationFn: doctorsApi.submitVerification, onSuccess: onChange });
+  const submit = useSafeMutation({
+    mutationFn: doctorsApi.submitVerification,
+    onSuccess: onChange,
+  });
   const canSubmit = ['unverified', 'rejected', 'suspended'].includes(profile.verificationStatus);
   return (
     <Card>
@@ -214,7 +218,7 @@ function Verification({ profile, onChange }) {
 function Clinics() {
   const queryClient = useQueryClient();
   const clinics = useQuery({ queryKey: ['doctors', 'clinics'], queryFn: doctorsApi.myClinics });
-  const respond = useMutation({
+  const respond = useSafeMutation({
     mutationFn: ({ id, action }) => clinicsApi.respond(id, action),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['doctors', 'clinics'] }),
   });
@@ -225,6 +229,16 @@ function Clinics() {
         title="Clinic membership"
         description="In-clinic hours can be published only at clinics where you are an active member. A clinic administrator invites you."
       />
+      {respond.isError && (
+        <Alert tone="error" className="mt-3">
+          {authErrorMessage(respond.error)}
+        </Alert>
+      )}
+      {clinics.isError && (
+        <Alert tone="error" className="mt-3">
+          {authErrorMessage(clinics.error)}
+        </Alert>
+      )}
       {clinics.data?.length === 0 && (
         <p className="mt-2 text-sm text-text-muted">You are not a member of any clinic yet.</p>
       )}
@@ -236,12 +250,17 @@ function Clinics() {
             </p>
             {m.status === 'invited' && (
               <div className="flex gap-2">
-                <Button onClick={() => respond.mutate({ id: m.id, action: 'accept' })}>
+                <Button
+                  onClick={() => respond.mutate({ id: m.id, action: 'accept' })}
+                  disabled={respond.isPending}
+                  loading={respond.isPending && respond.variables?.action === 'accept'}
+                >
                   Accept
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={() => respond.mutate({ id: m.id, action: 'decline' })}
+                  disabled={respond.isPending}
                 >
                   Decline
                 </Button>

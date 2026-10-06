@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOCUMENT_TYPES } from '@healthbridge/shared';
 import { recordsApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -31,6 +31,7 @@ import { MissingProfileNotice } from '../patients/MissingProfileNotice.jsx';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { LoadingState } from '../../components/ui/EmptyState.jsx';
 import { FileText, FlaskConical, FolderHeart, Pill, Sparkles, Upload } from 'lucide-react';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const IN_PROGRESS = new Set(['pending_upload', 'quarantined', 'scanning']);
 const MAX_BYTES = 10 * 1024 * 1024; // mirrors the server default; the server decides
@@ -43,7 +44,7 @@ function UploadForm({ patientId, onUploaded }) {
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
 
-  const upload = useMutation({
+  const upload = useSafeMutation({
     mutationFn: async () => {
       const contentType = contentTypeFor(file.name);
       if (!contentType) throw new Error('Choose a PDF, PNG or JPEG file.');
@@ -82,7 +83,7 @@ function UploadForm({ patientId, onUploaded }) {
         description="Lab reports, prescriptions, scans or discharge summaries. Every file is checked for safety before it is added to your record."
       />
       <form
-        className="mt-4 grid gap-4 sm:grid-cols-2"
+        className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
           setDone(null);
@@ -145,7 +146,7 @@ function AiProcessingCard({ patientId }) {
     queryFn: () => intelligenceApi.aiProcessing(patientId),
     enabled: Boolean(patientId),
   });
-  const toggle = useMutation({
+  const toggle = useSafeMutation({
     mutationFn: (enabled) => intelligenceApi.setAiProcessing(patientId, enabled),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai-processing', patientId] }),
   });
@@ -211,7 +212,7 @@ export function RecordsPage() {
     enabled: Boolean(patientId),
   });
   const aiEnabled = Boolean(aiSetting.data?.enabled);
-  const remove = useMutation({ mutationFn: recordsApi.retire, onSuccess: refresh });
+  const remove = useSafeMutation({ mutationFn: recordsApi.retire, onSuccess: refresh });
   const download = useDownload();
   const { confirm, dialog } = useConfirm();
   const confirmRemove = async (id) => {

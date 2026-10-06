@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOCUMENT_TYPES } from '@healthbridge/shared';
 import { careApi, consentsApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -34,6 +34,7 @@ import {
   Stethoscope,
   UserRound,
 } from 'lucide-react';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 /** What each kind of access lets a doctor do, in plain words. */
 const SCOPE_HELP = {
@@ -79,7 +80,7 @@ function HowSharingWorks() {
           className="ml-auto h-4 w-4 transition-transform group-open:rotate-180"
         />
       </summary>
-      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+      <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         {[
           [
             'Who',
@@ -133,7 +134,7 @@ function GrantForm({ patientId, onGranted }) {
     setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   const chosen = doctors.find((r) => r.doctorId === (doctorId || doctors[0]?.doctorId));
 
-  const grant = useMutation({
+  const grant = useSafeMutation({
     mutationFn: () =>
       consentsApi.grant({
         patientId,
@@ -198,7 +199,7 @@ function GrantForm({ patientId, onGranted }) {
             <summary className="cursor-pointer text-sm text-primary">
               Only some kinds of documents{types.length ? ` (${types.length} chosen)` : ''}
             </summary>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {DOCUMENT_TYPES.map((t) => (
                 <CheckboxField
                   key={t}
@@ -390,7 +391,7 @@ export function PrivacyPage() {
     queryClient.invalidateQueries({ queryKey: ['consents', patientId] });
     queryClient.invalidateQueries({ queryKey: ['access-log', patientId] });
   };
-  const revoke = useMutation({
+  const revoke = useSafeMutation({
     mutationFn: (id) => consentsApi.revoke(id, 'no_longer_needed'),
     onSuccess: refresh,
   });

@@ -157,7 +157,7 @@ describe('inbox', () => {
     });
     open('/app/notifications');
     expect(
-      await screen.findByRole('link', { name: 'Notifications, 2 unread' }),
+      await screen.findByRole('link', { name: /^Notifications\s+2\s+unread$/ }),
     ).toBeInTheDocument();
     const item = (await screen.findByText('Follow-up check-in from Dr. Synthetic')).closest('li');
     await userEvent.click(within(item).getByRole('button', { name: 'Mark read' }));

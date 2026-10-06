@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { careApi, doctorsApi, patientsApi } from '../../lib/domainApi.js';
 import { ApiError } from '../../lib/apiClient.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -17,6 +17,7 @@ import { CalendarDays, ChevronDown, HelpCircle, Search, Stethoscope, UserPlus } 
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { AvailabilitySummary, DoctorCredentials } from './DoctorInfo.jsx';
 import { useDoctorProfile, useDoctorSlots } from './doctorInfo.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 /** Which actions the patient side can take in each state (the server enforces the same rules). */
 const PATIENT_ACTIONS = {
@@ -84,7 +85,7 @@ function StateLegend() {
           className="ml-auto h-4 w-4 transition-transform group-open:rotate-180"
         />
       </summary>
-      <ol className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <ol className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {LEGEND.map(([title, text], i) => (
           <li key={title} className="rounded-lg bg-surface-muted p-3 text-sm">
             <p className="font-medium text-text">
@@ -232,7 +233,7 @@ function DoctorSearch({ patientId, existingDoctorIds, onRequested }) {
     queryKey: ['doctors', 'directory', submitted],
     queryFn: async () => (await doctorsApi.directory({ q: submitted || undefined })).data,
   });
-  const request = useMutation({
+  const request = useSafeMutation({
     mutationFn: (doctor) => careApi.request({ patientId, doctorId: doctor.id }),
     onSuccess: (_rel, doctor) => {
       setMessage({
@@ -320,7 +321,7 @@ export function MyDoctorsPage() {
     enabled: Boolean(patientId),
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['care', patientId] });
-  const act = useMutation({
+  const act = useSafeMutation({
     mutationFn: ({ id, action }) => careApi.act(id, action),
     onSuccess: refresh,
   });

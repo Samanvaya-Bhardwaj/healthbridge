@@ -8,7 +8,7 @@ export function DoctorCredentials({ doctor }) {
   const verified = doctor.verified ?? doctor.verificationStatus === 'verified';
   const specialities = [doctor.primarySpecialization, ...(doctor.additionalSpecializations ?? [])];
   return (
-    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
       <div className="sm:col-span-2">
         <dt className="sr-only">Verification</dt>
         <dd

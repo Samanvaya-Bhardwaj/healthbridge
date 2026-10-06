@@ -45,6 +45,7 @@ import { FolderOpen } from 'lucide-react';
 import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { ButtonLink } from '../../components/ui/Button.jsx';
 import { ShieldCheck } from 'lucide-react';
+import { LoadError } from '../../components/ui/LoadError.jsx';
 
 /**
  * Doctor: patients who shared records. The list is just the doctor's own active consents;
@@ -190,6 +191,7 @@ function FollowUpsForPatient({ patientId }) {
           </ButtonLink>
         }
       />
+      <LoadError queries={[list]} what="follow-ups" className="mt-2" />
       {list.isSuccess && mine.length === 0 && (
         <p className="mt-2 text-sm text-text-muted">No follow-ups with this patient.</p>
       )}
@@ -265,7 +267,7 @@ export function DoctorPatientRecordsPage() {
             tabs={RECORD_TABS}
           />
           {tab === 'overview' && (
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <Card>
                 <SectionHeader
                   icon={FlaskConical}

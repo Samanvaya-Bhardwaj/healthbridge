@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Building2,
@@ -35,6 +35,7 @@ import {
   useSharedRecords,
   waitingWindowOpen,
 } from '../doctors/doctorWork.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const dayRange = (now) => {
   const from = new Date(now);
@@ -76,11 +77,11 @@ function Visit({ a, consent, now, featured = false }) {
   const live = room.data?.consultation?.status === 'live' || a.status === 'in_consultation';
   const present = Boolean(room.data?.waitingRoom?.patientPresent);
   const roomPath = `/app/appointments/${a.id}/consultation`;
-  const start = useMutation({
+  const start = useSafeMutation({
     mutationFn: () => consultationApi.start(a.id),
     onSuccess: () => navigate(roomPath),
   });
-  const checkIn = useMutation({
+  const checkIn = useSafeMutation({
     mutationFn: () => schedulingApi.action(a.id, 'check-in'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['doctor-today'] }),
   });
@@ -283,7 +284,7 @@ export function DoctorToday({ firstName }) {
         </Alert>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-6">
           {today.isPending && <LoadingState label="Loading today’s consultations" rows={3} />}
           {today.isError && <Alert tone="error">{authErrorMessage(today.error)}</Alert>}

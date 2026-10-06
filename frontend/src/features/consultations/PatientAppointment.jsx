@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { APPOINTMENT_CONSENT_GRACE_HOURS, PATIENT_FULL_REFUND_HOURS } from '@healthbridge/shared';
 import {
   Building2,
@@ -39,6 +39,8 @@ import {
 import { SCOPE_LABELS } from '../records/labels.js';
 import { EmergencyGuidance, NoteView, VideoPanel } from './ConsultationParts.jsx';
 import { PrescriptionList } from './Prescriptions.jsx';
+import { LoadError } from '../../components/ui/LoadError.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const UPCOMING = ['pending_payment', 'confirmed', 'checked_in'];
 const SHARE_SCOPES = ['patient_profile', 'medical_documents'];
@@ -297,7 +299,7 @@ function SharingItem({ a }) {
     queryFn: () => consentsApi.list(a.patientId),
     retry: false,
   });
-  const grant = useMutation({
+  const grant = useSafeMutation({
     mutationFn: () =>
       consentsApi.grant({
         patientId: a.patientId,
@@ -465,7 +467,7 @@ function FollowUpsForVisit({ a, consultationId }) {
 
 function Manage({ a, now }) {
   const queryClient = useQueryClient();
-  const cancel = useMutation({
+  const cancel = useSafeMutation({
     mutationFn: () => schedulingApi.cancel(a.id, 'patient_request'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -578,11 +580,12 @@ export function PatientAppointment({ view, status, appointmentId, notice }) {
           {c?.status === 'live' && <StatusBadge status="live" />}
         </div>
       </PageHeader>
+      <LoadError queries={[details]} what="the payment and booking details" />
       {notice && <Alert tone="success">{notice}</Alert>}
       {status?.emergencyGuidance && <EmergencyGuidance guidance={status.emergencyGuidance} />}
       <NowPanel a={a} view={view} status={status} appointmentId={appointmentId} />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Details a={a} />
         {upcoming || c?.status === 'live' ? (
           <Card>

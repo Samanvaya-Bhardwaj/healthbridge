@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assistApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
@@ -13,6 +13,7 @@ import { PageHeader } from '../../components/ui/Typography.jsx';
 import { BackLink } from '../../components/ui/BackLink.jsx';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { formatDateTime } from '../appointments/format.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const AI_NOTICE =
   'AI-generated from the shared records. Every sentence cites its source — check the sources before relying on it. It does not diagnose or recommend treatment.';
@@ -41,7 +42,7 @@ function Sentences({ sentences }) {
 /** Doctor: ask a question about a consented patient's records (patient-scoped RAG). */
 export function AskRecords({ patientId }) {
   const [question, setQuestion] = useState('');
-  const ask = useMutation({ mutationFn: () => assistApi.ask(patientId, question.trim()) });
+  const ask = useSafeMutation({ mutationFn: () => assistApi.ask(patientId, question.trim()) });
   return (
     <div className="space-y-3">
       <form
@@ -59,7 +60,12 @@ export function AskRecords({ patientId }) {
           onChange={(e) => setQuestion(e.target.value)}
           hint="For example: What was the most recent WBC count?"
         />
-        <Button type="submit" disabled={ask.isPending || question.trim().length < 3}>
+        <Button
+          type="submit"
+          variant="ai"
+          disabled={question.trim().length < 3}
+          loading={ask.isPending}
+        >
           {ask.isPending ? 'Searching…' : 'Ask'}
         </Button>
       </form>
@@ -98,11 +104,11 @@ export function BriefPage() {
     queryFn: () => assistApi.brief(id, false),
     retry: false,
   });
-  const refresh = useMutation({
+  const refresh = useSafeMutation({
     mutationFn: () => assistApi.brief(id, true),
     onSuccess: (data) => queryClient.setQueryData(['brief', id], data),
   });
-  const feedback = useMutation({
+  const feedback = useSafeMutation({
     mutationFn: (rating) => assistApi.feedback(brief.data.id, rating),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['brief', id] }),
   });

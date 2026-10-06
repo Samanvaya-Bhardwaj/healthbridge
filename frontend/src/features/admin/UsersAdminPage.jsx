@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ALL_ROLES,
   PERMISSIONS,
@@ -22,6 +22,7 @@ import { controlClass } from '../../components/ui/fieldStyles.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { Users } from 'lucide-react';
 import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const roleOptions = ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 const STATUS_REASONS = [
@@ -50,7 +51,7 @@ function UserDetail({ userId, onClose }) {
     setMessage({ tone: 'success', text });
   };
   const onError = (error) => setMessage({ tone: 'error', text: authErrorMessage(error) });
-  const status = useMutation({
+  const status = useSafeMutation({
     mutationFn: ({ next, reasonCode }) =>
       adminApi.setUserStatus(userId, {
         status: next,
@@ -67,7 +68,7 @@ function UserDetail({ userId, onClose }) {
     },
     onError,
   });
-  const grant = useMutation({
+  const grant = useSafeMutation({
     mutationFn: (role) => adminApi.grantRole(userId, role),
     onSuccess: (data) => {
       setDialog(null);
@@ -75,7 +76,7 @@ function UserDetail({ userId, onClose }) {
     },
     onError,
   });
-  const revoke = useMutation({
+  const revoke = useSafeMutation({
     mutationFn: (role) => adminApi.revokeRole(userId, role),
     onSuccess: (data) => {
       setDialog(null);
@@ -83,7 +84,7 @@ function UserDetail({ userId, onClose }) {
     },
     onError,
   });
-  const sessions = useMutation({
+  const sessions = useSafeMutation({
     mutationFn: () => adminApi.revokeSessions(userId),
     onSuccess: (data) => {
       setDialog(null);
@@ -112,7 +113,7 @@ function UserDetail({ userId, onClose }) {
           Close
         </Button>
       </div>
-      <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-text-subtle">Status</dt>
           <dd>
@@ -324,7 +325,7 @@ export function UsersAdminPage() {
       {canAdminister && <PlatformBoundary compact />}
       <Card>
         <form
-          className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             setSelected(null);
@@ -373,7 +374,12 @@ export function UsersAdminPage() {
       ) : rows.length === 0 ? (
         <EmptyState title="No users found">Try a different name, email or filter.</EmptyState>
       ) : (
-        <div className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised">
+        <div
+          role="region"
+          aria-label="Users table"
+          tabIndex={0}
+          className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised"
+        >
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Users</caption>
             <thead className="border-b border-border text-text-subtle">

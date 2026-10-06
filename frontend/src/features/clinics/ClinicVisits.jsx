@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Building2, CreditCard, ShieldOff, UserCheck, Video } from 'lucide-react';
 import { paymentsApi, schedulingApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -11,6 +11,7 @@ import { RadioGroup, TextField } from '../../components/ui/Fields.jsx';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { MODE_LABELS, formatDateTime, formatFee, formatTime } from '../appointments/format.js';
 import { paymentText, refundable, usePaymentState } from './clinicWork.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 /** The role boundary, stated where clinic administrators work. */
 export function OperationsBoundary({ compact = false }) {
@@ -56,7 +57,7 @@ export function RefundDialog({ a, paymentState, onClose }) {
   const partly = paymentState === 'partially_refunded';
   const paise = part === 'amount' ? Math.round(Number(amount || 0) * 100) : undefined;
   const invalid = part === 'amount' && (!paise || paise <= 0 || paise > a.feePaise);
-  const refund = useMutation({
+  const refund = useSafeMutation({
     mutationFn: () =>
       paymentsApi.refund(
         a.id,
@@ -174,7 +175,7 @@ export function ClinicVisitRow({ a, now }) {
     queryClient.invalidateQueries({ queryKey: ['clinic-board'] });
     queryClient.invalidateQueries({ queryKey: ['appointment', a.id] });
   };
-  const act = useMutation({
+  const act = useSafeMutation({
     mutationFn: (action) =>
       action === 'cancel'
         ? schedulingApi.cancel(a.id, 'clinic_closed')

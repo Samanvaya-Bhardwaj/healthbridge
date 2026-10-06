@@ -1,4 +1,3 @@
-import { useMutation } from '@tanstack/react-query';
 import { consultationApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
@@ -7,6 +6,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { formatDateTime } from '../appointments/format.js';
 import { VideoRoom } from './VideoRoom.jsx';
 import { PATIENT_SOAP_LABELS, SOAP } from './soap.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 /** Pieces of the consultation room shared by the doctor and patient views. */
 
@@ -59,7 +59,7 @@ export function NoteView({ note, patient = false }) {
           {note.correctionReason}
         </p>
       )}
-      <dl className="grid gap-2 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {SOAP.filter(([key]) => note.note[key]).map(([key, label]) => (
           <div key={key}>
             <dt className="text-xs font-semibold uppercase text-text-subtle">
@@ -74,7 +74,7 @@ export function NoteView({ note, patient = false }) {
 }
 
 export function VideoPanel({ appointmentId }) {
-  const join = useMutation({ mutationFn: () => consultationApi.join(appointmentId) });
+  const join = useSafeMutation({ mutationFn: () => consultationApi.join(appointmentId) });
   return (
     <div className="rounded-lg border border-border bg-surface-muted p-4">
       {!join.data ? (

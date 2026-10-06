@@ -12,7 +12,6 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { clinicsApi } from '../../lib/domainApi.js';
-import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { ButtonLink } from '../../components/ui/Button.jsx';
 import { Card } from '../../components/ui/Card.jsx';
@@ -21,6 +20,7 @@ import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { formatTime } from '../appointments/format.js';
 import { ClinicVisitRow, OperationsBoundary } from './ClinicVisits.jsx';
 import { ACTIVE, GONE, attentionItems, doctorsWorking, useClinicDay } from './clinicWork.js';
+import { LoadError } from '../../components/ui/LoadError.jsx';
 
 function Stat({ label, value, icon: Icon, tone = 'primary' }) {
   return (
@@ -92,7 +92,7 @@ export function ClinicOverview({ clinicId, firstName }) {
       />
       <OperationsBoundary />
 
-      {day.isError && <Alert tone="error">{authErrorMessage(day.error)}</Alert>}
+      <LoadError queries={[day, clinic, members]} what="today at your clinic" />
       {day.isSuccess && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat icon={CalendarDays} label="Visits today" value={visits.length} />
@@ -115,7 +115,7 @@ export function ClinicOverview({ clinicId, firstName }) {
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-6">
           {issues.length > 0 && (
             <section aria-labelledby="issues-heading" className="space-y-3">

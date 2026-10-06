@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GUARDIAN_RELATIONSHIP_TYPES, createDependentSchema } from '@healthbridge/shared';
 import { patientsApi } from '../../lib/domainApi.js';
 import { ApiError } from '../../lib/apiClient.js';
@@ -14,6 +14,8 @@ import { PatientProfileForm } from './PatientProfileForm.jsx';
 import { useAuth } from '../auth/authContext.js';
 import { Stethoscope, UserRound } from 'lucide-react';
 import { PageHeader } from '../../components/ui/Typography.jsx';
+import { useConfirm } from '../../components/ui/useConfirm.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const RELATIONSHIP_OPTIONS = GUARDIAN_RELATIONSHIP_TYPES.map((v) => ({
   value: v,
@@ -48,7 +50,19 @@ function Dependents() {
     setAdding(false);
     refresh();
   });
-  const end = useMutation({ mutationFn: patientsApi.endGuardianship, onSuccess: refresh });
+  const end = useSafeMutation({ mutationFn: patientsApi.endGuardianship, onSuccess: refresh });
+  const { confirm, dialog } = useConfirm();
+  const confirmEnd = async (d) => {
+    const ok = await confirm({
+      title: `Stop managing ${d.fullName}’s care?`,
+      description:
+        'You will no longer see their appointments, records or follow-ups, or book for them. Their health record is kept.',
+      confirmLabel: 'Stop managing',
+      destructive: true,
+      tone: 'warning',
+    });
+    if (ok) end.mutate(d.guardianship.id);
+  };
 
   return (
     <Card>
@@ -89,6 +103,17 @@ function Dependents() {
           />
         </div>
       )}
+      {dialog}
+      {end.isError && (
+        <Alert tone="error" className="mt-4">
+          {authErrorMessage(end.error)}
+        </Alert>
+      )}
+      {dependents.isError && (
+        <Alert tone="error" className="mt-4">
+          {authErrorMessage(dependents.error)}
+        </Alert>
+      )}
       {dependents.isPending && <Skeleton className="mt-6 h-12 w-full" />}
       {dependents.data?.length > 0 && (
         <ul className="mt-6 divide-y divide-border">
@@ -110,7 +135,8 @@ function Dependents() {
                 </Link>
                 <Button
                   variant="ghost"
-                  onClick={() => end.mutate(d.guardianship.id)}
+                  onClick={() => confirmEnd(d)}
+                  disabled={end.isPending}
                   aria-label={`Stop managing ${d.fullName}`}
                 >
                   Stop managing

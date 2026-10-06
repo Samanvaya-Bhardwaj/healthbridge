@@ -9,7 +9,7 @@ import {
   localIso,
 } from './weekModel.js';
 
-const PX_PER_MIN = 0.9;
+const PX_PER_MIN = 1.2;
 
 export function Legend() {
   return (
@@ -49,7 +49,7 @@ export function WeekGrid({ weekStart, rules = [], appointments = [], timeOff = [
   const today = localIso(new Date());
 
   return (
-    <div className="overflow-x-auto">
+    <div role="region" aria-label="Week schedule" tabIndex={0} className="overflow-x-auto">
       <div className="grid min-w-[44rem] grid-cols-[3rem_repeat(7,minmax(0,1fr))]">
         <div />
         {days.map((d) => (
@@ -92,7 +92,10 @@ export function WeekGrid({ weekStart, rules = [], appointments = [], timeOff = [
               .map((b) => {
                 const style = {
                   top: top(b.start),
-                  height: Math.max(14, (b.end - Math.max(b.start, startHour * 60)) * PX_PER_MIN),
+                  height: Math.max(
+                    b.to ? 24 : 14,
+                    (b.end - Math.max(b.start, startHour * 60)) * PX_PER_MIN,
+                  ),
                 };
                 const inset =
                   b.kind === 'available' || b.kind === 'timeOff'
@@ -108,9 +111,7 @@ export function WeekGrid({ weekStart, rules = [], appointments = [], timeOff = [
                       )}
                       <span className="truncate">{b.label}</span>
                     </span>
-                    {style.height > 30 && (
-                      <span className="block truncate opacity-80">{b.detail}</span>
-                    )}
+                    {style.height > 30 && <span className="block truncate">{b.detail}</span>}
                   </>
                 );
                 const cls = `absolute ${inset} overflow-hidden rounded px-1 py-0.5 text-[11px] leading-tight ${KIND_STYLES[b.kind]}`;
@@ -162,7 +163,7 @@ export function WeekAgenda({ weekStart, rules = [], appointments = [], timeOff =
                   const content = (
                     <>
                       <span className="font-medium">{b.label}</span>
-                      <span className="opacity-80"> · {b.detail}</span>
+                      <span> · {b.detail}</span>
                     </>
                   );
                   const cls = `block rounded-lg px-2.5 py-1.5 text-sm ${KIND_STYLES[b.kind]}`;

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BadgeCheck, Ban, ClipboardCheck, FileSearch, ShieldOff, XCircle } from 'lucide-react';
 import { adminApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -12,6 +12,7 @@ import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { Tabs } from '../../components/ui/Tabs.jsx';
 import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const TABS = [
   ['pending', 'Waiting'],
@@ -44,9 +45,9 @@ const NEGATIVE = Object.keys(REASON_LABELS)
   .map((value) => ({ value, label: REASON_LABELS[value] }));
 const when = (v) => (v ? new Date(v).toLocaleString('en-IN') : '—');
 
-function Row({ label, children }) {
+function Row({ label, children, className }) {
   return (
-    <div>
+    <div className={className}>
       <dt className="text-xs font-semibold uppercase tracking-wide text-text-subtle">{label}</dt>
       <dd className="mt-0.5 text-sm text-text">{children || '—'}</dd>
     </div>
@@ -63,7 +64,7 @@ function Application({ item }) {
   if (detail.isError) return <Alert tone="error">{authErrorMessage(detail.error)}</Alert>;
   const p = detail.data.doctorProfile;
   return (
-    <dl className="grid gap-4 rounded-xl bg-surface-muted p-4 sm:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-4 rounded-xl bg-surface-muted p-4 sm:grid-cols-2">
       <Row label="Name shown to patients">{p.professionalName}</Row>
       <Row label="Profile created">{when(p.createdAt)}</Row>
       <Row label="Registration number">{item.registrationNumber}</Row>
@@ -87,9 +88,9 @@ function Application({ item }) {
         ) : null}
       </Row>
       <Row label="Languages">{p.languages?.join(', ')}</Row>
-      <div className="sm:col-span-2">
-        <Row label="About">{p.bio}</Row>
-      </div>
+      <Row label="About" className="sm:col-span-2">
+        {p.bio}
+      </Row>
     </dl>
   );
 }
@@ -99,18 +100,18 @@ function CaseCard({ item, onChanged }) {
   const [chosen, setOpen] = useState(null);
   const open = chosen ?? item.status === 'under_review';
   const [dialog, setDialog] = useState(null);
-  const start = useMutation({
+  const start = useSafeMutation({
     mutationFn: () => adminApi.startReview(item.id),
     onSuccess: onChanged,
   });
-  const decide = useMutation({
+  const decide = useSafeMutation({
     mutationFn: (body) => adminApi.decide(item.id, body),
     onSuccess: () => {
       setDialog(null);
       onChanged();
     },
   });
-  const suspend = useMutation({
+  const suspend = useSafeMutation({
     mutationFn: (body) => adminApi.suspendDoctor(item.doctorId, body),
     onSuccess: () => {
       setDialog(null);

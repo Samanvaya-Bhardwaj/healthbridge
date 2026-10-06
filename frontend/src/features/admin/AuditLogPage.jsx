@@ -193,7 +193,7 @@ function AuditRow({ entry, onFilter }) {
       {open && (
         <tr>
           <td colSpan={6} className="bg-surface-muted px-4 py-3">
-            <dl className="grid gap-2 text-xs sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
               <div>
                 <dt className="text-text-subtle">Request ID</dt>
                 <dd>
@@ -232,7 +232,7 @@ function AuditRow({ entry, onFilter }) {
                   {Object.keys(entry.metadata ?? {}).length === 0 ? (
                     '—'
                   ) : (
-                    <dl className="mt-1 grid gap-x-4 gap-y-1 rounded-lg bg-surface-raised p-3 sm:grid-cols-[auto_1fr]">
+                    <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 rounded-lg bg-surface-raised p-3 sm:grid-cols-[auto_1fr]">
                       {Object.entries(entry.metadata).map(([k, v]) => (
                         <div key={k} className="contents">
                           <dt className="font-mono text-text-subtle">{k}</dt>
@@ -303,7 +303,7 @@ export function AuditLogPage() {
       <PlatformBoundary compact />
       <Card>
         <form
-          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
             apply(draft);
@@ -444,7 +444,12 @@ export function AuditLogPage() {
       ) : rows.length === 0 ? (
         <EmptyState title="No audit entries">No entries match these filters.</EmptyState>
       ) : (
-        <div className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised">
+        <div
+          role="region"
+          aria-label="Audit entries table"
+          tabIndex={0}
+          className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised"
+        >
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Audit entries</caption>
             <thead className="border-b border-border text-text-subtle">

@@ -101,7 +101,7 @@ function ContinuityIllustration() {
 export function HomePage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-20">
-      <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary">
             Healthcare continuity
@@ -133,7 +133,7 @@ export function HomePage() {
       </div>
 
       <ul
-        className="mt-20 grid gap-10 border-t border-border pt-12 sm:grid-cols-3"
+        className="mt-20 grid grid-cols-1 gap-10 border-t border-border pt-12 sm:grid-cols-3"
         aria-label="Our principles"
       >
         {principles.map((p) => (

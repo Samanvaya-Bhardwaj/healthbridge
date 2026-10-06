@@ -35,7 +35,7 @@ export function PersonIdentity({ name, detail, verified = false, size = 'md', to
       <Avatar name={name} size={size} tone={tone} />
       <span className="min-w-0">
         <span className="flex items-center gap-1 font-medium text-text">
-          <span className="truncate">{name}</span>
+          <span className="[overflow-wrap:anywhere]">{name}</span>
           {verified && (
             <BadgeCheck
               className="h-4 w-4 shrink-0 text-primary"

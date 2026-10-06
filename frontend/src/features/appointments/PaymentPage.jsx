@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { paymentsApi, schedulingApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
@@ -11,6 +11,7 @@ import { MODE_LABELS, formatDateTime, formatFee, formatTime } from './format.js'
 import { openRazorpayCheckout } from './razorpayCheckout.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { CreditCard } from 'lucide-react';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const POLL_MS = 2_000;
 const SLOW_AFTER_MS = 60_000;
@@ -45,7 +46,7 @@ export function PaymentPage() {
     queryClient.invalidateQueries({ queryKey: ['appointment', id] });
   };
 
-  const start = useMutation({
+  const start = useSafeMutation({
     mutationFn: () => paymentsApi.checkout(id),
     onSuccess: async (result) => {
       setCheckout(result);
@@ -64,7 +65,7 @@ export function PaymentPage() {
       }
     },
   });
-  const simulate = useMutation({
+  const simulate = useSafeMutation({
     mutationFn: (outcome) => paymentsApi.simulate(id, outcome),
     onSuccess: toProcessing,
   });
@@ -79,7 +80,7 @@ export function PaymentPage() {
     </Link>
   );
   const summary = (
-    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
       <div>
         <dt className="text-text-muted">Doctor</dt>
         <dd className="font-medium text-text">{a.doctor?.professionalName}</dd>
@@ -195,7 +196,11 @@ export function PaymentPage() {
             test webhook exactly as it would from a real payment provider.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button onClick={() => simulate.mutate('success')} disabled={simulate.isPending}>
+            <Button
+              onClick={() => simulate.mutate('success')}
+              disabled={simulate.isPending}
+              loading={simulate.isPending && simulate.variables === 'success'}
+            >
               Simulate successful payment
             </Button>
             <Button
@@ -216,8 +221,13 @@ export function PaymentPage() {
             start.mutate();
           }}
           disabled={start.isPending}
+          loading={start.isPending}
         >
-          {failed ? 'Try again' : `Pay ${formatFee(a.feePaise)}`}
+          {start.isPending
+            ? 'Opening secure payment…'
+            : failed
+              ? 'Try again'
+              : `Pay ${formatFee(a.feePaise)}`}
         </Button>
       )}
     </div>

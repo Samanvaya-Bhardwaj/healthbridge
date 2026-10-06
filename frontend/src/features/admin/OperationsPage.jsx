@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, RotateCcw, ServerCog } from 'lucide-react';
 import { adminApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -12,6 +12,7 @@ import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { Tabs } from '../../components/ui/Tabs.jsx';
 import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
 import { QUEUE_NAMES, platformHealth } from './adminHealth.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 /** Job states in plain words, the same everywhere on this page. */
 const STATES = [
@@ -87,7 +88,7 @@ export function OperationsPage() {
     queryKey: ['admin', 'operations', 'dead-letters', tab],
     queryFn: () => adminApi.deadLetters(tab),
   });
-  const retry = useMutation({
+  const retry = useSafeMutation({
     mutationFn: (id) => adminApi.retryDeadLetter(id),
     onSuccess: () => {
       setConfirming(null);
@@ -123,7 +124,7 @@ export function OperationsPage() {
               title="What the states mean"
               description="Counts refresh every 15 seconds."
             />
-            <ul className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <li className="flex items-start gap-2">
                 <Badge tone="success">Healthy</Badge>
                 <span className="text-text-muted">Nothing waiting or failing.</span>
@@ -144,7 +145,12 @@ export function OperationsPage() {
           </Card>
 
           {summary.data.queues && (
-            <div className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised">
+            <div
+              role="region"
+              aria-label="Queues table"
+              tabIndex={0}
+              className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised"
+            >
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">Queues</caption>
                 <thead className="border-b border-border text-text-subtle">

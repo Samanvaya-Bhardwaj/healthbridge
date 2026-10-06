@@ -48,7 +48,7 @@ export function PatientProfileForm({
       onSubmit={handleSubmit((values) => onSubmit(values, setError))}
       className="space-y-6"
     >
-      <fieldset className="grid gap-5 sm:grid-cols-2">
+      <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-semibold text-text">Personal details</legend>
         {field('fullName', 'Full name', { autoComplete: 'name' })}
         {field('preferredName', 'Preferred name (optional)')}
@@ -62,14 +62,14 @@ export function PatientProfileForm({
         />
         {extraFields?.(register, errors)}
       </fieldset>
-      <fieldset className="grid gap-5 sm:grid-cols-2">
+      <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-semibold text-text">Contact</legend>
         {field('phone', 'Mobile number (optional)', { type: 'tel', placeholder: '+919812345678' })}
         {field('city', 'City (optional)')}
         {field('state', 'State (optional)')}
         {field('postalCode', 'PIN code (optional)')}
       </fieldset>
-      <fieldset className="grid gap-5 sm:grid-cols-3">
+      <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <legend className="mb-2 text-sm font-semibold text-text">
           Emergency contact (optional)
         </legend>

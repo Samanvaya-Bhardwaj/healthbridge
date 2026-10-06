@@ -22,18 +22,24 @@ export function NotificationBell() {
     retry: false,
   });
   const unread = count.data?.unreadCount ?? 0;
+  const shown = unread > 99 ? '99+' : String(unread);
   return (
     <Link
       to="/app/notifications"
       className="relative inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
-      aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
     >
       <Bell aria-hidden="true" className="h-5 w-5" />
-      <span className="hidden lg:inline">Notifications</span>
+      <span className="sr-only lg:not-sr-only">Notifications</span>{' '}
       {unread > 0 && (
-        <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-contrast">
-          {unread > 99 ? '99+' : unread}
-        </span>
+        <>
+          <span
+            aria-hidden="true"
+            className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-contrast"
+          >
+            {shown}
+          </span>
+          <span className="sr-only">{`${shown} unread`}</span>
+        </>
       )}
     </Link>
   );
@@ -94,7 +100,11 @@ export function InboxPage() {
                 <div>
                   <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
                     {!n.readAt && (
-                      <span className="h-2 w-2 rounded-full bg-primary" aria-label="Unread" />
+                      <span
+                        role="img"
+                        className="h-2 w-2 rounded-full bg-primary"
+                        aria-label="Unread"
+                      />
                     )}
                     {n.title}
                     {n.priority === 'urgent' && <Badge tone="danger">Urgent</Badge>}
@@ -113,7 +123,11 @@ export function InboxPage() {
                     </Link>
                   )}
                   {!n.readAt && (
-                    <Button variant="ghost" onClick={() => read.mutate(n.id)}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => read.mutate(n.id)}
+                      loading={read.isPending && read.variables === n.id}
+                    >
                       Mark read
                     </Button>
                   )}

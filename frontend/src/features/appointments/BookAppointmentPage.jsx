@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   BOOKING_HORIZON_DAYS,
   PATIENT_FULL_REFUND_HOURS,
@@ -26,6 +26,7 @@ import {
   summariseSlots,
   useDoctorProfile,
 } from '../care/doctorInfo.js';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const dayParts = (slots) => {
   const parts = [
@@ -216,7 +217,7 @@ export function BookAppointmentPage() {
   const daySlots = days.find(([k]) => k === activeDay)?.[1] ?? [];
   const clinicName = (id) => doctor.data?.clinics?.find((c) => c.id === id)?.name;
 
-  const submit = useMutation({
+  const submit = useSafeMutation({
     mutationFn: () =>
       rescheduleId
         ? schedulingApi.reschedule(rescheduleId, selected.startsAt)
@@ -304,7 +305,7 @@ export function BookAppointmentPage() {
         </EmptyState>
       )}
       {slots.isSuccess && modes.length > 0 && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="space-y-4">
             {!rescheduleId && (
               <Step
@@ -313,7 +314,7 @@ export function BookAppointmentPage() {
                 hint="How would you like to see the doctor?"
                 done={Boolean(activeMode)}
               >
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {['online', 'in_clinic'].map((m) => {
                     const info = modes.find((x) => x.mode === m);
                     const Icon = MODE_ICONS[m];

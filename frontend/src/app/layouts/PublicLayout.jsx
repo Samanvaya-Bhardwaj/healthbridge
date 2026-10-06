@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { Link, Outlet } from 'react-router';
+import { useRouteFocus } from '../useRouteFocus.js';
 import { Logo } from '../../components/ui/Logo.jsx';
 import { SystemStatus } from '../../features/system/SystemStatus.jsx';
 import { DemoBanner } from '../../features/system/DemoBanner.jsx';
@@ -36,6 +38,8 @@ function HeaderActions() {
 }
 
 export function PublicLayout() {
+  const mainRef = useRef(null);
+  useRouteFocus(mainRef);
   return (
     <div className="flex min-h-dvh flex-col">
       <a
@@ -53,7 +57,7 @@ export function PublicLayout() {
           <HeaderActions />
         </div>
       </header>
-      <main id="main" className="flex-1">
+      <main id="main" ref={mainRef} tabIndex={-1} className="flex-1 outline-none">
         <Outlet />
       </main>
       <footer className="border-t border-border">

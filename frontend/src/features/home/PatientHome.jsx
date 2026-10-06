@@ -36,6 +36,7 @@ import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { ButtonLink } from '../../components/ui/Button.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PersonIdentity } from '../../components/ui/Identity.jsx';
+import { LoadError } from '../../components/ui/LoadError.jsx';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import {
   MODE_LABELS,
@@ -431,7 +432,9 @@ function YourCare({ team, patientId }) {
           summary={
             documents.isPending
               ? 'Loading…'
-              : `${available ? `${available} document${available === 1 ? '' : 's'}` : 'No documents yet'}${checking ? ` · ${checking} being checked` : ''}`
+              : documents.isError
+                ? 'Couldn’t load just now. Open to see your records.'
+                : `${available ? `${available} document${available === 1 ? '' : 's'}` : 'No documents yet'}${checking ? ` · ${checking} being checked` : ''}`
           }
           to="/app/records"
           action={available ? 'Open' : 'Upload'}
@@ -442,9 +445,11 @@ function YourCare({ team, patientId }) {
           summary={
             prescriptions.isPending
               ? 'Loading…'
-              : latest
-                ? `Latest from ${latest.doctorName ?? 'your doctor'}, ${formatDateTime(latest.signedAt)}`
-                : 'Signed prescriptions appear here'
+              : prescriptions.isError
+                ? 'Couldn’t load just now. Open to see your prescriptions.'
+                : latest
+                  ? `Latest from ${latest.doctorName ?? 'your doctor'}, ${formatDateTime(latest.signedAt)}`
+                  : 'Signed prescriptions appear here'
           }
           to="/app/prescriptions"
           action="View"
@@ -533,7 +538,9 @@ export function PatientHome({ firstName }) {
   ];
 
   const loading = profile.isPending || (patientId && (care.isPending || upcoming.isPending));
-  const firstRun = missing || (!loading && !next && !activeDoctor);
+  // A failed load must never look like a brand-new account ("add your first doctor").
+  const failed = (profile.isError && !missing) || care.isError || upcoming.isError;
+  const firstRun = !failed && (missing || (!loading && !next && !activeDoctor));
 
   return (
     <div className="space-y-8">
@@ -551,7 +558,12 @@ export function PatientHome({ firstName }) {
         <LoadingState label="Loading your home page" rows={3} />
       ) : (
         <>
-          {firstRun && !next ? (
+          {failed ? (
+            <LoadError
+              queries={[missing ? null : profile, care, upcoming]}
+              what="your appointments and doctors"
+            />
+          ) : firstRun && !next ? (
             <GettingStarted
               hasProfile={Boolean(patientId)}
               hasDoctor={Boolean(activeDoctor)}
@@ -563,7 +575,8 @@ export function PatientHome({ firstName }) {
             <NoAppointment doctor={activeDoctor} patientId={patientId} />
           )}
 
-          {patientId && (!firstRun || actions.length > 0) && (
+          <LoadError queries={[followUps]} what="your follow-up check-ins" />
+          {patientId && !failed && (!firstRun || actions.length > 0) && (
             <ActionsNeeded items={actions} loading={followUps.isPending} />
           )}
 
@@ -603,7 +616,7 @@ export function PatientHome({ firstName }) {
           )}
 
           {patientId && !firstRun && (
-            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <RecentActivity patientId={patientId} />
               <YourCare team={team} patientId={patientId} />
             </div>

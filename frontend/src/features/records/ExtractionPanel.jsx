@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { intelligenceApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { FlaskConical, Sparkles } from 'lucide-react';
+import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
 const FLAG_TONES = { high: 'warning', low: 'warning', normal: 'success' };
 
@@ -22,7 +23,7 @@ export function ExtractionPanel({ documentId, canVerify = false }) {
     queryKey: ['extraction', documentId],
     queryFn: () => intelligenceApi.extraction(documentId),
   });
-  const verify = useMutation({
+  const verify = useSafeMutation({
     mutationFn: () => intelligenceApi.verify(documentId, selected),
     onSuccess: () => {
       setSelected([]);
