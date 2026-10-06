@@ -71,9 +71,12 @@ export function AskRecords({ patientId }) {
         </Alert>
       )}
       {ask.data && (
-        <div className="rounded-lg border border-border p-3">
+        <div className="rounded-xl border border-ai/25 bg-ai-soft/40 p-3">
           <p className="mb-2 flex items-center gap-2 text-xs text-text-muted">
-            <Badge tone="primary">AI-generated</Badge> {AI_NOTICE}
+            <Badge tone="ai" icon={Sparkles}>
+              AI-generated
+            </Badge>{' '}
+            {AI_NOTICE}
           </p>
           {ask.data.status === 'answered' ? (
             <Sentences sentences={ask.data.sentences} />
@@ -136,9 +139,9 @@ export function BriefPage() {
         </Alert>
       )}
       {b && (
-        <Card className="border-2 border-dashed border-primary/30">
-          <p className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-primary-soft px-3 py-2 text-xs text-text">
-            <Badge tone="primary" icon={Sparkles}>
+        <Card className="border-2 border-dashed border-ai/30">
+          <p className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-ai-soft px-3 py-2 text-xs text-text">
+            <Badge tone="ai" icon={Sparkles}>
               AI-generated · not a clinical opinion
             </Badge>
             {AI_NOTICE}

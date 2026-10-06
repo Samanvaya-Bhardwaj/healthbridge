@@ -151,16 +151,16 @@ function AiProcessingCard({ patientId }) {
   });
   if (!setting.data) return null;
   return (
-    <Card className="border-primary/20">
+    <Card className="border-ai/25">
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ai-soft text-ai"
         >
           <Sparkles className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ai">
             AI assistance · optional
           </p>
           <CheckboxField

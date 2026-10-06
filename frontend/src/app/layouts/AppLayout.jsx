@@ -8,12 +8,13 @@ import { DemoBanner } from '../../features/system/DemoBanner.jsx';
 import { navigationFor, primaryRole } from '../navigation.js';
 import { NotificationBell } from '../../features/notifications/Inbox.jsx';
 import { Avatar } from '../../components/ui/Identity.jsx';
+import { Logo } from '../../components/ui/Logo.jsx';
 
 const linkClass = ({ isActive }) =>
-  `flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
+  `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${
     isActive
-      ? 'bg-primary-soft text-primary'
-      : 'text-text-muted hover:bg-surface-muted hover:text-text'
+      ? 'bg-surface-raised font-semibold text-primary shadow-card ring-1 ring-border'
+      : 'font-medium text-text-muted hover:bg-surface-raised/70 hover:text-text'
   }`;
 
 /** Navigation grouped under the role's plain-language headings. */
@@ -34,7 +35,7 @@ function NavList({ items, onNavigate, idPrefix }) {
             {group.name && (
               <p
                 id={headingId}
-                className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wide text-text-subtle"
+                className="px-3 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-text-subtle"
               >
                 {group.name}
               </p>
@@ -159,7 +160,7 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface-muted/40">
+    <div className="flex min-h-dvh flex-col bg-surface">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:px-4 focus:py-2"
@@ -179,12 +180,8 @@ export function AppLayout() {
             >
               <Menu aria-hidden="true" className="h-5 w-5" />
             </button>
-            <Link
-              to="/app"
-              className="flex items-center gap-2.5 font-semibold tracking-tight text-text"
-            >
-              <img src="/favicon.svg" alt="" width="28" height="28" />
-              HealthBridge
+            <Link to="/app" aria-label="HealthBridge home">
+              <Logo />
             </Link>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -220,13 +217,10 @@ export function AppLayout() {
       />
 
       <div className="mx-auto flex w-full max-w-7xl flex-1">
-        <nav
-          aria-label="Main"
-          className="hidden w-64 shrink-0 border-r border-border px-3 py-6 md:block"
-        >
+        <nav aria-label="Main" className="hidden w-64 shrink-0 px-3 py-8 md:block">
           <NavList items={items} idPrefix="nav" />
         </nav>
-        <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-10 md:py-8">
+        <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-10">
           <Outlet />
         </main>
       </div>

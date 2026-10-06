@@ -9,6 +9,11 @@ const tones = {
     iconClass: 'text-warning',
   },
   error: { box: 'border-danger/40 bg-danger/5', icon: XCircle, iconClass: 'text-danger' },
+  attention: {
+    box: 'border-attention/40 bg-attention/5',
+    icon: AlertTriangle,
+    iconClass: 'text-attention',
+  },
 };
 tones.danger = tones.error;
 
@@ -22,7 +27,7 @@ export function Alert({ tone = 'info', title, children, action, className = '' }
   return (
     <div
       role={tone === 'error' || tone === 'danger' ? 'alert' : 'status'}
-      className={`flex gap-3 rounded-lg border px-4 py-3 text-sm text-text ${t.box} ${className}`}
+      className={`flex gap-3 rounded-xl border px-4 py-3 text-sm text-text ${t.box} ${className}`}
     >
       <Icon aria-hidden="true" className={`mt-0.5 h-4 w-4 shrink-0 ${t.iconClass}`} />
       <div className="min-w-0 flex-1">

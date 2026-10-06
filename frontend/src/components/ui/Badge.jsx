@@ -5,6 +5,7 @@ import {
   CircleDot,
   Clock,
   Eye,
+  OctagonAlert,
   Timer,
   XCircle,
 } from 'lucide-react';
@@ -16,6 +17,8 @@ const tones = {
   danger: 'bg-danger/10 text-danger',
   primary: 'bg-primary-soft text-primary',
   info: 'bg-info/10 text-info',
+  attention: 'bg-attention/10 text-attention',
+  ai: 'bg-ai-soft text-ai',
 };
 
 export function Badge({ tone = 'neutral', icon: Icon, children }) {
@@ -38,7 +41,8 @@ export function Badge({ tone = 'neutral', icon: Icon, children }) {
 const STATUS_CATEGORIES = Object.freeze({
   confirmed: { tone: 'success', icon: CheckCircle2 },
   pending: { tone: 'warning', icon: Clock },
-  attention: { tone: 'danger', icon: AlertTriangle },
+  attention: { tone: 'attention', icon: AlertTriangle },
+  error: { tone: 'danger', icon: OctagonAlert },
   inProgress: { tone: 'primary', icon: CircleDot },
   completed: { tone: 'neutral', icon: CheckCircle2 },
   cancelled: { tone: 'neutral', icon: XCircle },
@@ -69,13 +73,13 @@ const STATUS = {
   draft: ['pending', 'Draft'],
   // Requires attention
   needs_attention: ['attention', 'Needs attention'],
-  urgent: ['attention', 'Urgent'],
-  failed: ['attention', 'Failed'],
-  rejected: ['attention', 'Rejected'],
+  urgent: ['error', 'Urgent'],
+  failed: ['error', 'Failed'],
+  rejected: ['error', 'Rejected'],
   no_show: ['attention', 'No-show'],
   open: ['attention', 'Open'],
-  disabled: ['attention', 'Disabled'],
-  suspended: ['attention', 'Suspended'],
+  disabled: ['error', 'Disabled'],
+  suspended: ['error', 'Suspended'],
   // In progress
   checked_in: ['inProgress', 'Checked in'],
   in_consultation: ['inProgress', 'In consultation'],

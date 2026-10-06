@@ -304,6 +304,7 @@ const TIMELINE_ICONS = {
   follow_up: HeartPulse,
 };
 
+/** Recent activity as a short timeline: the shape of the patient's record. */
 function RecentActivity({ patientId }) {
   const timeline = useQuery({
     queryKey: ['timeline', patientId, 'home'],
@@ -313,8 +314,9 @@ function RecentActivity({ patientId }) {
   });
   const events = (timeline.data?.data ?? []).slice(0, 4);
   return (
-    <Card>
+    <section aria-labelledby="activity-heading">
       <SectionHeader
+        id="activity-heading"
         icon={History}
         title="Recent health activity"
         actions={
@@ -325,149 +327,129 @@ function RecentActivity({ patientId }) {
           )
         }
       />
-      {timeline.isPending && <LoadingState label="Loading activity" rows={2} className="mt-3" />}
+      {timeline.isPending && <LoadingState label="Loading activity" rows={2} className="mt-4" />}
       {timeline.isSuccess && events.length === 0 && (
-        <p className="mt-3 text-sm text-text-muted">
+        <p className="mt-4 text-sm text-text-muted">
           Visits, documents and prescriptions will appear here as they happen.
         </p>
       )}
       {timeline.isError && (
-        <p className="mt-3 text-sm text-text-muted">Recent activity can’t be shown right now.</p>
+        <p className="mt-4 text-sm text-text-muted">Recent activity can’t be shown right now.</p>
       )}
-      <ol className="mt-2 divide-y divide-border">
+      <ol className="relative mt-4 space-y-4 pl-10">
+        {events.length > 1 && (
+          <span aria-hidden="true" className="absolute bottom-4 left-4 top-4 w-px bg-border" />
+        )}
         {events.map((e) => {
           const Icon = TIMELINE_ICONS[e.type] ?? History;
           return (
-            <li key={e.id} className="flex items-start gap-3 py-2.5">
-              <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div className="min-w-0 flex-1 text-sm">
-                <p className="text-text">{e.title}</p>
-                <p className="flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
-                  <time dateTime={e.occurredAt}>{formatDateTime(e.occurredAt)}</time>
-                  {e.provenance === 'doctor_verified' && (
-                    <span className="inline-flex items-center gap-1 text-success">
-                      <BadgeCheck aria-hidden="true" className="h-3.5 w-3.5" />
-                      Verified
-                    </span>
-                  )}
-                </p>
-              </div>
+            <li key={e.id} className="relative">
+              <span
+                aria-hidden="true"
+                className="absolute -left-10 top-0 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface-raised text-primary"
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+              <p className="pt-1 text-sm text-text">{e.title}</p>
+              <p className="flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
+                <time dateTime={e.occurredAt}>{formatDateTime(e.occurredAt)}</time>
+                {e.provenance === 'doctor_verified' && (
+                  <span className="inline-flex items-center gap-1 text-success">
+                    <BadgeCheck aria-hidden="true" className="h-3.5 w-3.5" />
+                    Verified
+                  </span>
+                )}
+              </p>
             </li>
           );
         })}
       </ol>
-    </Card>
+    </section>
   );
 }
 
-function DoctorsCard({ team, patientId }) {
-  const current = team.filter((r) => ['active', 'pending', 'paused'].includes(r.status));
+/** One line of "your care": what it is, where it stands, and where to go. */
+function CareRow({ icon: Icon, title, summary, to, action }) {
   return (
-    <Card>
-      <SectionHeader
-        icon={Stethoscope}
-        title="My doctors"
-        actions={
-          <ButtonLink as={Link} to="/app/doctors" variant="subtle" size="sm">
-            {current.length ? 'Manage' : 'Find a doctor'}
-          </ButtonLink>
-        }
-      />
-      {current.length === 0 ? (
-        <p className="mt-3 text-sm text-text-muted">
-          No doctors yet. Add your family doctor so you can book with them.
-        </p>
-      ) : (
-        <ul className="mt-2 divide-y divide-border">
-          {current.slice(0, 3).map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-              <PersonIdentity
-                name={r.doctor.professionalName}
-                verified
-                size="sm"
-                detail={r.doctor.primarySpecialization}
-              />
-              {r.status === 'active' ? (
-                <ButtonLink
-                  as={Link}
-                  to={`/app/appointments/book?doctorId=${r.doctorId}&patientId=${patientId}`}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Book
-                </ButtonLink>
-              ) : (
-                <StatusBadge
-                  status={r.status}
-                  label={r.status === 'pending' ? 'Request pending' : undefined}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <li className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary"
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-text">{title}</p>
+        <p className="text-sm text-text-muted">{summary}</p>
+      </div>
+      <ButtonLink as={Link} to={to} variant="subtle" size="sm">
+        {action}
+      </ButtonLink>
+    </li>
   );
 }
 
-function RecordsCard({ patientId }) {
+/** Doctors, records and prescriptions in one calm panel instead of three cards. */
+function YourCare({ team, patientId }) {
   const documents = useQuery({
     queryKey: ['documents', patientId],
     queryFn: () => recordsApi.list(patientId),
     retry: false,
   });
-  const available = (documents.data ?? []).filter((d) => d.status === 'available');
-  const checking = (documents.data ?? []).filter((d) =>
-    ['pending_upload', 'quarantined', 'scanning'].includes(d.status),
-  ).length;
-  return (
-    <Card>
-      <SectionHeader icon={FileText} title="Health records" />
-      <p className="mt-3 text-sm text-text">
-        {documents.isPending
-          ? 'Loading…'
-          : available.length
-            ? `${available.length} document${available.length === 1 ? '' : 's'} in your records.`
-            : 'No documents yet.'}
-        {checking > 0 && ` ${checking} being checked.`}
-      </p>
-      <p className="mt-1 text-sm text-text-muted">
-        Keep lab reports and scans here so your doctors can see your history when you share it.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <ButtonLink as={Link} to="/app/records" size="sm" variant="secondary" icon={Upload}>
-          {available.length ? 'Open records' : 'Upload a document'}
-        </ButtonLink>
-      </div>
-    </Card>
-  );
-}
-
-function PrescriptionsCard({ patientId }) {
-  const list = useQuery({
+  const prescriptions = useQuery({
     queryKey: ['prescriptions', patientId],
     queryFn: () => consultationApi.forPatient(patientId),
     retry: false,
   });
-  const latest = (list.data ?? []).find((rx) => rx.status === 'signed');
+  const doctors = team.filter((r) => r.status === 'active');
+  const pending = team.filter((r) => r.status === 'pending').length;
+  const available = (documents.data ?? []).filter((d) => d.status === 'available').length;
+  const checking = (documents.data ?? []).filter((d) =>
+    ['pending_upload', 'quarantined', 'scanning'].includes(d.status),
+  ).length;
+  const latest = (prescriptions.data ?? []).find((rx) => rx.status === 'signed');
   return (
-    <Card>
-      <SectionHeader icon={Pill} title="Prescriptions" />
-      <p className="mt-3 text-sm text-text">
-        {list.isPending
-          ? 'Loading…'
-          : latest
-            ? `Latest: ${latest.reference}${latest.doctorName ? ` from ${latest.doctorName}` : ''}, signed ${formatDateTime(latest.signedAt)}.`
-            : 'No prescriptions yet.'}
-      </p>
-      <p className="mt-1 text-sm text-text-muted">
-        Prescriptions your doctors sign appear here, ready to download.
-      </p>
-      <div className="mt-3">
-        <ButtonLink as={Link} to="/app/prescriptions" size="sm" variant="secondary" icon={Pill}>
-          {latest ? 'View prescriptions' : 'Open prescriptions'}
-        </ButtonLink>
-      </div>
+    <Card as="section" aria-labelledby="care-heading">
+      <SectionHeader id="care-heading" icon={Stethoscope} title="Your care" className="mb-4" />
+      <ul className="divide-y divide-border">
+        <CareRow
+          icon={Stethoscope}
+          title="My doctors"
+          summary={
+            doctors.length
+              ? `${doctors.map((r) => r.doctor.professionalName).join(', ')}${pending ? ` · ${pending} request pending` : ''}`
+              : pending
+                ? 'Waiting for your doctor to accept'
+                : 'Add your family doctor to book with them'
+          }
+          to="/app/doctors"
+          action={doctors.length ? 'Manage' : 'Find'}
+        />
+        <CareRow
+          icon={FileText}
+          title="Health records"
+          summary={
+            documents.isPending
+              ? 'Loading…'
+              : `${available ? `${available} document${available === 1 ? '' : 's'}` : 'No documents yet'}${checking ? ` · ${checking} being checked` : ''}`
+          }
+          to="/app/records"
+          action={available ? 'Open' : 'Upload'}
+        />
+        <CareRow
+          icon={Pill}
+          title="Prescriptions"
+          summary={
+            prescriptions.isPending
+              ? 'Loading…'
+              : latest
+                ? `Latest from ${latest.doctorName ?? 'your doctor'}, ${formatDateTime(latest.signedAt)}`
+                : 'Signed prescriptions appear here'
+          }
+          to="/app/prescriptions"
+          action="View"
+        />
+      </ul>
     </Card>
   );
 }
@@ -621,11 +603,9 @@ export function PatientHome({ firstName }) {
           )}
 
           {patientId && !firstRun && (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <RecentActivity patientId={patientId} />
-              <DoctorsCard team={team} patientId={patientId} />
-              <RecordsCard patientId={patientId} />
-              <PrescriptionsCard patientId={patientId} />
+              <YourCare team={team} patientId={patientId} />
             </div>
           )}
           {missing && (

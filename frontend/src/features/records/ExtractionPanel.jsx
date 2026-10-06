@@ -55,7 +55,9 @@ export function ExtractionPanel({ documentId, canVerify = false }) {
   return (
     <div className="space-y-3">
       <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
-        <Badge tone="primary">AI-extracted</Badge>
+        <Badge tone="ai" icon={Sparkles}>
+          AI-extracted
+        </Badge>
         Suggestions read from the document. They become part of the record only when a doctor
         verifies them.
         {x.needsReview && <Badge tone="warning">Needs review by a doctor</Badge>}

@@ -1,63 +1,76 @@
 @import 'tailwindcss';
 
 /*
- * HealthBridge design tokens.
- * Calm, clinical, trustworthy: generous white space, a teal primary, slate neutrals,
- * soft borders instead of heavy shadows, and no decorative gradients.
- * Semantic tokens switch automatically for dark mode.
+ * HealthBridge visual identity.
+ *
+ * Calm, trustworthy, clinical but human. Warm "paper" surfaces instead of cold slate,
+ * a deep sea-glass teal for care and action, a clay accent reserved for things that
+ * need attention, and a separate muted indigo used only for AI assistance, so AI reads
+ * as an assistant layer rather than the product. Borders do the structuring; shadows
+ * are almost absent. Every text pairing meets WCAG AA in both themes.
  */
 
 :root {
-  --hb-surface: #ffffff;
-  --hb-surface-muted: #f8fafc;
+  /* Surfaces: warm paper page, white cards. */
+  --hb-surface: #f8f6f1;
+  --hb-surface-muted: #f1eee6;
   --hb-surface-raised: #ffffff;
-  --hb-border: #e2e8f0;
-  --hb-text: #0f172a;
-  --hb-text-muted: #475569;
-  --hb-text-subtle: #64748b;
-  --hb-primary: #0f766e;
-  --hb-primary-hover: #115e59;
-  --hb-primary-soft: #f0fdfa;
+  --hb-border: #e4dfd3;
+  /* Ink: deep green-black text with warm greys. */
+  --hb-text: #15302b;
+  --hb-text-muted: #4a5d57;
+  --hb-text-subtle: #5f706a;
+  /* Care: the HealthBridge teal. */
+  --hb-primary: #146c63;
+  --hb-primary-hover: #0e554e;
+  --hb-primary-soft: #e6f2ee;
   --hb-primary-contrast: #ffffff;
-  --hb-focus: #0d9488;
-  --hb-success: #15803d;
-  --hb-warning: #b45309;
-  --hb-danger: #b91c1c;
-  --hb-info: #0369a1;
-  /* Elevation: borders do most of the work; shadows stay barely visible. */
-  --hb-shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
-  --hb-shadow-overlay: 0 12px 32px rgb(15 23 42 / 0.18);
+  --hb-focus: #1b8a7e;
+  /* Semantic states. */
+  --hb-success: #2d7a4f;
+  --hb-warning: #8f5a0b;
+  --hb-attention: #ad4f27;
+  --hb-danger: #b1352c;
+  --hb-info: #2e6491;
+  /* AI assistance: deliberately not the brand colour. */
+  --hb-ai: #5a55a6;
+  --hb-ai-soft: #efeefa;
+  --hb-shadow-card: 0 1px 0 rgb(21 48 43 / 0.03);
+  --hb-shadow-overlay: 0 16px 40px rgb(21 48 43 / 0.18);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --hb-surface: #0b1220;
-    --hb-surface-muted: #0f172a;
-    --hb-surface-raised: #111a2e;
-    --hb-border: #1e293b;
-    --hb-text: #e2e8f0;
-    --hb-text-muted: #94a3b8;
-    --hb-text-subtle: #7c8aa0;
-    --hb-primary: #2dd4bf;
-    --hb-primary-hover: #5eead4;
-    --hb-primary-soft: #0f2a2a;
-    --hb-primary-contrast: #042f2e;
-    --hb-focus: #5eead4;
-    --hb-success: #4ade80;
-    --hb-warning: #fbbf24;
-    --hb-danger: #f87171;
-    --hb-info: #7dd3fc;
-    --hb-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
-    --hb-shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5);
+    --hb-surface: #0e1614;
+    --hb-surface-muted: #16211e;
+    --hb-surface-raised: #131d1a;
+    --hb-border: #2a3834;
+    --hb-text: #e6eeeb;
+    --hb-text-muted: #aebcb7;
+    --hb-text-subtle: #91a39d;
+    --hb-primary: #5cc6b4;
+    --hb-primary-hover: #84d8ca;
+    --hb-primary-soft: #16302b;
+    --hb-primary-contrast: #06231f;
+    --hb-focus: #84d8ca;
+    --hb-success: #72d29c;
+    --hb-warning: #e7b65c;
+    --hb-attention: #ef9b74;
+    --hb-danger: #f28b82;
+    --hb-info: #8ec1ea;
+    --hb-ai: #aea9f2;
+    --hb-ai-soft: #22213a;
+    --hb-shadow-card: 0 1px 0 rgb(0 0 0 / 0.3);
+    --hb-shadow-overlay: 0 16px 40px rgb(0 0 0 / 0.55);
     color-scheme: dark;
   }
 }
 
 @theme inline {
   --font-sans:
-    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+    'Figtree Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
 
   --color-surface: var(--hb-surface);
   --color-surface-muted: var(--hb-surface-muted);
@@ -73,10 +86,13 @@
   --color-focus: var(--hb-focus);
   --color-success: var(--hb-success);
   --color-warning: var(--hb-warning);
+  --color-attention: var(--hb-attention);
   --color-danger: var(--hb-danger);
   --color-info: var(--hb-info);
+  --color-ai: var(--hb-ai);
+  --color-ai-soft: var(--hb-ai-soft);
 
-  /* Shape scale: controls 0.5rem (lg), cards 1rem (2xl), pills full. */
+  /* Shape: controls xl (0.75rem), cards 2xl (1rem), buttons and badges full. */
   --shadow-card: var(--hb-shadow-card);
   --shadow-overlay: var(--hb-shadow-overlay);
 }
@@ -89,9 +105,16 @@
   body {
     @apply bg-surface text-text font-sans antialiased;
   }
+  /* Times, counts and references line up. */
+  time {
+    font-variant-numeric: tabular-nums;
+  }
   :focus-visible {
     outline: 2px solid var(--hb-focus);
     outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--hb-primary-soft);
   }
   @media (prefers-reduced-motion: reduce) {
     *,

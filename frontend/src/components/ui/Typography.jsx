@@ -12,22 +12,21 @@
 
 export function PageHeader({ icon: Icon, eyebrow, title, description, actions, children }) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="flex min-w-0 gap-4">
-        {Icon && (
-          <span
-            aria-hidden="true"
-            className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary sm:flex"
-          >
-            <Icon className="h-5 w-5" />
-          </span>
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary">
+            {Icon && <Icon aria-hidden="true" className="h-3.5 w-3.5" />}
+            {eyebrow}
+          </p>
         )}
-        <div className="min-w-0">
-          {eyebrow && <p className="text-sm font-medium text-primary">{eyebrow}</p>}
-          <h1 className="text-2xl font-semibold tracking-tight text-text">{title}</h1>
-          {description && <p className="mt-1.5 max-w-2xl text-text-muted">{description}</p>}
-          {children}
-        </div>
+        <h1 className="mt-1.5 text-[1.75rem] font-semibold leading-tight tracking-tight text-text">
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-2 max-w-2xl leading-relaxed text-text-muted">{description}</p>
+        )}
+        {children}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
     </header>
@@ -46,7 +45,10 @@ export function SectionHeader({
   return (
     <div className={`flex flex-wrap items-start justify-between gap-3 ${className}`}>
       <div className="min-w-0">
-        <Heading id={id} className="flex items-center gap-2 text-base font-semibold text-text">
+        <Heading
+          id={id}
+          className="flex items-center gap-2 text-[1.0625rem] font-semibold text-text"
+        >
           {Icon && <Icon aria-hidden="true" className="h-4 w-4 text-primary" />}
           {title}
         </Heading>

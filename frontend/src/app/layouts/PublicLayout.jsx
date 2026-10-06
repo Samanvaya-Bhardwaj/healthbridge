@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router';
+import { Logo } from '../../components/ui/Logo.jsx';
 import { SystemStatus } from '../../features/system/SystemStatus.jsx';
 import { DemoBanner } from '../../features/system/DemoBanner.jsx';
 import { useAuth } from '../../features/auth/authContext.js';
@@ -10,7 +11,7 @@ function HeaderActions() {
     return (
       <Link
         to="/app"
-        className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
+        className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
       >
         Open HealthBridge
       </Link>
@@ -20,13 +21,13 @@ function HeaderActions() {
     <div className="flex items-center gap-2">
       <Link
         to="/login"
-        className="rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:text-text"
+        className="whitespace-nowrap rounded-full px-3 py-2.5 text-sm font-medium text-text-muted hover:text-text sm:px-4"
       >
         Sign in
       </Link>
       <Link
         to="/register"
-        className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-contrast hover:bg-primary-hover"
+        className="whitespace-nowrap rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-contrast hover:bg-primary-hover sm:px-5"
       >
         Create account
       </Link>
@@ -45,10 +46,9 @@ export function PublicLayout() {
       </a>
       <DemoBanner />
       <header className="border-b border-border">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-text">
-            <img src="/favicon.svg" alt="" width="28" height="28" />
-            HealthBridge
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+          <Link to="/" aria-label="HealthBridge home">
+            <Logo />
           </Link>
           <HeaderActions />
         </div>

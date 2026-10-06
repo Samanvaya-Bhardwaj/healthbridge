@@ -194,7 +194,7 @@ function Visit({ a, consent, now, featured = false }) {
             <ButtonLink
               as={Link}
               to={`/app/appointments/${a.id}/brief`}
-              variant="ghost"
+              variant="ai"
               icon={Sparkles}
             >
               AI brief

@@ -4,6 +4,7 @@ import { createBrowserRouter } from 'react-router';
 import { App } from './app/App.jsx';
 import { routes } from './app/routes.jsx';
 import { installGlobalErrorReporting } from './lib/errorReporting.js';
+import '@fontsource-variable/figtree';
 import './styles/index.css';
 
 installGlobalErrorReporting();

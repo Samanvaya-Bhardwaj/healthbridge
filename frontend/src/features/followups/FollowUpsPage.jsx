@@ -16,7 +16,16 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
-import { AlertTriangle, CheckCircle2, Frown, HeartPulse, Meh, Phone, Smile } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  Frown,
+  HeartPulse,
+  Meh,
+  Phone,
+  Smile,
+} from 'lucide-react';
 import { Tabs } from '../../components/ui/Tabs.jsx';
 import { Link, useSearchParams } from 'react-router';
 import { ButtonLink } from '../../components/ui/Button.jsx';
@@ -377,10 +386,13 @@ function FollowUpDetail({ id, onChanged }) {
         <p className="text-sm text-text-muted">No answer yet.</p>
       )}
       {f.summary && (
-        <div className="rounded-lg bg-surface-muted p-3">
+        <div className="rounded-xl border border-ai/20 bg-ai-soft/60 p-3">
           <p className="mb-1 flex items-center gap-2 text-xs text-text-muted">
-            <Badge tone="primary">AI-generated</Badge> Summary of the answer above, with citations.
-            Escalation is decided by fixed rules, not AI.
+            <Badge tone="ai" icon={Sparkles}>
+              AI-generated
+            </Badge>{' '}
+            Summary of the answer above, with citations. Escalation is decided by fixed rules, not
+            AI.
           </p>
           <ul className="space-y-1 text-sm text-text">
             {f.summary.sentences.map((s, i) => (

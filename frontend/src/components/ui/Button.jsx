@@ -1,19 +1,22 @@
 import { Loader2 } from 'lucide-react';
 
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors ' +
+  'inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors ' +
   'disabled:cursor-not-allowed disabled:opacity-60';
 
 const sizes = {
-  md: 'min-h-11 px-4 py-2.5 text-sm',
-  sm: 'min-h-9 px-3 py-1.5 text-sm',
+  md: 'min-h-11 px-5 py-2.5 text-sm',
+  sm: 'min-h-9 px-3.5 py-1.5 text-sm',
 };
 
 const variants = {
   primary: 'bg-primary text-primary-contrast hover:bg-primary-hover',
-  secondary: 'border border-border bg-surface-raised text-text hover:bg-surface-muted',
+  secondary:
+    'border border-border bg-surface-raised text-text hover:border-primary/40 hover:bg-primary-soft/60',
   ghost: 'text-text-muted hover:bg-surface-muted hover:text-text',
   danger: 'bg-danger text-white hover:opacity-90',
+  // AI assistance: its own quiet colour, so it reads as a helper, not the main action.
+  ai: 'border border-ai/25 bg-ai-soft text-ai hover:border-ai/50',
 };
 // Design-system names; the original names stay valid.
 variants.destructive = variants.danger;

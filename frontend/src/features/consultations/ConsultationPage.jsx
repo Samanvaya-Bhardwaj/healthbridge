@@ -549,7 +549,7 @@ function PatientContext({ view, appointmentId }) {
               target="_blank"
               rel="noopener"
               size="sm"
-              variant="secondary"
+              variant="ai"
               icon={Sparkles}
             >
               AI brief

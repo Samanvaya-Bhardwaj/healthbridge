@@ -152,7 +152,7 @@ function UpcomingWithPatient({ patientId }) {
                 as={Link}
                 to={`/app/appointments/${a.id}/brief`}
                 size="sm"
-                variant="ghost"
+                variant="ai"
                 icon={Sparkles}
               >
                 AI brief

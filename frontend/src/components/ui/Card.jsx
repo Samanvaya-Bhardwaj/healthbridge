@@ -2,7 +2,7 @@
 export function Card({ as: Component = 'section', className = '', children, ...props }) {
   return (
     <Component
-      className={`rounded-2xl border border-border bg-surface-raised p-6 ${className}`}
+      className={`rounded-2xl border border-border bg-surface-raised p-5 shadow-card sm:p-6 ${className}`}
       {...props}
     >
       {children}

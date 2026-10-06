@@ -290,7 +290,7 @@ function ScheduleItem({ a, now, onAction, pending }) {
           <ButtonLink
             as={Link}
             to={`/app/appointments/${a.id}/brief`}
-            variant="subtle"
+            variant="ai"
             size="sm"
             icon={Sparkles}
           >

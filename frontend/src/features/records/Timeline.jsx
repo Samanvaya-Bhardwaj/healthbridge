@@ -47,7 +47,7 @@ const PROVENANCE = {
   doctor_reported: { tone: 'primary', icon: Stethoscope },
   doctor_verified: { tone: 'success', icon: BadgeCheck },
   system_recorded: { tone: 'neutral', icon: Info },
-  ai_extracted: { tone: 'warning', icon: Sparkles },
+  ai_extracted: { tone: 'ai', icon: Sparkles },
 };
 const LEGEND = [
   [
@@ -211,7 +211,7 @@ export function Timeline({ patientId, allowExport = false }) {
                     </Badge>
                     {e.actor && <span>{e.actor}</span>}
                     {e.detail?.aiDerivedFields?.length > 0 && (
-                      <Badge tone="warning" icon={Sparkles}>
+                      <Badge tone="ai" icon={Sparkles}>
                         Date/issuer read by AI
                       </Badge>
                     )}
