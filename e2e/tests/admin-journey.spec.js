@@ -36,7 +36,7 @@ test('platform admin manages accounts, reads the audit trail and checks operatio
   await test.step('operations shows queue health', async () => {
     await nav(page, 'Operations').click();
     await expect(page.getByRole('heading', { name: 'Outbox events' })).toBeVisible();
-    await expect(page.getByRole('rowheader', { name: 'notifications' })).toBeVisible();
+    await expect(page.getByRole('rowheader', { name: /notifications/ })).toBeVisible();
   });
 
   await test.step('no clinical records for administrators', async () => {
@@ -44,6 +44,9 @@ test('platform admin manages accounts, reads the audit trail and checks operatio
     await page.goto('/app/medical-records');
     await expect(
       page.getByRole('heading', { name: 'You don’t have access to this page' }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/^Platform administrators do not have access to clinical records\./),
     ).toBeVisible();
   });
 });

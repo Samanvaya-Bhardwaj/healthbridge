@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { adminApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
@@ -12,6 +13,7 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { ScrollText } from 'lucide-react';
+import { PlatformBoundary } from './AdminParts.jsx';
 
 const CATEGORIES = [
   'authentication',
@@ -25,10 +27,48 @@ const CATEGORIES = [
 const OUTCOMES = ['success', 'failure', 'denied'].map((o) => ({ value: o, label: o }));
 const OUTCOME_TONES = { success: 'success', failure: 'warning', denied: 'danger' };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RESOURCES = [
+  ['user', 'Account'],
+  ['session', 'Sign-in session'],
+  ['doctor', 'Doctor profile'],
+  ['doctor_verification', 'Doctor verification'],
+  ['clinic', 'Clinic'],
+  ['clinic_membership', 'Clinic membership'],
+  ['patient', 'Patient profile'],
+  ['care_relationship', 'Care relationship'],
+  ['consent', 'Consent'],
+  ['appointment', 'Appointment'],
+  ['payment', 'Payment'],
+  ['medical_document', 'Medical document'],
+  ['consultation', 'Consultation'],
+  ['clinical_note', 'Clinical note'],
+  ['prescription', 'Prescription'],
+  ['follow_up', 'Follow-up'],
+  ['dead_letter_job', 'Background job'],
+  ['audit_log', 'Audit log'],
+].map(([value, label]) => ({ value, label }));
+/** Common actions, offered as suggestions; any action name can be typed. */
+const COMMON_ACTIONS = [
+  'auth.login',
+  'auth.register',
+  'auth.password_reset',
+  'admin.user_read',
+  'admin.user_status_update',
+  'admin.doctor_verification_decision',
+  'admin.doctor_suspend',
+  'admin.doctor_verification_read',
+  'consent.granted',
+  'consent.revoked',
+  'document.access_denied',
+  'document.viewed',
+  'payment.refund_requested',
+  'operations.dead_letter_retry',
+];
 const EMPTY = {
   category: '',
   outcome: '',
   action: '',
+  resourceType: '',
   actorUserId: '',
   patientId: '',
   requestId: '',
@@ -59,9 +99,21 @@ function toQuery(f) {
   };
 }
 
+const FILTER_LABELS = {
+  category: 'Category',
+  outcome: 'Outcome',
+  action: 'Action',
+  resourceType: 'Resource',
+  actorUserId: 'User',
+  patientId: 'Patient',
+  requestId: 'Request',
+  from: 'From',
+  to: 'To',
+};
+
 const short = (id) => (id ? `${id.slice(0, 8)}…` : '—');
 
-function Field({ id, label, value, onChange, type = 'text', placeholder }) {
+function Field({ id, label, value, onChange, type = 'text', placeholder, list }) {
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-text">
@@ -72,6 +124,7 @@ function Field({ id, label, value, onChange, type = 'text', placeholder }) {
         type={type}
         value={value}
         placeholder={placeholder}
+        list={list}
         onChange={(e) => onChange(e.target.value.trim())}
         className={controlClass()}
       />
@@ -176,9 +229,27 @@ function AuditRow({ entry, onFilter }) {
               <div className="sm:col-span-2">
                 <dt className="text-text-subtle">Metadata</dt>
                 <dd>
-                  <pre className="mt-1 max-h-60 overflow-auto rounded-lg bg-surface-raised p-3 font-mono">
-                    {JSON.stringify(entry.metadata ?? {}, null, 2)}
-                  </pre>
+                  {Object.keys(entry.metadata ?? {}).length === 0 ? (
+                    '—'
+                  ) : (
+                    <dl className="mt-1 grid gap-x-4 gap-y-1 rounded-lg bg-surface-raised p-3 sm:grid-cols-[auto_1fr]">
+                      {Object.entries(entry.metadata).map(([k, v]) => (
+                        <div key={k} className="contents">
+                          <dt className="font-mono text-text-subtle">{k}</dt>
+                          <dd className="break-all font-mono text-text">
+                            {v === null || ['string', 'number', 'boolean'].includes(typeof v)
+                              ? String(v)
+                              : Array.isArray(v) && v.every((x) => typeof x !== 'object')
+                                ? v.join(', ')
+                                : JSON.stringify(v)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  <p className="mt-1 text-text-subtle">
+                    Identifiers and reason codes only; audit entries never contain clinical content.
+                  </p>
                 </dd>
               </div>
             </dl>
@@ -194,8 +265,12 @@ function AuditRow({ entry, onFilter }) {
  * reason codes only — never medical content. Reading the trail is itself audited.
  */
 export function AuditLogPage() {
-  const [draft, setDraft] = useState(EMPTY);
-  const [filter, setFilter] = useState(EMPTY);
+  const [params] = useSearchParams();
+  const [initial] = useState(() =>
+    Object.fromEntries(Object.keys(EMPTY).map((k) => [k, params.get(k) ?? ''])),
+  );
+  const [draft, setDraft] = useState(initial);
+  const [filter, setFilter] = useState(initial);
   const [error, setError] = useState(null);
   const audit = useInfiniteQuery({
     queryKey: ['admin', 'audit', filter],
@@ -225,6 +300,7 @@ export function AuditLogPage() {
         title="Audit log"
         description="Security and access events, newest first. Entries cannot be changed or deleted, and reading this log is itself recorded."
       />
+      <PlatformBoundary compact />
       <Card>
         <form
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
@@ -247,12 +323,27 @@ export function AuditLogPage() {
             onChange={(e) => set('outcome')(e.target.value)}
             options={OUTCOMES}
           />
-          <Field
-            id="audit-action"
-            label="Action"
-            value={draft.action}
-            onChange={set('action')}
-            placeholder="e.g. auth.login"
+          <div>
+            <Field
+              id="audit-action"
+              label="Action"
+              value={draft.action}
+              onChange={set('action')}
+              placeholder="e.g. auth.login"
+              list="audit-actions"
+            />
+            <datalist id="audit-actions">
+              {COMMON_ACTIONS.map((a) => (
+                <option key={a} value={a} />
+              ))}
+            </datalist>
+          </div>
+          <SelectField
+            label="Resource"
+            placeholder="Any resource"
+            value={draft.resourceType}
+            onChange={(e) => set('resourceType')(e.target.value)}
+            options={RESOURCES}
           />
           <Field
             id="audit-request"
@@ -262,15 +353,17 @@ export function AuditLogPage() {
           />
           <Field
             id="audit-actor"
-            label="Actor (user ID)"
+            label="User (who acted)"
             value={draft.actorUserId}
             onChange={set('actorUserId')}
+            placeholder="User ID, from Users or a row below"
           />
           <Field
             id="audit-patient"
             label="Patient ID"
             value={draft.patientId}
             onChange={set('patientId')}
+            placeholder="Shows who accessed a patient’s record"
           />
           <Field
             id="audit-from"
@@ -280,8 +373,31 @@ export function AuditLogPage() {
             onChange={set('from')}
           />
           <Field id="audit-to" label="To" type="date" value={draft.to} onChange={set('to')} />
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
             <Button type="submit">Apply filters</Button>
+            <span className="text-sm text-text-muted">Quick range:</span>
+            {[
+              ['Today', 0],
+              ['Last 7 days', 6],
+              ['Last 30 days', 29],
+            ].map(([label, days]) => (
+              <Button
+                key={label}
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const d = new Date();
+                  const iso = (x) =>
+                    `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+                  const start = new Date(d.getTime() - days * 86_400_000);
+                  const next = { ...draft, from: iso(start), to: iso(d) };
+                  setDraft(next);
+                  apply(next);
+                }}
+              >
+                {label}
+              </Button>
+            ))}
             {active && (
               <Button
                 variant="ghost"
@@ -303,6 +419,24 @@ export function AuditLogPage() {
         )}
       </Card>
 
+      {active && (
+        <div className="flex flex-wrap items-center gap-2 text-sm" aria-label="Active filters">
+          <span className="text-text-muted">Showing:</span>
+          {Object.entries(filter)
+            .filter(([, v]) => v)
+            .map(([k, v]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => narrow({ [k]: '' })}
+                className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-3 py-1 text-xs text-primary hover:bg-primary/15"
+                aria-label={`Remove filter ${FILTER_LABELS[k]}: ${v}`}
+              >
+                {FILTER_LABELS[k]}: <span className="font-mono">{v}</span> ×
+              </button>
+            ))}
+        </div>
+      )}
       {audit.isPending ? (
         <Skeleton className="h-64" />
       ) : audit.isError ? (

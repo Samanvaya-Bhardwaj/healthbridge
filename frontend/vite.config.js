@@ -24,5 +24,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup.js'],
     include: ['src/**/*.test.{js,jsx}'],
     css: false,
+    // Multi-step UI flows (typing, dialogs) can exceed 5 s on a loaded machine.
+    testTimeout: 15_000,
   },
 });

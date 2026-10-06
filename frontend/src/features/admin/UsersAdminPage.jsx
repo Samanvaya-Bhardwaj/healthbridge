@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ALL_ROLES,
@@ -20,6 +21,7 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { Users } from 'lucide-react';
+import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
 
 const roleOptions = ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 const STATUS_REASONS = [
@@ -36,8 +38,8 @@ function UserDetail({ userId, onClose }) {
   const { user: me, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState(null);
-  const [reason, setReason] = useState('security_concern');
   const [newRole, setNewRole] = useState(ROLES.SUPPORT);
+  const [dialog, setDialog] = useState(null);
   const detail = useQuery({
     queryKey: ['admin', 'user', userId],
     queryFn: () => adminApi.user(userId),
@@ -49,29 +51,44 @@ function UserDetail({ userId, onClose }) {
   };
   const onError = (error) => setMessage({ tone: 'error', text: authErrorMessage(error) });
   const status = useMutation({
-    mutationFn: (next) =>
+    mutationFn: ({ next, reasonCode }) =>
       adminApi.setUserStatus(userId, {
         status: next,
-        reasonCode: next === 'active' ? 'reinstated' : reason,
+        reasonCode: next === 'active' ? 'reinstated' : reasonCode,
       }),
-    onSuccess: (data) =>
-      refresh(data, data.status === 'disabled' ? 'Account disabled.' : 'Account reinstated.'),
+    onSuccess: (data) => {
+      setDialog(null);
+      refresh(
+        data,
+        data.status === 'disabled'
+          ? 'Account disabled. The person was signed out everywhere and cannot sign in.'
+          : 'Account reinstated. The person can sign in again.',
+      );
+    },
     onError,
   });
   const grant = useMutation({
     mutationFn: (role) => adminApi.grantRole(userId, role),
-    onSuccess: (data) => refresh(data, 'Role granted.'),
+    onSuccess: (data) => {
+      setDialog(null);
+      refresh(data, 'Role granted. It applies from their next sign-in or token refresh.');
+    },
     onError,
   });
   const revoke = useMutation({
     mutationFn: (role) => adminApi.revokeRole(userId, role),
-    onSuccess: (data) => refresh(data, 'Role removed.'),
+    onSuccess: (data) => {
+      setDialog(null);
+      refresh(data, 'Role removed.');
+    },
     onError,
   });
   const sessions = useMutation({
     mutationFn: () => adminApi.revokeSessions(userId),
-    onSuccess: (data) =>
-      setMessage({ tone: 'success', text: `Signed out of ${data.revoked} session(s).` }),
+    onSuccess: (data) => {
+      setDialog(null);
+      setMessage({ tone: 'success', text: `Signed out of ${data.revoked} session(s).` });
+    },
     onError,
   });
 
@@ -140,7 +157,7 @@ function UserDetail({ userId, onClose }) {
                   variant="ghost"
                   aria-label={`Remove role ${ROLE_LABELS[r]}`}
                   disabled={revoke.isPending}
-                  onClick={() => revoke.mutate(r)}
+                  onClick={() => setDialog({ kind: 'revoke', role: r })}
                 >
                   Remove
                 </Button>
@@ -160,7 +177,9 @@ function UserDetail({ userId, onClose }) {
             <Button
               variant="secondary"
               disabled={grant.isPending}
-              onClick={() => grant.mutate(missing.includes(newRole) ? newRole : missing[0])}
+              onClick={() =>
+                setDialog({ kind: 'grant', role: missing.includes(newRole) ? newRole : missing[0] })
+              }
             >
               Grant
             </Button>
@@ -177,38 +196,88 @@ function UserDetail({ userId, onClose }) {
           <h3 id="account-actions" className="text-sm font-semibold text-text">
             Account actions
           </h3>
-          {canUpdate && u.status === 'active' && (
-            <div className="flex flex-wrap items-end gap-2">
-              <SelectField
-                label="Reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                options={STATUS_REASONS}
-              />
-              <Button
-                variant="danger"
-                disabled={status.isPending}
-                onClick={() => status.mutate('disabled')}
-              >
+          <p className="text-sm text-text-muted">
+            {u.status === 'active'
+              ? 'Active: the person can sign in.'
+              : 'Disabled: the person cannot sign in until the account is reinstated.'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {canUpdate && u.status === 'active' && (
+              <Button variant="danger" onClick={() => setDialog({ kind: 'disable' })}>
                 Disable account
               </Button>
-            </div>
-          )}
-          {canUpdate && u.status === 'disabled' && (
-            <Button disabled={status.isPending} onClick={() => status.mutate('active')}>
-              Reinstate account
-            </Button>
-          )}
-          {canSessions && (
-            <Button
-              variant="secondary"
-              disabled={sessions.isPending}
-              onClick={() => sessions.mutate()}
-            >
-              Sign out everywhere
-            </Button>
-          )}
+            )}
+            {canUpdate && u.status === 'disabled' && (
+              <Button onClick={() => setDialog({ kind: 'reinstate' })}>Reinstate account</Button>
+            )}
+            {canSessions && (
+              <Button variant="secondary" onClick={() => setDialog({ kind: 'sessions' })}>
+                Sign out everywhere
+              </Button>
+            )}
+          </div>
+          {self && <p className="text-xs text-text-subtle">You can’t disable your own account.</p>}
         </section>
+      )}
+      {dialog?.kind === 'disable' && (
+        <ActionDialog
+          title={`Disable ${u.fullName}’s account?`}
+          description="They are signed out of every device at once and cannot sign in until the account is reinstated. Their data is not deleted."
+          confirmLabel="Disable account"
+          reasons={STATUS_REASONS}
+          reasonLabel="Why are you disabling it?"
+          destructive
+          pending={status.isPending}
+          error={status.error}
+          onConfirm={({ reasonCode }) => status.mutate({ next: 'disabled', reasonCode })}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'reinstate' && (
+        <ActionDialog
+          title={`Reinstate ${u.fullName}’s account?`}
+          description="They can sign in again with their existing password. This is recorded as “reinstated” in the audit log."
+          confirmLabel="Reinstate account"
+          pending={status.isPending}
+          error={status.error}
+          onConfirm={() => status.mutate({ next: 'active' })}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'sessions' && (
+        <ActionDialog
+          title={`Sign ${u.fullName} out everywhere?`}
+          description="Every signed-in device is signed out at once. Use this after a lost device or a suspected compromise. They can sign in again with their password."
+          confirmLabel="Sign out everywhere"
+          destructive
+          pending={sessions.isPending}
+          error={sessions.error}
+          onConfirm={() => sessions.mutate()}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'grant' && (
+        <ActionDialog
+          title={`Give ${u.fullName} the ${ROLE_LABELS[dialog.role]} role?`}
+          description="Roles decide what someone can do. Administrator and support roles never include access to medical records."
+          confirmLabel="Grant role"
+          pending={grant.isPending}
+          error={grant.error}
+          onConfirm={() => grant.mutate(dialog.role)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'revoke' && (
+        <ActionDialog
+          title={`Remove the ${ROLE_LABELS[dialog.role]} role from ${u.fullName}?`}
+          description="They lose what this role allows. The platform always keeps at least one platform administrator."
+          confirmLabel="Remove role"
+          destructive
+          pending={revoke.isPending}
+          error={revoke.error}
+          onConfirm={() => revoke.mutate(dialog.role)}
+          onClose={() => setDialog(null)}
+        />
       )}
       {message && (
         <Alert tone={message.tone} className="mt-4">
@@ -221,8 +290,14 @@ function UserDetail({ userId, onClose }) {
 
 /** Platform admin and support: account lookup and administration (every read is audited). */
 export function UsersAdminPage() {
-  const [draft, setDraft] = useState({ q: '', role: '', status: '' });
-  const [filter, setFilter] = useState({ q: '', role: '', status: '' });
+  const [params] = useSearchParams();
+  const initial = {
+    q: params.get('q') ?? '',
+    role: params.get('role') ?? '',
+    status: params.get('status') ?? '',
+  };
+  const [draft, setDraft] = useState(initial);
+  const [filter, setFilter] = useState(initial);
   const [selected, setSelected] = useState(null);
   const users = useInfiniteQuery({
     queryKey: ['admin', 'users', filter],
@@ -246,6 +321,7 @@ export function UsersAdminPage() {
             : 'Find an account to help someone sign in or find their way. You can view accounts but not change them; every lookup is recorded in the audit log.'
         }
       />
+      {canAdminister && <PlatformBoundary compact />}
       <Card>
         <form
           className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
@@ -305,10 +381,10 @@ export function UsersAdminPage() {
                 <th scope="col" className="px-4 py-3 font-medium">
                   Name
                 </th>
-                <th scope="col" className="px-4 py-3 font-medium">
+                <th scope="col" className="hidden px-4 py-3 font-medium sm:table-cell">
                   Roles
                 </th>
-                <th scope="col" className="px-4 py-3 font-medium">
+                <th scope="col" className="hidden px-4 py-3 font-medium sm:table-cell">
                   Status
                 </th>
                 <th scope="col" className="px-4 py-3 font-medium">
@@ -320,13 +396,26 @@ export function UsersAdminPage() {
               {rows.map((u) => (
                 <tr key={u.id}>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-text">{u.fullName}</div>
-                    <div className="text-text-subtle">{u.email}</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(u.id)}
+                      className="text-left font-medium text-text hover:text-primary"
+                    >
+                      {u.fullName}
+                    </button>
+                    <div className="break-all text-text-subtle">{u.email}</div>
+                    {/* Small screens: roles and status under the name, no sideways scroll. */}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 sm:hidden">
+                      <StatusBadge status={u.status} />
+                      <span className="text-xs text-text-muted">
+                        {u.roles.map((r) => ROLE_LABELS[r] ?? r).join(', ')}
+                      </span>
+                    </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     {u.roles.map((r) => ROLE_LABELS[r] ?? r).join(', ') || '—'}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     <StatusBadge status={u.status} />
                   </td>
                   <td className="px-4 py-3 text-right">

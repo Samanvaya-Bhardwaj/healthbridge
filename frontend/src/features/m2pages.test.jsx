@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { App } from '../app/App.jsx';
@@ -169,7 +169,7 @@ describe('administration', () => {
   it('platform admin reviews the verification queue', async () => {
     const admin = makeUser(['PLATFORM_ADMIN']);
     const calls = signedIn(admin, {
-      'GET /api/v1/admin/doctor-verifications': () =>
+      'GET /api/v1/admin/doctor-verifications?status=under_review': () =>
         json(200, {
           data: [
             {
@@ -183,12 +183,42 @@ describe('administration', () => {
             },
           ],
         }),
+      // The full application (an audited read) opens with the case.
+      'GET /api/v1/admin/doctor-verifications/v1': () =>
+        json(200, {
+          data: {
+            id: 'v1',
+            doctorProfile: {
+              professionalName: 'Dr. Farah Khan',
+              primarySpecialization: 'Dermatology',
+              additionalSpecializations: [],
+              qualifications: [{ degree: 'MBBS', institution: 'Synthetic College', year: 2015 }],
+              yearsOfExperience: 6,
+              languages: ['English'],
+              bio: null,
+              createdAt: '2026-10-01T09:00:00Z',
+            },
+          },
+        }),
       'POST /api/v1/admin/doctor-verifications/v1/decision': () =>
         json(200, { data: { id: 'v1', status: 'verified' } }),
     });
     renderAt('/app/admin/verification');
-    expect(await screen.findByText('Dr. Farah Khan')).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Approve' }));
+    expect((await screen.findAllByText('Dr. Farah Khan')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('MBBS, Synthetic College (2015)')).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Verify doctor' }));
+    // Verifying asks the admin to confirm they checked the register.
+    const dialog = await screen.findByRole('dialog', { name: 'Verify Dr. Farah Khan?' });
+    const confirm = within(dialog).getByRole('button', { name: 'Verify doctor' });
+    expect(confirm).toBeDisabled();
+    await user.click(within(dialog).getByLabelText(/I checked registration REG-9 with Council/));
+    await user.click(confirm);
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.key === 'POST /api/v1/admin/doctor-verifications/v1/decision'),
+      ).toBe(true),
+    );
     const decision = calls.find(
       (c) => c.key === 'POST /api/v1/admin/doctor-verifications/v1/decision',
     );

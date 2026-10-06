@@ -91,15 +91,26 @@ describe('user administration', () => {
     expect(offered).not.toContain('DOCTOR');
     expect(offered).not.toContain('CLINIC_ADMIN');
 
-    await user.selectOptions(screen.getByLabelText('Reason'), 'policy_violation');
+    // Disabling requires a reason and a confirmation.
     await user.click(screen.getByRole('button', { name: 'Disable account' }));
-    expect(await screen.findByText('Account disabled.')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'Disable Ravi Kumar’s account?' });
+    const confirm = within(dialog).getByRole('button', { name: 'Disable account' });
+    expect(confirm).toBeDisabled();
+    await user.selectOptions(
+      within(dialog).getByLabelText('Why are you disabling it?'),
+      'policy_violation',
+    );
+    await user.click(confirm);
+    expect(await screen.findByText(/Account disabled\./)).toBeInTheDocument();
     expect(sent).toEqual([{ status: 'disabled', reasonCode: 'policy_violation' }]);
     expect(screen.getByRole('button', { name: 'Reinstate account' })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Grant a role'), 'SUPPORT');
     await user.click(screen.getByRole('button', { name: 'Grant' }));
-    expect(await screen.findByText('Role granted.')).toBeInTheDocument();
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Grant role' }),
+    );
+    expect(await screen.findByText(/Role granted\./)).toBeInTheDocument();
   });
 
   it('support can look accounts up but sees no account actions or audit log', async () => {
@@ -149,10 +160,12 @@ describe('audit log viewer', () => {
     expect(await screen.findByText('document.download')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Details' }));
-    expect(screen.getByText(/"scope": "medical_documents"/)).toBeInTheDocument();
+    expect(screen.getByText('scope')).toBeInTheDocument();
+    expect(screen.getByText('medical_documents')).toBeInTheDocument();
+    expect(screen.getByText(/never contain clinical content/)).toBeInTheDocument();
 
     await user.click(screen.getByTitle('Show only this actor'));
-    expect(await screen.findByLabelText('Actor (user ID)')).toHaveValue(ACTOR);
+    expect(await screen.findByLabelText('User (who acted)')).toHaveValue(ACTOR);
     expect(calls.some((c) => c.key.includes(`actorUserId=${ACTOR}`))).toBe(true);
 
     const before = calls.length;
@@ -200,10 +213,14 @@ describe('operations', () => {
     open('/app/admin/operations');
     const user = userEvent.setup();
     expect(await screen.findByText('SMTP unavailable')).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'notifications' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: /notifications/ })).toBeInTheDocument();
+    expect(screen.getByText('Needs attention')).toBeInTheDocument();
+    // Retrying asks first and explains what happens.
     await user.click(screen.getByRole('button', { name: 'Retry' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Run this job again?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Retry job' }));
     expect(await screen.findByText('Job queued again.')).toBeInTheDocument();
-    expect(await screen.findByText('Nothing needs attention')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing here')).toBeInTheDocument();
   });
 });
 

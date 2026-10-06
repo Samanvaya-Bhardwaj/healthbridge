@@ -13,7 +13,7 @@ const REASONS = {
   },
   PLATFORM_ADMIN: {
     eyebrow: 'Administration only',
-    text: 'Platform administrators manage accounts, clinics and doctor verification. They never receive access to patients’ medical records.',
+    text: 'Platform administrators do not have access to clinical records. Administration covers accounts, doctor verification, clinics, the audit trail and background jobs; medical records, notes, prescriptions and lab results stay with patients and the doctors they share them with.',
     back: 'Back to overview',
   },
   SUPPORT: {

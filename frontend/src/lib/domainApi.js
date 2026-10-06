@@ -50,6 +50,12 @@ export const clinicsApi = {
 
 export const adminApi = {
   verificationQueue: (status) => data(apiRequest(`/admin/doctor-verifications${qs({ status })}`)),
+  /** One application with the doctor's full professional profile (the read is audited). */
+  verificationCase: (id) => data(apiRequest(`/admin/doctor-verifications/${id}`)),
+  suspendDoctor: (doctorId, body) =>
+    data(apiRequest(`/admin/doctors/${doctorId}/suspend`, { method: 'POST', body })),
+  setClinicStatus: (clinicId, status) =>
+    data(apiRequest(`/admin/clinics/${clinicId}/status`, { method: 'PATCH', body: { status } })),
   startReview: (id) =>
     data(apiRequest(`/admin/doctor-verifications/${id}/start-review`, { method: 'POST' })),
   decide: (id, body) =>

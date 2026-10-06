@@ -1,86 +1,270 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { VERIFICATION_REASON_CODES } from '@healthbridge/shared';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BadgeCheck, Ban, ClipboardCheck, FileSearch, ShieldOff, XCircle } from 'lucide-react';
 import { adminApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
-import { Skeleton } from '../../components/ui/Skeleton.jsx';
-import { BadgeCheck } from 'lucide-react';
+import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
+import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
-import { EmptyState } from '../../components/ui/EmptyState.jsx';
-import { controlClass } from '../../components/ui/fieldStyles.js';
+import { Tabs } from '../../components/ui/Tabs.jsx';
+import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
 
-const REJECTION_REASONS = VERIFICATION_REASON_CODES.filter((c) => c !== 'credentials_confirmed');
-const humanize = (code) => code.replace(/_/g, ' ');
+const TABS = [
+  ['pending', 'Waiting'],
+  ['under_review', 'In review'],
+  ['verified', 'Verified'],
+  ['rejected', 'Rejected'],
+  ['suspended', 'Suspended'],
+];
+const TAB_HELP = {
+  pending: 'Submitted and not yet picked up. Start a review to take an application.',
+  under_review:
+    'Being checked. Compare the registration with the medical council register, then verify or reject.',
+  verified:
+    'Doctors patients can find and book. Suspend one if their registration lapses or a serious concern is raised.',
+  rejected: 'Not approved. The doctor can correct their details and submit again.',
+  suspended: 'Removed from search and booking. The doctor can submit again for a new review.',
+};
+const REASON_LABELS = {
+  credentials_confirmed: 'Credentials confirmed',
+  registration_not_found: 'Registration not found in the council register',
+  registration_mismatch: 'Registration details don’t match the register',
+  documents_insufficient: 'Not enough supporting information',
+  duplicate_application: 'Duplicate application',
+  registration_lapsed: 'Registration has lapsed',
+  misconduct_report: 'Misconduct report',
+  other: 'Other',
+};
+const NEGATIVE = Object.keys(REASON_LABELS)
+  .filter((r) => r !== 'credentials_confirmed')
+  .map((value) => ({ value, label: REASON_LABELS[value] }));
+const when = (v) => (v ? new Date(v).toLocaleString('en-IN') : '—');
 
-function Decision({ item, onDone }) {
-  const [reasonCode, setReasonCode] = useState(REJECTION_REASONS[0]);
-  const [notes, setNotes] = useState('');
-  const decide = useMutation({
-    mutationFn: (decision) =>
-      adminApi.decide(item.id, {
-        decision,
-        reasonCode: decision === 'verified' ? 'credentials_confirmed' : reasonCode,
-        ...(notes ? { notes } : {}),
-      }),
-    onSuccess: onDone,
-  });
+function Row({ label, children }) {
   return (
-    <div className="mt-4 space-y-3 rounded-lg border border-border p-4">
-      <label className="block text-sm font-medium text-text" htmlFor={`notes-${item.id}`}>
-        Internal notes (not shown to the doctor)
-      </label>
-      <textarea
-        id={`notes-${item.id}`}
-        rows={2}
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        className={controlClass(false, { inline: true })}
-      />
-      <div className="flex flex-wrap items-end gap-2">
-        <Button onClick={() => decide.mutate('verified')} disabled={decide.isPending}>
-          Approve
-        </Button>
-        <label className="sr-only" htmlFor={`reason-${item.id}`}>
-          Rejection reason
-        </label>
-        <select
-          id={`reason-${item.id}`}
-          value={reasonCode}
-          onChange={(e) => setReasonCode(e.target.value)}
-          className={controlClass(false, { inline: true })}
-        >
-          {REJECTION_REASONS.map((r) => (
-            <option key={r} value={r}>
-              {humanize(r)}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="secondary"
-          onClick={() => decide.mutate('rejected')}
-          disabled={decide.isPending}
-        >
-          Reject
-        </Button>
-      </div>
-      {decide.isError && <Alert tone="error">{authErrorMessage(decide.error)}</Alert>}
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-text-subtle">{label}</dt>
+      <dd className="mt-0.5 text-sm text-text">{children || '—'}</dd>
     </div>
   );
 }
 
-/** Platform admin: doctor credential-verification queue (manual review in M2). */
+/** The full application: everything the doctor submitted, loaded (and audited) when opened. */
+function Application({ item }) {
+  const detail = useQuery({
+    queryKey: ['admin', 'verification', item.id],
+    queryFn: () => adminApi.verificationCase(item.id),
+  });
+  if (detail.isPending) return <LoadingState label="Loading application" rows={2} />;
+  if (detail.isError) return <Alert tone="error">{authErrorMessage(detail.error)}</Alert>;
+  const p = detail.data.doctorProfile;
+  return (
+    <dl className="grid gap-4 rounded-xl bg-surface-muted p-4 sm:grid-cols-2">
+      <Row label="Name shown to patients">{p.professionalName}</Row>
+      <Row label="Profile created">{when(p.createdAt)}</Row>
+      <Row label="Registration number">{item.registrationNumber}</Row>
+      <Row label="Medical council">
+        {item.registrationCouncil}
+        {item.registrationYear ? ` · registered ${item.registrationYear}` : ''}
+      </Row>
+      <Row label="Speciality">
+        {[p.primarySpecialization, ...(p.additionalSpecializations ?? [])].join(', ')}
+      </Row>
+      <Row label="Experience">{`${p.yearsOfExperience} years`}</Row>
+      <Row label="Qualifications">
+        {p.qualifications?.length ? (
+          <ul>
+            {p.qualifications.map((q) => (
+              <li key={`${q.degree}-${q.year}`}>
+                {q.degree}, {q.institution} ({q.year})
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Row>
+      <Row label="Languages">{p.languages?.join(', ')}</Row>
+      <div className="sm:col-span-2">
+        <Row label="About">{p.bio}</Row>
+      </div>
+    </dl>
+  );
+}
+
+function CaseCard({ item, onChanged }) {
+  // Applications in review open by default (also right after “Start review”).
+  const [chosen, setOpen] = useState(null);
+  const open = chosen ?? item.status === 'under_review';
+  const [dialog, setDialog] = useState(null);
+  const start = useMutation({
+    mutationFn: () => adminApi.startReview(item.id),
+    onSuccess: onChanged,
+  });
+  const decide = useMutation({
+    mutationFn: (body) => adminApi.decide(item.id, body),
+    onSuccess: () => {
+      setDialog(null);
+      onChanged();
+    },
+  });
+  const suspend = useMutation({
+    mutationFn: (body) => adminApi.suspendDoctor(item.doctorId, body),
+    onSuccess: () => {
+      setDialog(null);
+      onChanged();
+    },
+  });
+  const name = item.doctor?.professionalName ?? 'Doctor';
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <PersonIdentity
+              name={name}
+              tone="neutral"
+              detail={item.doctor?.primarySpecialization}
+            />
+            <StatusBadge status={item.status} />
+          </div>
+          <p className="text-sm text-text-muted">
+            Reg. no. <span className="font-mono text-text">{item.registrationNumber}</span> ·{' '}
+            {item.registrationCouncil}
+            {item.registrationYear ? ` (${item.registrationYear})` : ''} · submitted{' '}
+            {when(item.submittedAt)}
+          </p>
+          {item.decisionReasonCode && item.status !== 'under_review' && (
+            <p className="text-sm text-text">
+              <span className="font-medium">
+                {item.status === 'verified' ? 'Decision' : 'Reason'}:
+              </span>{' '}
+              {REASON_LABELS[item.decisionReasonCode] ?? item.decisionReasonCode}
+              {item.decidedAt && ` · ${when(item.decidedAt)}`}
+              {item.decisionNotes && (
+                <span className="block text-text-muted">Notes: {item.decisionNotes}</span>
+              )}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {item.status === 'pending' && (
+            <Button icon={ClipboardCheck} onClick={() => start.mutate()} loading={start.isPending}>
+              Start review
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            icon={FileSearch}
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? 'Hide application' : 'View application'}
+          </Button>
+        </div>
+      </div>
+      {start.isError && (
+        <Alert tone="error" className="mt-3">
+          {authErrorMessage(start.error)}
+        </Alert>
+      )}
+      {open && (
+        <div className="mt-4 space-y-4">
+          <Application item={item} />
+          {item.status === 'under_review' && (
+            <div className="flex flex-wrap gap-2">
+              <Button icon={BadgeCheck} onClick={() => setDialog('verify')}>
+                Verify doctor
+              </Button>
+              <Button variant="secondary" icon={XCircle} onClick={() => setDialog('reject')}>
+                Reject
+              </Button>
+            </div>
+          )}
+          {item.status === 'verified' && (
+            <Button variant="ghost" icon={Ban} onClick={() => setDialog('suspend')}>
+              Suspend doctor
+            </Button>
+          )}
+        </div>
+      )}
+      {dialog === 'verify' && (
+        <ActionDialog
+          title={`Verify ${name}?`}
+          description="Patients will be able to find and book this doctor. The decision is recorded in the audit log."
+          confirmLabel="Verify doctor"
+          notes
+          acknowledge={`I checked registration ${item.registrationNumber} with ${item.registrationCouncil} and the details match.`}
+          pending={decide.isPending}
+          error={decide.error}
+          onConfirm={({ notes }) =>
+            decide.mutate({
+              decision: 'verified',
+              reasonCode: 'credentials_confirmed',
+              ...(notes ? { notes } : {}),
+            })
+          }
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'reject' && (
+        <ActionDialog
+          title={`Reject ${name}’s application?`}
+          description="The doctor is not listed. They see the reason and can correct their details and submit again."
+          confirmLabel="Reject application"
+          reasons={NEGATIVE}
+          reasonLabel="Why are you rejecting it?"
+          notes
+          destructive
+          pending={decide.isPending}
+          error={decide.error}
+          onConfirm={({ reasonCode, notes }) =>
+            decide.mutate({ decision: 'rejected', reasonCode, ...(notes ? { notes } : {}) })
+          }
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'suspend' && (
+        <ActionDialog
+          title={`Suspend ${name}?`}
+          description="They disappear from search at once and patients can no longer book them. Appointments already booked are not cancelled automatically. The doctor can submit again for review."
+          confirmLabel="Suspend doctor"
+          reasons={NEGATIVE}
+          reasonLabel="Why are you suspending them?"
+          notes
+          destructive
+          acknowledge="I understand this stops new bookings with this doctor immediately."
+          pending={suspend.isPending}
+          error={suspend.error}
+          onConfirm={({ reasonCode, notes }) =>
+            suspend.mutate({ reasonCode, ...(notes ? { notes } : {}) })
+          }
+          onClose={() => setDialog(null)}
+        />
+      )}
+    </Card>
+  );
+}
+
+/** Platform admin: doctor credential verification. */
 export function VerificationQueuePage() {
   const queryClient = useQueryClient();
-  const queue = useQuery({
-    queryKey: ['admin', 'verifications'],
-    queryFn: () => adminApi.verificationQueue(),
+  const counts = useQueries({
+    queries: TABS.map(([status]) => ({
+      queryKey: ['admin', 'verifications', status],
+      queryFn: () => adminApi.verificationQueue(status),
+    })),
   });
+  const [chosen, setTab] = useState(null);
+  // Open on the work waiting: applications in review first, then new ones.
+  const tab =
+    chosen ??
+    (counts[1].data?.length ? 'under_review' : counts[0].data?.length ? 'pending' : 'pending');
+  const index = TABS.findIndex(([s]) => s === tab);
+  const list = counts[index];
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'verifications'] });
-  const start = useMutation({ mutationFn: adminApi.startReview, onSuccess: refresh });
 
   return (
     <div className="space-y-6">
@@ -88,52 +272,36 @@ export function VerificationQueuePage() {
         icon={BadgeCheck}
         eyebrow="Administration"
         title="Doctor verification"
-        description="Check each registration against the medical council register before approving. Only verified doctors appear to patients. Every decision is audited."
+        description="Check each registration against the medical council register before verifying. Only verified doctors appear to patients. Every decision is recorded in the audit log."
       />
-      {start.isError && <Alert tone="error">{authErrorMessage(start.error)}</Alert>}
-      {queue.isPending && <Skeleton className="h-24 w-full" />}
-      {queue.data?.length === 0 && (
-        <EmptyState icon={BadgeCheck} title="No doctors waiting for verification">
-          New applications appear here when doctors submit their profile.
+      <PlatformBoundary compact />
+      <Tabs
+        label="Applications"
+        value={tab}
+        onChange={setTab}
+        tabs={TABS.map(([status, label], i) => [
+          status,
+          `${label}${counts[i].data?.length ? ` (${counts[i].data.length})` : ''}`,
+          status === 'suspended' ? ShieldOff : undefined,
+        ])}
+      />
+      <p className="text-sm text-text-muted">{TAB_HELP[tab]}</p>
+      {list.isPending && <LoadingState label="Loading applications" rows={2} />}
+      {list.isError && <Alert tone="error">{authErrorMessage(list.error)}</Alert>}
+      {list.isSuccess && list.data.length === 0 && (
+        <EmptyState icon={BadgeCheck} title="Nothing here">
+          {tab === 'pending'
+            ? 'No applications are waiting. New ones appear here when doctors submit their profile.'
+            : 'No applications in this group.'}
         </EmptyState>
       )}
-      {queue.data?.map((item) => (
-        <Card key={item.id}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-2 font-medium text-text">
-                {item.doctor?.professionalName} <StatusBadge status={item.status} />
-              </p>
-              <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm text-text-muted sm:grid-cols-2">
-                <div>
-                  <dt className="inline">Registration: </dt>
-                  <dd className="inline font-medium text-text">{item.registrationNumber}</dd>
-                </div>
-                <div>
-                  <dt className="inline">Council: </dt>
-                  <dd className="inline">
-                    {item.registrationCouncil} ({item.registrationYear})
-                  </dd>
-                </div>
-                <div>
-                  <dt className="inline">Specialization: </dt>
-                  <dd className="inline">{item.doctor?.primarySpecialization}</dd>
-                </div>
-                <div>
-                  <dt className="inline">Submitted: </dt>
-                  <dd className="inline">{new Date(item.submittedAt).toLocaleString('en-IN')}</dd>
-                </div>
-              </dl>
-            </div>
-            {item.status === 'pending' && (
-              <Button onClick={() => start.mutate(item.id)} disabled={start.isPending}>
-                Start review
-              </Button>
-            )}
-          </div>
-          {item.status === 'under_review' && <Decision item={item} onDone={refresh} />}
-        </Card>
-      ))}
+      <ul className="space-y-3">
+        {list.data?.map((item) => (
+          <li key={item.id}>
+            <CaseCard item={item} onChanged={refresh} />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
