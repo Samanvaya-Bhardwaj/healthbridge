@@ -272,11 +272,20 @@ function AccessLog({ patientId }) {
         ? e.outcome === 'denied'
         : true,
   );
+  // Newest first, by day. Repeats in a row (a doctor reopening the same notes during one
+  // consultation) become one line with a count, so the history stays readable.
   const days = [];
   for (const e of items) {
     const day = formatDay(e.occurredAt);
     if (days.at(-1)?.[0] !== day) days.push([day, []]);
-    days.at(-1)[1].push(e);
+    const list = days.at(-1)[1];
+    const last = list.at(-1);
+    if (last && last.description === e.description && last.outcome === e.outcome) {
+      last.count += 1;
+      last.earliestAt = e.occurredAt;
+    } else {
+      list.push({ ...e, count: 1, earliestAt: e.occurredAt });
+    }
   }
   return (
     <Card>
@@ -351,10 +360,13 @@ function AccessLog({ patientId }) {
                     />
                     <span className={`min-w-0 flex-1 ${denied ? 'text-danger' : 'text-text'}`}>
                       {e.description}
+                      {e.count > 1 && <span className="text-text-muted"> · {e.count} times</span>}
                       {denied && <span className="sr-only"> (refused)</span>}
                     </span>
                     <time className="shrink-0 text-text-subtle" dateTime={e.occurredAt}>
-                      {formatTime(e.occurredAt)}
+                      {e.count > 1 && formatTime(e.earliestAt) !== formatTime(e.occurredAt)
+                        ? `${formatTime(e.earliestAt)}–${formatTime(e.occurredAt)}`
+                        : formatTime(e.occurredAt)}
                     </time>
                   </li>
                 );

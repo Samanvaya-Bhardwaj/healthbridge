@@ -68,7 +68,11 @@ function SupportHome({ user, firstName }) {
 export function RoleHome() {
   const { user } = useAuth();
   const role = primaryRole(user.roles);
-  const firstName = user.fullName.split(' ')[0];
+  // "Dr Nikhil Rao" → "Nikhil": a title is not a first name.
+  const words = user.fullName.trim().split(/\s+/);
+  const firstName =
+    (words.length > 1 && /^(dr|prof|mr|mrs|ms|miss)\.?$/i.test(words[0]) ? words[1] : words[0]) ??
+    user.fullName;
   if (role === 'DOCTOR') return <DoctorToday firstName={firstName} />;
   if (role === 'CLINIC_ADMIN')
     return <ClinicOverview clinicId={adminClinicIds(user)[0]} firstName={firstName} />;

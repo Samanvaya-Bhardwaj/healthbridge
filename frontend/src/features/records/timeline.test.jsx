@@ -78,7 +78,7 @@ describe('health timeline', () => {
     expect(screen.getByText('September 2026')).toBeInTheDocument();
     expect(screen.getByText('August 2026')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Export (JSON)' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Download a copy' }));
     expect(calls.some((c) => c.key.endsWith('/timeline/export'))).toBe(true);
     expect(URL.createObjectURL).toHaveBeenCalled();
   });

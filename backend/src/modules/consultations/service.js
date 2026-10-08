@@ -183,6 +183,11 @@ export function createConsultationService({
           endsAt: row.ends_at,
           doctorName: row.doctor_name,
           clinicName: row.clinic_name ?? null,
+          clinicAddress:
+            [row.clinic_address_line, row.clinic_city, row.clinic_state, row.clinic_postal_code]
+              .filter(Boolean)
+              .join(', ') || null,
+          clinicPhone: row.clinic_phone ?? null,
           patientId: row.patient_id,
           doctorId: row.doctor_id,
         },

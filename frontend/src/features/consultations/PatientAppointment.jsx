@@ -174,6 +174,7 @@ function NowPanel({ a, view, status, appointmentId }) {
             Go to {a.clinicName ?? 'the clinic'} on {formatDay(a.startsAt)} at{' '}
             {formatTime(a.startsAt)}. Check in at reception (from one hour before the start).
           </p>
+          {a.clinicAddress && <p className="font-medium text-text">{a.clinicAddress}</p>}
         </NextStep>
       );
     case 'checked_in':
@@ -253,7 +254,22 @@ function Details({ a }) {
   const rows = [
     ['When', `${formatDay(a.startsAt)}, ${formatTime(a.startsAt)}–${formatTime(a.endsAt)}`],
     ['Type', MODE_LABELS[a.mode]],
-    ...(a.clinicName ? [['Where', a.clinicName]] : []),
+    ...(a.clinicName
+      ? [
+          [
+            'Where',
+            <>
+              {a.clinicName}
+              {a.clinicAddress && <span className="block text-text-muted">{a.clinicAddress}</span>}
+              {a.clinicPhone && (
+                <a href={`tel:${a.clinicPhone}`} className="block text-primary hover:underline">
+                  {a.clinicPhone}
+                </a>
+              )}
+            </>,
+          ],
+        ]
+      : []),
     ...(a.feePaise !== undefined ? [['Fee', formatFee(a.feePaise)]] : []),
     ...(a.reference ? [['Reference', a.reference]] : []),
   ];

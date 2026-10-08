@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { BackLink } from '../../components/ui/BackLink.jsx';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MAX_PRESCRIPTION_ITEMS, MEDICATION_ROUTES } from '@healthbridge/shared';
 import { consultationApi, doctorsApi, followUpApi, schedulingApi } from '../../lib/domainApi.js';
-import { authErrorMessage } from '../auth/errorMessages.js';
+import { authErrorMessage, isConnectionProblem } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge, StatusBadge } from '../../components/ui/Badge.jsx';
 import { Button, ButtonLink } from '../../components/ui/Button.jsx';
@@ -235,7 +235,10 @@ function PrescriptionBuilder({ initial, submitLabel, needsReason, onSubmit, pend
             <SelectField
               label="Route"
               value={item.route}
-              options={MEDICATION_ROUTES.map((r) => ({ value: r, label: r }))}
+              options={MEDICATION_ROUTES.map((r) => ({
+                value: r,
+                label: r[0].toUpperCase() + r.slice(1),
+              }))}
               onChange={(e) => update(index, 'route', e.target.value)}
             />
             <TextField
@@ -696,7 +699,14 @@ function DoctorView({ view, status, appointmentId, refresh }) {
           </Card>
         )}
         {c?.outcome && (
-          <Alert tone={c.outcome === 'emergency_escalation' ? 'error' : 'success'}>
+          <Alert
+            tone={c.outcome === 'emergency_escalation' ? 'error' : 'success'}
+            action={
+              <ButtonLink as={Link} to="/app" size="sm" variant="secondary">
+                Back to today
+              </ButtonLink>
+            }
+          >
             Outcome recorded: {OUTCOME_LABELS[c.outcome]}
             {c.outcomeDetail?.followUpOn &&
               ` · follow-up on ${formatDateOnly(c.outcomeDetail.followUpOn)}`}
@@ -716,6 +726,12 @@ function DoctorView({ view, status, appointmentId, refresh }) {
 export function ConsultationPage() {
   const { id } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  // A one-time notice ("Appointment booked."): shown now, not again on reload or Back.
+  const [notice] = useState(() => ({ id, text: location.state?.notice }));
+  useEffect(() => {
+    if (location.state?.notice) navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
   const queryClient = useQueryClient();
   // Live state without clinical content (waiting room, start, outcome), polled. The full
   // (audited) view is re-read only when the consultation state changes.
@@ -750,7 +766,7 @@ export function ConsultationPage() {
     return (
       <div className="space-y-6">
         <BackLink to="/app/appointments">Appointments</BackLink>
-        {status.isError && (
+        {isConnectionProblem(status.error) && (
           <Alert tone="warning" title="Your connection looks unstable.">
             We’re still trying to reach the consultation room every few seconds. You don’t need to
             reload; this message disappears once the connection is back.
@@ -760,7 +776,7 @@ export function ConsultationPage() {
           view={view.data}
           status={status.data}
           appointmentId={id}
-          notice={location.state?.notice}
+          notice={notice.id === id ? notice.text : undefined}
         />
       </div>
     );
@@ -770,7 +786,7 @@ export function ConsultationPage() {
       <BackLink to="/app/appointments">{party === 'doctor' ? 'Schedule' : 'Appointments'}</BackLink>
       {view.isPending && <LoadingState label="Loading appointment" rows={3} />}
       {view.isError && <Alert tone="error">{authErrorMessage(view.error)}</Alert>}
-      {status.isError && (
+      {isConnectionProblem(status.error) && (
         <Alert tone="warning" title="Your connection looks unstable.">
           We’re still trying to reach the consultation room every few seconds. You don’t need to
           reload; this message disappears once the connection is back.

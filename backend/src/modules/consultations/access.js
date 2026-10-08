@@ -30,6 +30,12 @@ export async function authorizeConsultationParty(
     'd.user_id as doctor_user_id',
     'd.professional_name as doctor_name',
     'c.name as clinic_name',
+    // Public clinic details, so patients know where to go for an in-clinic visit.
+    'c.address_line as clinic_address_line',
+    'c.city as clinic_city',
+    'c.state as clinic_state',
+    'c.postal_code as clinic_postal_code',
+    'c.phone_e164 as clinic_phone',
   );
   const decision = await accessPolicy.enforce({
     principal,

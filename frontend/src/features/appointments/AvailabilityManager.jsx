@@ -186,8 +186,9 @@ function RuleForm({ rules, clinics, onSaved }) {
                     : 'border-border text-text hover:border-primary/40'
                 }`}
               >
-                {d.slice(0, 3)}
-                <span className="sr-only">{d.slice(3)}</span>
+                {/* One spoken word ("Monday"), not "Mon day". */}
+                <span aria-hidden="true">{d.slice(0, 3)}</span>
+                <span className="sr-only">{d}</span>
               </button>
             );
           })}

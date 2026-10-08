@@ -215,7 +215,10 @@ export function BookAppointmentPage() {
   const days = useMemo(() => groupByDay(modeSlots), [modeSlots]);
   const activeDay = day && days.some(([k]) => k === day) ? day : (days[0]?.[0] ?? null);
   const daySlots = days.find(([k]) => k === activeDay)?.[1] ?? [];
-  const clinicName = (id) => doctor.data?.clinics?.find((c) => c.id === id)?.name;
+  const clinicName = (id) => {
+    const c = doctor.data?.clinics?.find((x) => x.id === id);
+    return c && [c.name, c.city].filter(Boolean).join(', ');
+  };
 
   const submit = useSafeMutation({
     mutationFn: () =>

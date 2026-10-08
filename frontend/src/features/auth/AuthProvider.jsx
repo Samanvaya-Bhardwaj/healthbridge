@@ -75,7 +75,10 @@ export function AuthProvider({ children }) {
     authApi
       .refreshSession()
       .then((session) => !cancelled && establish(session))
-      .catch(() => !cancelled && setState({ status: 'anonymous', user: null, endedReason: null }));
+      // A session existed but can no longer be restored: say so on the sign-in page.
+      .catch(
+        () => !cancelled && setState({ status: 'anonymous', user: null, endedReason: 'expired' }),
+      );
     return () => {
       cancelled = true;
     };

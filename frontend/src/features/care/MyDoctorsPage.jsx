@@ -18,6 +18,7 @@ import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { AvailabilitySummary, DoctorCredentials } from './DoctorInfo.jsx';
 import { useDoctorProfile, useDoctorSlots } from './doctorInfo.js';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { PatientSelect } from '../records/PatientSelect.jsx';
 
 /** Which actions the patient side can take in each state (the server enforces the same rules). */
 const PATIENT_ACTIONS = {
@@ -175,7 +176,13 @@ function CareTeamCard({ rel, onAction, busy }) {
   );
 }
 
-function SearchResult({ doctor, inTeam, onRequest, busy }) {
+const IN_TEAM_TEXT = {
+  pending: 'Request sent: waiting for them to accept',
+  invited: 'They invited you: see the care team above',
+};
+
+function SearchResult({ doctor, teamStatus, onRequest, busy }) {
+  const inTeam = Boolean(teamStatus);
   const [open, setOpen] = useState(false);
   const slots = useDoctorSlots(doctor.id, { enabled: open });
   const clinic = doctor.clinics[0];
@@ -190,7 +197,9 @@ function SearchResult({ doctor, inTeam, onRequest, busy }) {
           }`}
         />
         {inTeam ? (
-          <span className="text-sm text-text-muted">Already in your care team</span>
+          <span className="text-sm text-text-muted">
+            {IN_TEAM_TEXT[teamStatus] ?? 'Already in the care team'}
+          </span>
         ) : (
           <Button variant="secondary" icon={UserPlus} disabled={busy} onClick={onRequest}>
             Request
@@ -225,7 +234,7 @@ function SearchResult({ doctor, inTeam, onRequest, busy }) {
   );
 }
 
-function DoctorSearch({ patientId, existingDoctorIds, onRequested }) {
+function DoctorSearch({ patientId, teamStatusByDoctor, onRequested }) {
   const [q, setQ] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [message, setMessage] = useState(null);
@@ -299,7 +308,7 @@ function DoctorSearch({ patientId, existingDoctorIds, onRequested }) {
           <SearchResult
             key={doctor.id}
             doctor={doctor}
-            inTeam={existingDoctorIds.has(doctor.id)}
+            teamStatus={teamStatusByDoctor.get(doctor.id)}
             busy={request.isPending}
             onRequest={() => request.mutate(doctor)}
           />
@@ -310,10 +319,23 @@ function DoctorSearch({ patientId, existingDoctorIds, onRequested }) {
 }
 
 export function MyDoctorsPage() {
-  const [params] = useSearchParams();
-  const dependentId = params.get('patientId') ?? undefined;
+  const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const self = useQuery({ queryKey: ['patients', 'me'], queryFn: patientsApi.me, retry: false });
+  const dependents = useQuery({
+    queryKey: ['patients', 'dependents'],
+    queryFn: patientsApi.dependents,
+  });
+  // Visiting your own id (from the switch) is the same as no dependent.
+  const requested = params.get('patientId') ?? undefined;
+  const dependentId = requested && requested !== self.data?.id ? requested : undefined;
+  const dependent = (dependents.data ?? []).find((d) => d.id === dependentId);
+  const dependentName = dependent?.preferredName || dependent?.fullName?.split(' ')[0];
+  const whose = dependentName ? `${dependentName}’s` : 'their';
+  const choices = [
+    ...(self.data ? [{ id: self.data.id, label: 'Me' }] : []),
+    ...(dependents.data ?? []).map((d) => ({ id: d.id, label: d.fullName })),
+  ];
   const patientId = dependentId ?? self.data?.id;
   const team = useQuery({
     queryKey: ['care', patientId],
@@ -334,7 +356,7 @@ export function MyDoctorsPage() {
   const current = (team.data ?? []).filter((r) => CURRENT.has(r.status));
   const past = (team.data ?? []).filter((r) => !CURRENT.has(r.status));
   // Only open relationships block a new request (ended ones can be requested again).
-  const existingDoctorIds = new Set(current.map((r) => r.doctorId));
+  const teamStatusByDoctor = new Map(current.map((r) => [r.doctorId, r.status]));
   const onAction = async (rel, action) => {
     if (action === 'end') {
       const ok = await confirm({
@@ -355,8 +377,23 @@ export function MyDoctorsPage() {
       <PageHeader
         icon={Stethoscope}
         eyebrow="My care"
-        title={dependentId ? 'Their Doctors' : 'My Doctors'}
-        description="The doctors you trust. Add your family doctor; once they accept, you can book online or in-clinic consultations with them."
+        title={
+          dependentId
+            ? dependentName
+              ? `${dependentName}’s doctors`
+              : 'Their doctors'
+            : 'My Doctors'
+        }
+        description={
+          dependentId
+            ? `You manage ${whose} care. Add ${whose} doctor; once the doctor accepts, you can book consultations for ${dependentName ?? 'them'}.`
+            : 'The doctors you trust. Add your family doctor; once they accept, you can book online or in-clinic consultations with them.'
+        }
+      />
+      <PatientSelect
+        choices={choices}
+        value={dependentId ?? self.data?.id}
+        onChange={(id) => setParams(id === self.data?.id ? {} : { patientId: id })}
       />
       {dialog}
       {act.isError && <Alert tone="error">{authErrorMessage(act.error)}</Alert>}
@@ -406,7 +443,7 @@ export function MyDoctorsPage() {
       {patientId && (
         <DoctorSearch
           patientId={patientId}
-          existingDoctorIds={existingDoctorIds}
+          teamStatusByDoctor={teamStatusByDoctor}
           onRequested={refresh}
         />
       )}

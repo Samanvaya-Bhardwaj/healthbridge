@@ -95,7 +95,11 @@ export function RefundDialog({ a, paymentState, onClose }) {
               disabled={invalid}
               loading={refund.isPending}
             >
-              {part === 'amount' && paise ? `Refund ${formatFee(paise)}` : 'Refund the rest'}
+              {part === 'amount' && paise
+                ? `Refund ${formatFee(paise)}`
+                : partly
+                  ? 'Refund the rest'
+                  : `Refund ${formatFee(a.feePaise)}`}
             </Button>
           </>
         )

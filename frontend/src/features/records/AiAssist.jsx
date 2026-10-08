@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assistApi } from '../../lib/domainApi.js';
-import { authErrorMessage } from '../auth/errorMessages.js';
+import { aiErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
@@ -73,7 +73,7 @@ export function AskRecords({ patientId }) {
         <Alert tone="error">
           {ask.error?.code === 'ai_processing_disabled'
             ? 'The patient has not turned on AI reading of their documents.'
-            : authErrorMessage(ask.error)}
+            : aiErrorMessage(ask.error)}
         </Alert>
       )}
       {ask.data && (
@@ -141,7 +141,7 @@ export function BriefPage() {
             ? 'The patient has not shared their records with you.'
             : brief.error?.code === 'ai_processing_disabled'
               ? 'The patient has not turned on AI reading of their documents.'
-              : authErrorMessage(brief.error)}
+              : aiErrorMessage(brief.error)}
         </Alert>
       )}
       {b && (

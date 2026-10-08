@@ -9,6 +9,23 @@ export const formatDateTime = (iso) =>
     minute: '2-digit',
   }).format(new Date(iso));
 
+/** With the year, for records that can be old: "8 Oct 2026, 11:30 am" (seconds for audits). */
+export const formatFullDateTime = (iso, { seconds = false } = {}) =>
+  new Intl.DateTimeFormat('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(seconds ? { second: '2-digit' } : {}),
+  }).format(new Date(iso));
+
+/** "8 Oct 2026". */
+export const formatFullDate = (iso) =>
+  new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).format(
+    new Date(iso),
+  );
+
 export const formatTime = (iso) =>
   new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 

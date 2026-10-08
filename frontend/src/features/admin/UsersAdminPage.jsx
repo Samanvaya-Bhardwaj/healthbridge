@@ -23,6 +23,7 @@ import { PageHeader } from '../../components/ui/Typography.jsx';
 import { Users } from 'lucide-react';
 import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { formatFullDateTime } from '../appointments/format.js';
 
 const roleOptions = ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 const STATUS_REASONS = [
@@ -33,7 +34,7 @@ const STATUS_REASONS = [
 ];
 /** Doctor and clinic roles come only from their workflows (verification, clinic admin). */
 const GRANTABLE = ALL_ROLES.filter((r) => !WORKFLOW_GRANTED_ROLES.includes(r));
-const when = (v) => (v ? new Date(v).toLocaleString('en-IN') : '—');
+const when = (v) => (v ? formatFullDateTime(v) : '—');
 
 function UserDetail({ userId, onClose }) {
   const { user: me, hasPermission } = useAuth();

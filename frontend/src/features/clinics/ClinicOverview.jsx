@@ -41,6 +41,13 @@ function Stat({ label, value, icon: Icon, tone = 'primary' }) {
   );
 }
 
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const teamSummary = (members) => {
+  const count = (role) =>
+    members.filter((m) => m.memberRole === role && m.status === 'active').length;
+  return `${plural(count('DOCTOR'), 'active doctor', 'active doctors')} · ${plural(count('CLINIC_ADMIN'), 'administrator', 'administrators')}`;
+};
+
 /** Clinic administrator home: today's operations at one clinic. */
 export function ClinicOverview({ clinicId, firstName }) {
   const [now] = useState(() => Date.now());
@@ -193,9 +200,7 @@ export function ClinicOverview({ clinicId, firstName }) {
           <Card>
             <SectionHeader icon={UsersRound} title="Clinic team" />
             <p className="mt-2 text-sm text-text-muted">
-              {members.data
-                ? `${members.data.filter((m) => m.memberRole === 'DOCTOR' && m.status === 'active').length} active doctors · ${members.data.filter((m) => m.memberRole === 'CLINIC_ADMIN' && m.status === 'active').length} administrators`
-                : 'Loading…'}
+              {members.data ? teamSummary(members.data) : 'Loading…'}
             </p>
             <ButtonLink as={Link} to="/app/clinic" size="sm" variant="secondary" className="mt-3">
               Manage team

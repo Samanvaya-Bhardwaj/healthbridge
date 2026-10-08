@@ -107,7 +107,7 @@ describe('registration', () => {
     await ue.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.getByText(/Thanks\. If this email can be used/)).toBeInTheDocument();
+    expect(screen.getByText(/Nearly there: sign in below/)).toBeInTheDocument();
     const body = JSON.parse(calls.find((c) => c.key === 'POST /api/v1/auth/register').init.body);
     expect(body).toEqual({
       fullName: 'Asha Rao',
@@ -246,7 +246,7 @@ describe('session restoration and lifecycle', () => {
     });
     renderAt('/app/account');
     expect(
-      await screen.findByText('Your session has ended. Please sign in again.'),
+      await screen.findByText(/You were signed out to keep your health information safe/),
     ).toBeInTheDocument();
   });
 

@@ -89,8 +89,8 @@ export function VideoPanel({ appointmentId }) {
           <div>
             <p className="font-medium">Demo video room</p>
             <p className="mt-1 text-white/70">
-              The mock provider issues a real, short-lived join token but carries no audio or video.
-              Start with live video (npm start -- --video) for real calls.
+              In this demo the call is simulated, so there is no camera or sound. Everything else
+              works as in a real consultation.
             </p>
           </div>
         </div>

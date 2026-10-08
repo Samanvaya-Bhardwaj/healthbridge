@@ -22,7 +22,7 @@ test('patient registers, joins a doctor’s care, books and pays for a consultat
     await patient.getByRole('checkbox').check();
     await patient.getByRole('button', { name: 'Create account' }).click();
     // Registration never signs in or reveals whether the email existed (no enumeration).
-    await expect(patient.getByText(/you can now sign in/)).toBeVisible();
+    await expect(patient.getByText(/Nearly there: sign in below/)).toBeVisible();
     await signIn(patient, person.email, person.password);
     await expect(patient.getByRole('heading', { name: /Welcome, Test/ })).toBeVisible();
   });

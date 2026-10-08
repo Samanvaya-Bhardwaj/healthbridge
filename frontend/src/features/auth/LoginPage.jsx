@@ -59,7 +59,8 @@ export function LoginPage() {
       )}
       {!notice && endedReason === 'expired' && (
         <Alert tone="info" className="mb-6">
-          Your session has ended. Please sign in again.
+          You were signed out to keep your health information safe. Sign in again to carry on where
+          you left off.
         </Alert>
       )}
       {!notice && endedReason === 'signed_out' && (

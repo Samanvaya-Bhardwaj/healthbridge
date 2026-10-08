@@ -153,7 +153,7 @@ export function Timeline({ patientId, allowExport = false }) {
             onClick={() => exporter.mutate()}
             loading={exporter.isPending}
           >
-            Export (JSON)
+            Download a copy
           </Button>
         )}
       </div>

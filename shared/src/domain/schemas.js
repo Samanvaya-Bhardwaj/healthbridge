@@ -142,7 +142,11 @@ export const qualificationSchema = z
   .object({
     degree: z.string().trim().min(2).max(80),
     institution: z.string().trim().min(2).max(150),
-    year: z.number().int().min(1950).max(2100),
+    year: z
+      .number({ error: 'Enter the year you qualified, for example 2012.' })
+      .int()
+      .min(1950, 'Enter the year you qualified, for example 2012.')
+      .max(2100, 'Enter the year you qualified, for example 2012.'),
   })
   .strict();
 
@@ -156,7 +160,11 @@ const doctorProfileFields = {
     .regex(/^[A-Za-z0-9/.-]+$/, 'Use letters, digits, "/", "." or "-".')
     .transform((v) => v.toUpperCase()),
   registrationCouncil: z.string().trim().min(2).max(100),
-  registrationYear: z.number().int().min(1950).max(2100),
+  registrationYear: z
+    .number({ error: 'Enter the year you registered, for example 2014.' })
+    .int()
+    .min(1950, 'Enter the year you registered, for example 2014.')
+    .max(2100, 'Enter the year you registered, for example 2014.'),
   primarySpecialization: z.string().trim().min(2).max(80),
   additionalSpecializations: z.array(z.string().trim().min(2).max(80)).max(5).optional(),
   qualifications: z.array(qualificationSchema).min(1).max(10),

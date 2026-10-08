@@ -9,7 +9,8 @@ import {
   localIso,
 } from './weekModel.js';
 
-const PX_PER_MIN = 1.2;
+const BASE_PX_PER_MIN = 1.2;
+const MIN_TARGET_PX = 24;
 
 export function Legend() {
   return (
@@ -44,6 +45,19 @@ export function WeekGrid({ weekStart, rules = [], appointments = [], timeOff = [
   const last = Math.max(18 * 60, ...spans.map((b) => b.end));
   const startHour = Math.floor(first / 60);
   const endHour = Math.min(24, Math.ceil(last / 60));
+  // Every appointment must be a 24px touch target without overlapping the next one, so the
+  // scale grows to fit the week's shortest booked visit (10-minute slots → taller grid).
+  const shortest = Math.min(
+    ...perDay
+      .flat()
+      .filter((b) => b.to)
+      .map((b) => b.end - b.start),
+    Infinity,
+  );
+  const PX_PER_MIN = Math.max(
+    BASE_PX_PER_MIN,
+    MIN_TARGET_PX / (Number.isFinite(shortest) ? shortest : 60),
+  );
   const height = (endHour - startHour) * 60 * PX_PER_MIN;
   const top = (min) => (Math.max(min, startHour * 60) - startHour * 60) * PX_PER_MIN;
   const today = localIso(new Date());

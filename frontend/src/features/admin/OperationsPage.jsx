@@ -13,6 +13,7 @@ import { Tabs } from '../../components/ui/Tabs.jsx';
 import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
 import { QUEUE_NAMES, platformHealth } from './adminHealth.js';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { formatFullDateTime } from '../appointments/format.js';
 
 /** Job states in plain words, the same everywhere on this page. */
 const STATES = [
@@ -41,9 +42,9 @@ function DeadLetter({ d, onRetry, pending }) {
           <p className="font-mono text-xs text-text-muted">{d.jobName}</p>
           <p className="mt-1 text-xs text-text-subtle">
             {d.attempts} attempt{d.attempts === 1 ? '' : 's'} · first failed{' '}
-            {new Date(d.firstFailedAt ?? d.failedAt).toLocaleString('en-IN')} · last failed{' '}
-            {new Date(d.failedAt).toLocaleString('en-IN')}
-            {d.retriedAt && ` · retried ${new Date(d.retriedAt).toLocaleString('en-IN')}`}
+            {formatFullDateTime(d.firstFailedAt ?? d.failedAt)} · last failed{' '}
+            {formatFullDateTime(d.failedAt)}
+            {d.retriedAt && ` · retried ${formatFullDateTime(d.retriedAt)}`}
           </p>
           <p className="mt-2 break-words rounded-lg bg-surface-muted px-3 py-2 font-mono text-xs text-text">
             {d.failureReason}

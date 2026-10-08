@@ -11,6 +11,9 @@ import { register as registerAccount } from './authApi.js';
 import { applyFieldErrors, authErrorMessage } from './errorMessages.js';
 import { AuthCard } from './AuthCard.jsx';
 
+const REGISTERED_NOTICE =
+  'Nearly there: sign in below with the email and password you just chose. If you already had an account with this email, use that password instead, or choose “Forgot your password?”.';
+
 export function RegisterPage() {
   const { status } = useAuth();
   const navigate = useNavigate();
@@ -30,9 +33,10 @@ export function RegisterPage() {
   const onSubmit = async (values) => {
     setFormError(null);
     try {
-      const result = await registerAccount(values);
+      await registerAccount(values);
       // The server responds identically for new and existing emails (no enumeration).
-      navigate('/login', { state: { notice: result.data.message, email: values.email } });
+      // Worded the same whether or not the email already had an account (no enumeration).
+      navigate('/login', { state: { notice: REGISTERED_NOTICE, email: values.email } });
     } catch (error) {
       if (!applyFieldErrors(error, setError)) setFormError(authErrorMessage(error));
     }
@@ -99,6 +103,11 @@ export function RegisterPage() {
           {isSubmitting ? 'Creating account…' : 'Create account'}
         </Button>
       </form>
+      <p className="mt-6 rounded-xl bg-surface-muted px-4 py-3 text-sm text-text-muted">
+        <span className="font-medium text-text">Are you a doctor?</span> Create your account here
+        too, then set up your professional profile from Profile. Patients can find you once
+        HealthBridge has verified your medical registration.
+      </p>
     </AuthCard>
   );
 }

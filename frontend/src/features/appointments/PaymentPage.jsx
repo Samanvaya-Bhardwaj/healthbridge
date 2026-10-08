@@ -10,6 +10,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { MODE_LABELS, formatDateTime, formatFee, formatTime } from './format.js';
 import { openRazorpayCheckout } from './razorpayCheckout.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
+import { BackLink } from '../../components/ui/BackLink.jsx';
 import { CreditCard } from 'lucide-react';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
 
@@ -74,11 +75,7 @@ export function PaymentPage() {
   if (appointment.isPending) return <Skeleton className="h-48 w-full" />;
   if (appointment.isError) return <Alert tone="error">{authErrorMessage(appointment.error)}</Alert>;
 
-  const back = (
-    <Link to="/app/appointments" className="text-sm font-medium text-primary">
-      ← Appointments
-    </Link>
-  );
+  const back = <BackLink to="/app/appointments">Appointments</BackLink>;
   const summary = (
     <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
       <div>
@@ -153,7 +150,7 @@ export function PaymentPage() {
         icon={CreditCard}
         eyebrow="My care"
         title="Complete payment"
-        description={`Your slot is reserved until ${formatTime(a.holdExpiresAt)}. It is confirmed as soon as the payment provider confirms the payment.`}
+        description={`Your slot is reserved until ${formatTime(a.holdExpiresAt)}. It is confirmed as soon as the payment provider confirms the payment. Changed your mind? You don’t need to do anything: an unpaid booking is released then.`}
       />
 
       <Card>
@@ -192,8 +189,9 @@ export function PaymentPage() {
         <Card>
           <h2 className="text-sm font-semibold text-text">Test payment</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Demo environment: no real money moves. Choose an outcome — the server receives a signed
-            test webhook exactly as it would from a real payment provider.
+            Demo environment: no real money moves. Choose what the payment provider should report;
+            HealthBridge then confirms or releases the booking exactly as it would for a real
+            payment.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { intelligenceApi } from '../../lib/domainApi.js';
-import { authErrorMessage } from '../auth/errorMessages.js';
+import { aiErrorMessage, authErrorMessage } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
@@ -33,7 +33,7 @@ export function ExtractionPanel({ documentId, canVerify = false }) {
   });
 
   if (extraction.isPending) return <Skeleton className="h-16 w-full" />;
-  if (extraction.isError) return <Alert tone="error">{authErrorMessage(extraction.error)}</Alert>;
+  if (extraction.isError) return <Alert tone="error">{aiErrorMessage(extraction.error)}</Alert>;
   const x = extraction.data;
   if (!x) {
     return (

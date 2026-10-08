@@ -106,6 +106,10 @@ const STATUS = {
   under_review: ['review', 'Under review'],
   unverified: ['review', 'Not verified'],
   expired: ['expired', 'Expired'],
+  // Consultation outcomes
+  online_managed: ['completed', 'Managed online'],
+  physical_visit_required: ['attention', 'Clinic visit needed'],
+  emergency_escalation: ['error', 'Emergency care advised'],
 };
 
 const fallbackLabel = (status) =>

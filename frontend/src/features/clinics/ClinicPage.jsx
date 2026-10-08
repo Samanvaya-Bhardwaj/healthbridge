@@ -13,7 +13,7 @@ import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
-import { formatDateTime } from '../appointments/format.js';
+import { formatDateTime, formatFullDate } from '../appointments/format.js';
 import { OperationsBoundary } from './ClinicVisits.jsx';
 import { ACTIVE, DAY_MS, adminClinicIds, dayStart } from './clinicWork.js';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
@@ -247,7 +247,7 @@ function Membership({ clinicId, members, onChanged }) {
                         {m.member?.email}
                         {m.joinedAt &&
                           m.status === 'active' &&
-                          ` · member since ${new Date(m.joinedAt).toLocaleDateString('en-IN')}`}
+                          ` · member since ${formatFullDate(m.joinedAt)}`}
                       </p>
                       {state?.help && (
                         <p className="mt-0.5 text-xs text-text-muted">{state.help}</p>

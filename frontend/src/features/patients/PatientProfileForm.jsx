@@ -5,7 +5,13 @@ import { TextField } from '../../components/ui/TextField.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 
-const SEX_OPTIONS = PATIENT_SEX.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }));
+const SEX_LABELS = {
+  female: 'Female',
+  male: 'Male',
+  intersex: 'Intersex',
+  unspecified: 'Other or not listed',
+};
+const SEX_OPTIONS = PATIENT_SEX.map((v) => ({ value: v, label: SEX_LABELS[v] ?? v }));
 const EMPTY = {
   fullName: '',
   preferredName: '',
@@ -64,7 +70,10 @@ export function PatientProfileForm({
       </fieldset>
       <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-semibold text-text">Contact</legend>
-        {field('phone', 'Mobile number (optional)', { type: 'tel', placeholder: '+919812345678' })}
+        {field('phone', 'Mobile number (optional)', {
+          type: 'tel',
+          hint: 'With the country code, for example +919812345678.',
+        })}
         {field('city', 'City (optional)')}
         {field('state', 'State (optional)')}
         {field('postalCode', 'PIN code (optional)')}

@@ -1,3 +1,4 @@
+import { ROLE_LABELS } from '@healthbridge/shared';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -14,7 +15,9 @@ import { controlClass } from '../../components/ui/fieldStyles.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { ScrollText } from 'lucide-react';
 import { PlatformBoundary } from './AdminParts.jsx';
+import { formatFullDateTime } from '../appointments/format.js';
 
+const sentence = (v) => v.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 const CATEGORIES = [
   'authentication',
   'authorization',
@@ -23,8 +26,9 @@ const CATEGORIES = [
   'data_access',
   'system',
   'financial',
-].map((c) => ({ value: c, label: c.replace('_', ' ') }));
-const OUTCOMES = ['success', 'failure', 'denied'].map((o) => ({ value: o, label: o }));
+].map((c) => ({ value: c, label: sentence(c) }));
+const OUTCOME_LABELS = { success: 'Success', failure: 'Failed', denied: 'Refused' };
+const OUTCOMES = Object.entries(OUTCOME_LABELS).map(([value, label]) => ({ value, label }));
 const OUTCOME_TONES = { success: 'success', failure: 'warning', denied: 'danger' };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RESOURCES = [
@@ -47,6 +51,7 @@ const RESOURCES = [
   ['dead_letter_job', 'Background job'],
   ['audit_log', 'Audit log'],
 ].map(([value, label]) => ({ value, label }));
+const RESOURCE_LABELS = Object.fromEntries(RESOURCES.map((r) => [r.value, r.label]));
 /** Common actions, offered as suggestions; any action name can be typed. */
 const COMMON_ACTIONS = [
   'auth.login',
@@ -138,14 +143,16 @@ function AuditRow({ entry, onFilter }) {
     <>
       <tr>
         <td className="whitespace-nowrap px-4 py-3 text-text-muted">
-          {new Date(entry.occurredAt).toLocaleString('en-IN')}
+          {formatFullDateTime(entry.occurredAt, { seconds: true })}
         </td>
         <td className="px-4 py-3">
           <div className="font-mono text-xs text-text">{entry.action}</div>
-          <div className="text-xs text-text-subtle">{entry.category.replace('_', ' ')}</div>
+          <div className="text-xs text-text-subtle">{sentence(entry.category)}</div>
         </td>
         <td className="px-4 py-3">
-          <Badge tone={OUTCOME_TONES[entry.outcome] ?? 'neutral'}>{entry.outcome}</Badge>
+          <Badge tone={OUTCOME_TONES[entry.outcome] ?? 'neutral'}>
+            {OUTCOME_LABELS[entry.outcome] ?? entry.outcome}
+          </Badge>
         </td>
         <td className="px-4 py-3">
           {entry.actor.userId ? (
@@ -161,13 +168,15 @@ function AuditRow({ entry, onFilter }) {
             <span className="text-xs text-text-subtle">{entry.actor.type}</span>
           )}
           {entry.actor.roles?.length > 0 && (
-            <div className="text-xs text-text-subtle">{entry.actor.roles.join(', ')}</div>
+            <div className="text-xs text-text-subtle">
+              {entry.actor.roles.map((r) => ROLE_LABELS[r] ?? r).join(', ')}
+            </div>
           )}
         </td>
         <td className="px-4 py-3 text-xs">
           {entry.resource ? (
             <>
-              {entry.resource.type}
+              {RESOURCE_LABELS[entry.resource.type] ?? sentence(entry.resource.type)}
               <div className="font-mono text-text-subtle">{short(entry.resource.id)}</div>
             </>
           ) : (

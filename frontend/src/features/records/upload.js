@@ -10,7 +10,8 @@ export const DOCUMENT_TYPE_LABELS = {
 
 /** What each document state means, in the words a patient would use. */
 export const STATUS_HINTS = {
-  pending_upload: 'Uploading…',
+  pending_upload:
+    'Uploading… If the upload was interrupted, upload the file again: unfinished uploads are cleared automatically.',
   quarantined: 'Processing: checking the file for safety. This usually takes under a minute.',
   scanning: 'Processing: checking the file for safety. This usually takes under a minute.',
   available: 'Secure: passed the safety check.',

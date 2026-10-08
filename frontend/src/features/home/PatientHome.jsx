@@ -25,6 +25,7 @@ import { ApiError } from '../../lib/apiClient.js';
 import {
   careApi,
   consultationApi,
+  doctorsApi,
   followUpApi,
   patientsApi,
   recordsApi,
@@ -46,6 +47,12 @@ import {
   formatTime,
 } from '../appointments/format.js';
 
+/** "Thu, 15 Oct" for a calendar day (read as a local date, never shifted by time zone). */
+const formatDateOnly = (iso) =>
+  new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }).format(
+    new Date(`${String(iso).slice(0, 10)}T00:00:00`),
+  );
+
 const greeting = (now) => {
   const h = new Date(now).getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -63,7 +70,7 @@ function relativeDay(iso, now) {
   return `In ${diff} days`;
 }
 
-function Step({ done, title, children, action }) {
+function Step({ done, waiting = false, title, children, action }) {
   return (
     <li className="flex flex-wrap items-start gap-3 py-3 sm:flex-nowrap">
       {done ? (
@@ -74,7 +81,7 @@ function Step({ done, title, children, action }) {
       <div className="min-w-0 flex-1">
         <p className={`font-medium ${done ? 'text-text-muted line-through' : 'text-text'}`}>
           {title}
-          <span className="sr-only">{done ? ' (done)' : ' (to do)'}</span>
+          <span className="sr-only">{done ? ' (done)' : waiting ? ' (waiting)' : ' (to do)'}</span>
         </p>
         {!done && <p className="mt-0.5 text-sm text-text-muted">{children}</p>}
       </div>
@@ -108,11 +115,14 @@ function GettingStarted({ hasProfile, hasDoctor, hasPendingDoctor }) {
         </Step>
         <Step
           done={hasDoctor}
+          waiting={hasPendingDoctor}
           title="2. Add your doctor"
           action={
             hasProfile &&
             (hasPendingDoctor ? (
-              <span className="text-sm text-text-muted">Waiting for the doctor to accept</span>
+              <ButtonLink as={Link} to="/app/doctors" size="sm" variant="secondary">
+                View request
+              </ButtonLink>
             ) : (
               <ButtonLink as={Link} to="/app/doctors" size="sm" icon={Stethoscope}>
                 Find a doctor
@@ -160,9 +170,15 @@ function NextAppointment({ a, now }) {
   const hint =
     a.status === 'pending_payment'
       ? 'Your time is held only briefly. Pay now to confirm it.'
-      : a.mode === 'online'
-        ? `Join from the appointment page. The waiting room opens at ${formatTime(new Date(opensAt).toISOString())}.`
-        : `At ${a.clinic?.name ?? 'the clinic'}. Check in at reception when you arrive.`;
+      : a.status === 'in_consultation'
+        ? a.mode === 'online'
+          ? 'Your consultation has started. Open the appointment to join the video call.'
+          : 'Your consultation is in progress.'
+        : a.status === 'checked_in'
+          ? 'You’re checked in. The doctor will call you in.'
+          : a.mode === 'online'
+            ? `Join from the appointment page. The waiting room opens at ${formatTime(new Date(opensAt).toISOString())}.`
+            : `At ${a.clinic?.name ?? 'the clinic'}. Check in at reception when you arrive.`;
   const ModeIcon = a.mode === 'online' ? Video : Building2;
   return (
     <section
@@ -353,7 +369,12 @@ function RecentActivity({ patientId }) {
               </span>
               <p className="pt-1 text-sm text-text">{e.title}</p>
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
-                <time dateTime={e.occurredAt}>{formatDateTime(e.occurredAt)}</time>
+                <time dateTime={e.occurredAt}>
+                  {/* Date-only events (a follow-up's due day) have no meaningful time. */}
+                  {e.datePrecision === 'instant'
+                    ? formatDateTime(e.occurredAt)
+                    : formatDateOnly(e.occurredAt)}
+                </time>
                 {e.provenance === 'doctor_verified' && (
                   <span className="inline-flex items-center gap-1 text-success">
                     <BadgeCheck aria-hidden="true" className="h-3.5 w-3.5" />
@@ -406,7 +427,7 @@ function YourCare({ team, patientId }) {
   const pending = team.filter((r) => r.status === 'pending').length;
   const available = (documents.data ?? []).filter((d) => d.status === 'available').length;
   const checking = (documents.data ?? []).filter((d) =>
-    ['pending_upload', 'quarantined', 'scanning'].includes(d.status),
+    ['quarantined', 'scanning'].includes(d.status),
   ).length;
   const latest = (prescriptions.data ?? []).find((rx) => rx.status === 'signed');
   return (
@@ -455,6 +476,50 @@ function YourCare({ team, patientId }) {
           action="View"
         />
       </ul>
+    </Card>
+  );
+}
+
+const APPLICATION_TEXT = {
+  unverified: [
+    'Finish your doctor registration',
+    'Your professional profile is saved. Submit it for verification so patients can find you.',
+  ],
+  pending: [
+    'Your doctor registration is waiting for review',
+    'Our team checks your registration with the medical council. You’ll get a notification when it’s decided.',
+  ],
+  under_review: [
+    'Your doctor registration is being reviewed',
+    'Our team is checking it with the medical council. You’ll get a notification when it’s decided.',
+  ],
+  rejected: [
+    'Your doctor registration was not approved',
+    'See the reason, correct your details and submit again.',
+  ],
+  suspended: [
+    'Your doctor profile is suspended',
+    'Patients can’t find or book you. Contact HealthBridge support.',
+  ],
+};
+
+/** Someone applying as a doctor: where their registration stands (patients never see it). */
+function DoctorApplication() {
+  const profile = useQuery({ queryKey: ['doctors', 'me'], queryFn: doctorsApi.me, retry: false });
+  const text = APPLICATION_TEXT[profile.data?.verificationStatus];
+  if (!text) return null;
+  return (
+    <Card as="section" aria-labelledby="application-heading">
+      <SectionHeader
+        id="application-heading"
+        icon={Stethoscope}
+        title={text[0]}
+        actions={<StatusBadge status={profile.data.verificationStatus} />}
+      />
+      <p className="mt-2 text-sm text-text-muted">{text[1]}</p>
+      <ButtonLink as={Link} to="/app/doctor-profile" variant="secondary" size="sm" className="mt-4">
+        Professional profile
+      </ButtonLink>
     </Card>
   );
 }
@@ -553,6 +618,8 @@ export function PatientHome({ firstName }) {
             : 'Stay in touch with the doctors you trust. Consult online first; visit only when your doctor says you need to.'
         }
       />
+
+      <DoctorApplication />
 
       {loading ? (
         <LoadingState label="Loading your home page" rows={3} />

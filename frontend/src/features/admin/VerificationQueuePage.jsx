@@ -13,6 +13,7 @@ import { PageHeader } from '../../components/ui/Typography.jsx';
 import { Tabs } from '../../components/ui/Tabs.jsx';
 import { ActionDialog, PlatformBoundary } from './AdminParts.jsx';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { formatFullDateTime } from '../appointments/format.js';
 
 const TABS = [
   ['pending', 'Waiting'],
@@ -43,7 +44,7 @@ const REASON_LABELS = {
 const NEGATIVE = Object.keys(REASON_LABELS)
   .filter((r) => r !== 'credentials_confirmed')
   .map((value) => ({ value, label: REASON_LABELS[value] }));
-const when = (v) => (v ? new Date(v).toLocaleString('en-IN') : '—');
+const when = (v) => (v ? formatFullDateTime(v) : '—');
 
 function Row({ label, children, className }) {
   return (
@@ -100,25 +101,29 @@ function CaseCard({ item, onChanged }) {
   const [chosen, setOpen] = useState(null);
   const open = chosen ?? item.status === 'under_review';
   const [dialog, setDialog] = useState(null);
+  const name = item.doctor?.professionalName ?? 'Doctor';
   const start = useSafeMutation({
     mutationFn: () => adminApi.startReview(item.id),
     onSuccess: onChanged,
   });
   const decide = useSafeMutation({
     mutationFn: (body) => adminApi.decide(item.id, body),
-    onSuccess: () => {
+    onSuccess: (_result, body) => {
       setDialog(null);
-      onChanged();
+      onChanged(
+        body.decision === 'verified'
+          ? `${name} is verified. Patients can now find and book them.`
+          : `${name}’s application was not approved. The decision is recorded in the audit log.`,
+      );
     },
   });
   const suspend = useSafeMutation({
     mutationFn: (body) => adminApi.suspendDoctor(item.doctorId, body),
     onSuccess: () => {
       setDialog(null);
-      onChanged();
+      onChanged(`${name} is suspended and no longer shown to patients.`);
     },
   });
-  const name = item.doctor?.professionalName ?? 'Doctor';
   return (
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -265,7 +270,11 @@ export function VerificationQueuePage() {
     (counts[1].data?.length ? 'under_review' : counts[0].data?.length ? 'pending' : 'pending');
   const index = TABS.findIndex(([s]) => s === tab);
   const list = counts[index];
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'verifications'] });
+  const [done, setDone] = useState(null);
+  const refresh = (message) => {
+    queryClient.invalidateQueries({ queryKey: ['admin', 'verifications'] });
+    setDone(typeof message === 'string' ? message : null);
+  };
 
   return (
     <div className="space-y-6">
@@ -287,6 +296,7 @@ export function VerificationQueuePage() {
         ])}
       />
       <p className="text-sm text-text-muted">{TAB_HELP[tab]}</p>
+      {done && <Alert tone="success">{done}</Alert>}
       {list.isPending && <LoadingState label="Loading applications" rows={2} />}
       {list.isError && <Alert tone="error">{authErrorMessage(list.error)}</Alert>}
       {list.isSuccess && list.data.length === 0 && (

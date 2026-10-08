@@ -15,6 +15,7 @@ import { controlClass } from '../../components/ui/fieldStyles.js';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
 import { PlatformBoundary } from './AdminParts.jsx';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { formatFullDate } from '../appointments/format.js';
 
 const EMPTY = {
   name: '',
@@ -264,8 +265,7 @@ function ClinicCard({ clinic, onChanged }) {
           </p>
           <p className="text-sm text-text-muted">
             {address || 'No address yet'}
-            {clinic.phone && ` · ${clinic.phone}`} · created{' '}
-            {new Date(clinic.createdAt).toLocaleDateString('en-IN')}
+            {clinic.phone && ` · ${clinic.phone}`} · created {formatFullDate(clinic.createdAt)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

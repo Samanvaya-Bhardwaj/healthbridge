@@ -35,7 +35,7 @@ test('a patient confirms their email and resets a forgotten password', async ({
   await page.getByLabel('Password').fill(person.password);
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page.getByText(/you can now sign in/)).toBeVisible();
+  await expect(page.getByText(/Nearly there: sign in below/)).toBeVisible();
 
   await test.step('confirm the email address from the welcome email', async () => {
     const text = await latestEmail(request, person.email, 'Confirm your email');

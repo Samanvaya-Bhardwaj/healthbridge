@@ -67,3 +67,19 @@ export function applyFieldErrors(error, setError) {
   }
   return applied;
 }
+
+/** True when the server could not be reached (or failed), not when it said no. */
+export function isConnectionProblem(error) {
+  if (!(error instanceof ApiError)) return false;
+  return (
+    ['network_error', 'timeout'].includes(error.code) || error.status === 0 || error.status >= 500
+  );
+}
+
+/** AI assistance is optional: an outage there must not sound like HealthBridge is down. */
+export function aiErrorMessage(error) {
+  if (isConnectionProblem(error)) {
+    return 'The AI assistant isn’t available right now. The records themselves are unaffected; try again in a few minutes.';
+  }
+  return authErrorMessage(error);
+}

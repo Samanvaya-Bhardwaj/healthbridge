@@ -21,7 +21,7 @@ import { Link } from 'react-router';
 import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { AvailabilitySummary, DoctorCredentials } from '../care/DoctorInfo.jsx';
 import { useDoctorProfile, useDoctorSlots } from '../care/doctorInfo.js';
-import { MODE_LABELS, formatFee } from '../appointments/format.js';
+import { MODE_LABELS, formatDateTime, formatFee } from '../appointments/format.js';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { controlClass } from '../../components/ui/fieldStyles.js';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
@@ -34,6 +34,14 @@ const VERIFICATION_HELP = {
   verified: 'Verified. Patients can find you and add you to their care team.',
   rejected: 'Verification was not approved. Correct your details and resubmit.',
   suspended: 'Your profile is suspended. Contact HealthBridge support.',
+};
+
+const HISTORY_LABELS = {
+  pending: 'waiting for review',
+  under_review: 'being reviewed',
+  verified: 'verified',
+  rejected: 'not approved',
+  suspended: 'suspended',
 };
 
 const toForm = (p) => ({
@@ -126,7 +134,7 @@ function DoctorForm({ profile, onSaved }) {
       <fieldset className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-semibold text-text">Professional details</legend>
         {f('professionalName', 'Name as shown to patients', { placeholder: 'Dr. …' })}
-        {f('primarySpecialization', 'Specialization')}
+        {f('primarySpecialization', 'Speciality')}
         {f('yearsOfExperience', 'Years of experience', { type: 'number', min: 0 })}
         {f('languages', 'Languages (comma-separated)')}
       </fieldset>
@@ -205,7 +213,7 @@ function Verification({ profile, onChange }) {
         <ul className="mt-4 space-y-1 text-xs text-text-subtle">
           {history.data.map((h) => (
             <li key={h.id}>
-              {new Date(h.submittedAt).toLocaleDateString('en-IN')}: {h.status.replace('_', ' ')}
+              Submitted {formatDateTime(h.submittedAt)} · {HISTORY_LABELS[h.status] ?? h.status}
               {h.decisionReasonCode && ` (${h.decisionReasonCode.replace(/_/g, ' ')})`}
             </li>
           ))}
