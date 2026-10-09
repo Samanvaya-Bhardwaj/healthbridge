@@ -37,3 +37,4 @@ export * from './domain/records.js';
 export * from './domain/consultations.js';
 export * from './domain/followups.js';
 export { plainValidationMessage } from './validationMessages.js';
+export * from './domain/assistant.js';

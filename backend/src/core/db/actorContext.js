@@ -21,6 +21,8 @@ export const SYSTEM_PURPOSES = Object.freeze([
   'timeline',
   'prescriptions',
   'followups',
+  // M13.1: retention sweep of expired care-assistant sessions.
+  'assistant',
 ]);
 
 /**

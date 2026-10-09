@@ -69,6 +69,9 @@ export const PERMISSIONS = Object.freeze({
   FOLLOWUPS_RESPOND: 'followups:respond',
   NOTIFICATIONS_READ: 'notifications:read',
 
+  // Care assistant (M13)
+  ASSISTANT_USE: 'assistant:use',
+
   // Administration
   USERS_READ: 'users:read',
   USERS_UPDATE: 'users:update',
@@ -116,6 +119,7 @@ export const PERMISSION_DESCRIPTIONS = Object.freeze({
   'followups:manage': 'Schedule, review and close follow-ups for own patients',
   'followups:respond': 'Answer follow-up check-ins for self or managed dependents',
   'notifications:read': 'Read own in-app notifications',
+  'assistant:use': 'Use the HealthBridge Assistant for self or dependents',
   'users:read': 'Read user accounts (administration/support)',
   'users:update': 'Change user account status',
   'admin:users': 'Grant and revoke user roles',
@@ -167,6 +171,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.MEDICAL_RECORDS_READ,
     P.MEDICAL_RECORDS_WRITE,
     P.PRESCRIPTIONS_READ,
+    // M13: the care assistant (workflow help only; never clinical decisions).
+    P.ASSISTANT_USE,
   ]),
   [ROLES.DOCTOR]: Object.freeze([
     ...OWN_ACCOUNT,
