@@ -19,7 +19,16 @@ from app.core.errors import ProblemError
 SCOPE_TOKEN_AUDIENCE = "healthbridge-ai-scope"  # noqa: S105 - claim identifier
 SCOPE_TOKEN_ISSUER = "healthbridge-api"  # noqa: S105
 MAX_SCOPE_LIFETIME_SECONDS = 300
-PURPOSES = frozenset({"document_analysis", "record_question", "doctor_brief", "follow_up_summary"})
+PURPOSES = frozenset(
+    {
+        "document_analysis",
+        "record_question",
+        "doctor_brief",
+        "follow_up_summary",
+        # M13.1: the care assistant acting for this patient (self or a managed dependent).
+        "care_assistant",
+    }
+)
 
 
 @dataclass(frozen=True)

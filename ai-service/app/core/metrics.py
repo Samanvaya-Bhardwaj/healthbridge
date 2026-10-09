@@ -42,7 +42,15 @@ LLM_COST = Counter(
     registry=REGISTRY,
 )
 
+AGENT_STEPS = Counter(
+    "ai_agent_steps_total",
+    "Care assistant steps by next action (tool name or respond) and outcome",
+    ["workflow", "action", "outcome"],
+    registry=REGISTRY,
+)
+
 __all__ = [
+    "AGENT_STEPS",
     "CONTENT_TYPE_LATEST",
     "HTTP_DURATION",
     "LLM_CALLS",

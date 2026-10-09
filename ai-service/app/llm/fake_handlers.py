@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.llm.base import LLMRequest
+from app.llm.care_fake import care_assistant_intent
 
 _DOC = re.compile(r"<document>\n?(.*?)\n?</document>", re.S)
 _LAB_LINE = re.compile(
@@ -166,4 +167,5 @@ DEFAULT_HANDLERS: dict[str, Handler] = {
     "record_question": answer,
     "doctor_brief": brief,
     "follow_up_summary": follow_up_summary,
+    "care_assistant_intent": care_assistant_intent,
 }
