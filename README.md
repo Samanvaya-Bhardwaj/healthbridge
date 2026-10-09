@@ -61,6 +61,11 @@ npm start          # secrets, build, every service, demo data; prints URLs and s
 - **Everyday commands:** `npm stop`, `npm run logs`, `npm run reset`.
 - **Verify everything:** `npm ci && npm run check`.
 
+**Taking over the project?** Start with the handover guide:
+**[docs/PROJECT_WORKFLOW.md](docs/PROJECT_WORKFLOW.md)**. It covers the end-to-end workflow
+phase by phase, the tech stack and where each part is used, the repository map, the rules
+that must not be broken, and how to make common changes.
+
 **Platform overview** (features, roles, flows, where AI is used):
 **[docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md)**.
 
