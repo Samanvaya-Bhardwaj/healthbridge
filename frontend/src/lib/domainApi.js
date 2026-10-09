@@ -250,3 +250,27 @@ export const inboxApi = {
   read: (id) => data(apiRequest(`/notifications/${id}/read`, { method: 'POST' })),
   readAll: () => data(apiRequest('/notifications/read-all', { method: 'POST' })),
 };
+
+/**
+ * The HealthBridge Assistant (M13.1). The server keeps only structured state; the visible
+ * conversation lives in this browser tab.
+ */
+export const assistantApi = {
+  start: (patientId) =>
+    data(
+      apiRequest('/assistant/sessions', { method: 'POST', body: patientId ? { patientId } : {} }),
+    ),
+  get: (id) => data(apiRequest(`/assistant/sessions/${id}`)),
+  send: (id, { text, version }) =>
+    data(
+      apiRequest(`/assistant/sessions/${id}/messages`, {
+        method: 'POST',
+        body: {
+          text,
+          version,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+        },
+      }),
+    ),
+  end: (id) => apiRequest(`/assistant/sessions/${id}`, { method: 'DELETE' }),
+};

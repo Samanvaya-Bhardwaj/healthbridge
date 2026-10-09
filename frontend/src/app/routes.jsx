@@ -35,6 +35,7 @@ import { BriefPage } from '../features/records/AiAssist.jsx';
 import { ConsultationPage } from '../features/consultations/ConsultationPage.jsx';
 import { FollowUpsPage } from '../features/followups/FollowUpsPage.jsx';
 import { InboxPage } from '../features/notifications/Inbox.jsx';
+import { AssistantPage } from '../features/assistant/AssistantPage.jsx';
 import {
   DoctorRecordsPage,
   DoctorPatientRecordsPage,
@@ -48,6 +49,7 @@ const guarded = (permission, element) => (
 const PAGES = [
   [SECTIONS.patientProfile, <ProfilePage key="profile" />],
   [SECTIONS.doctors, <MyDoctorsPage key="doctors" />],
+  [SECTIONS.assistant, <AssistantPage key="assistant" />],
   [SECTIONS.doctorProfile, <DoctorProfilePage key="doctor-profile" />],
   [SECTIONS.patients, <DoctorPatientsPage key="patients" />],
   [SECTIONS.verification, <VerificationQueuePage key="verification" />],

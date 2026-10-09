@@ -15,6 +15,7 @@ import {
   ScrollText,
   ServerCog,
   ShieldCheck,
+  Sparkles,
   Stethoscope,
   UserRound,
   Users,
@@ -37,6 +38,14 @@ import { PERMISSIONS as P, ROLES } from '@healthbridge/shared';
 /** @type {Record<string, NavItem>} */
 export const SECTIONS = {
   home: { key: 'home', label: 'Home', path: '', icon: Home },
+  assistant: {
+    key: 'assistant',
+    label: 'Assistant',
+    path: 'assistant',
+    permission: P.ASSISTANT_USE,
+    icon: Sparkles,
+    description: 'Say what you need in your own words: find a doctor and a free time.',
+  },
   dashboard: { key: 'dashboard', label: 'Overview', path: '', icon: LayoutDashboard },
   appointments: {
     key: 'appointments',
@@ -200,6 +209,7 @@ const as = (section, overrides) => ({ ...section, ...overrides });
 export const ROLE_NAVIGATION = {
   [ROLES.PATIENT]: [
     as(S.home, { group: 'My care' }),
+    as(S.assistant, { group: 'My care' }),
     as(S.doctors, { group: 'My care' }),
     as(S.appointments, { group: 'My care' }),
     as(S.followUps, {
