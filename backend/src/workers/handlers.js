@@ -44,6 +44,7 @@ export function createJobProcessors(container, queues) {
     timelineProjector,
     prescriptionService,
     followUpService,
+    assistantService,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -133,6 +134,8 @@ export function createJobProcessors(container, queues) {
           return {
             consents: await consentService.expireDue(),
             uploads: await documentPipeline.expireStaleIntents(),
+            // M13.1: care-assistant state is kept 24 hours at most.
+            assistantSessions: await assistantService.purgeExpired(),
           };
         }
         const ids = await notificationService.collectDueReminders();

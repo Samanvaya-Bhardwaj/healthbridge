@@ -106,6 +106,19 @@ export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchIm
         timeout: 90_000,
         scope: { patientId: input.patientId, purpose: 'follow_up_summary' },
       }),
+    /**
+     * One step of a care-assistant turn (M13.1, ADR-0029): the message or a tool result in,
+     * the next action (a backend tool to run, or a reply) out. The AI service executes
+     * nothing and never calls back; the scope names the acting patient only.
+     */
+    agentStep: (input, { requestId, timeout = 20_000 } = {}) =>
+      request('/v1/agent/step', {
+        method: 'POST',
+        body: input,
+        requestId,
+        timeout,
+        scope: { patientId: input.patientId, purpose: 'care_assistant' },
+      }),
     /** Document agent run for one authorised document (content sent, never stored here). */
     analyzeDocument: (input, { requestId } = {}) =>
       request('/v1/documents/analyze', {

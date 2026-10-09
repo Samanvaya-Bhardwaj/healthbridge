@@ -46,6 +46,8 @@ import { createIntelligenceService } from './modules/intelligence/service.js';
 import { createTimelineProjector } from './modules/timeline/projector.js';
 import { createTimelineService } from './modules/timeline/service.js';
 import { createAssistService } from './modules/assist/service.js';
+import { createAssistantService } from './modules/assistant/service.js';
+import { createAssistantRepository } from './modules/assistant/repository.js';
 import { createEnvelope } from './core/crypto/envelope.js';
 import { createVideoProvider } from './modules/consultations/videoProvider.js';
 import { createConsultationService } from './modules/consultations/service.js';
@@ -272,6 +274,19 @@ export function createContainer({
   const timelineProjector = createTimelineProjector({ knex, logger });
   const timelineService = createTimelineService({ knex, accessPolicy, audit });
   const assistService = createAssistService({ knex, aiClient, accessPolicy, audit });
+  // M13.1: the care assistant orchestrates existing read services; the AI only plans.
+  const assistantService = createAssistantService({
+    knex,
+    aiClient,
+    accessPolicy,
+    audit,
+    repository: createAssistantRepository(),
+    careService,
+    doctorService,
+    availabilityService,
+    logger,
+    ...(now ? { now } : {}),
+  });
   const envelope = createEnvelope(config.clinicalData);
   const consultationService = createConsultationService({
     knex,
@@ -395,6 +410,7 @@ export function createContainer({
     timelineProjector,
     timelineService,
     assistService,
+    assistantService,
     consultationService,
     prescriptionService,
     followUpService,

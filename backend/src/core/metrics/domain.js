@@ -93,6 +93,25 @@ export const domainMetrics = Object.freeze({
     'event',
   ]),
 
+  // M13: care assistant (metadata only: intents, tool names, outcomes)
+  agentRuns: counter('healthbridge_agent_runs_total', 'Care assistant turns', [
+    'intent',
+    'outcome',
+  ]),
+  agentToolCalls: counter('healthbridge_agent_tool_calls_total', 'Care assistant tool calls', [
+    'tool',
+    'outcome',
+  ]),
+  agentFailures: counter('healthbridge_agent_failures_total', 'Care assistant degraded turns', [
+    'kind',
+  ]),
+  agentLatency: histogram('healthbridge_agent_latency_seconds', 'Care assistant turn time', [
+    'outcome',
+  ]),
+  agentToolLatency: histogram('healthbridge_agent_tool_latency_seconds', 'Assistant tool time', [
+    'tool',
+  ]),
+
   // M11: browser errors (PHI-safe: error class and kind only)
   clientErrors: counter('client_errors_total', 'Errors reported by the web app', ['kind', 'name']),
 

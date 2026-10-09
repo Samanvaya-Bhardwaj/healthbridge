@@ -14,6 +14,7 @@ import { documentRoutes } from '../../modules/documents/routes.js';
 import { intelligenceRoutes } from '../../modules/intelligence/routes.js';
 import { timelineRoutes } from '../../modules/timeline/routes.js';
 import { assistRoutes } from '../../modules/assist/routes.js';
+import { assistantRoutes } from '../../modules/assistant/routes.js';
 import { consultationRoutes } from '../../modules/consultations/routes.js';
 import { followUpRoutes } from '../../modules/followups/routes.js';
 import { telemetryRoutes } from '../../modules/telemetry/routes.js';
@@ -54,6 +55,7 @@ export function apiV1Router({ config, version, container }) {
   router.use(intelligenceRoutes(container));
   router.use(timelineRoutes(container));
   router.use(assistRoutes(container));
+  router.use(assistantRoutes(container));
   router.use(consultationRoutes(container));
   // Before doctorRoutes: /doctors/me/follow-ups must not match /doctors/:id.
   router.use(followUpRoutes(container));

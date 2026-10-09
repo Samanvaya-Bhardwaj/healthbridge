@@ -133,6 +133,11 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
         .select('id')
         .whereIn('patient_id', testPatients.clone());
       await trx('medical_events').whereIn('patient_id', testPatients.clone()).del();
+      // M13 rows: care-assistant sessions (owner-level cleanup; the app cannot delete them).
+      await trx('agent_sessions')
+        .whereIn('user_id', testUsers.clone())
+        .orWhereIn('patient_id', testPatients.clone())
+        .del();
       // M9 rows: clinical records are never deleted at runtime (triggers); the owner
       // disables the guards inside this transaction only to clean test data.
       const testConsultations = trx('consultations')
