@@ -451,6 +451,24 @@ The patient journey is the backbone, and the other roles join it where they act.
   - `modules/admin/`, `modules/operations/`, `modules/audit/`;
   - `features/admin/`, `features/clinics/`.
 
+### Phase 18: The HealthBridge Assistant (M13.1)
+
+- **What happens:**
+  - A patient (or guardian) opens **Assistant** and writes in plain words, for example "a dermatologist tomorrow evening".
+  - The assistant shows matching verified doctors, care-team status and free times, clearly labelled **AI suggestion** and **Suggested · not booked**.
+  - Booking continues on the existing booking page.
+  - Possible emergencies get fixed 112/108 guidance.
+- **How it works:**
+  - The backend runs the turn loop: it calls the AI service's bounded LangGraph planner one step at a time.
+  - The planner fills a fixed form (intent, specialty, day, time window); it never writes free text.
+  - The backend executes allow-listed read tools through the existing services, then validates the returned state and builds the cards from its own data.
+  - Only structured state is stored (`agent_sessions`, 24 h). Message text is never stored.
+- **Code:**
+  - `backend/src/modules/assistant/`;
+  - `ai-service/app/agents/care_assistant.py`;
+  - `frontend/src/features/assistant/`;
+  - [AGENTIC_AI.md](AGENTIC_AI.md), ADR-0029.
+
 ---
 
 ## 6. Background jobs (worker)

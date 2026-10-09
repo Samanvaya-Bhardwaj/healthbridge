@@ -34,5 +34,6 @@ old one.
 | [0026](adr/0026-followups-notifications.md) | Follow-ups: due sweep, durable reminders, deterministic escalation (warning signs → urgent + fixed guidance), bounded AI summary for the doctor, in-app inbox | Accepted |
 | [0028](adr/0028-deployment-tls-backups-cd.md) | Deployment: same signed images everywhere; single-host Compose with TLS and ECS Fargate task definitions; managed-service TLS; snapshot-consistent encrypted backups with manifest-verified restore drills; CD with staging smoke + rollback and approval-gated production | Accepted |
 | [0027](adr/0027-admin-observability-account-recovery.md) | Admin UI (users, audit viewer, operations); read-only loopback Bull Board; Prometheus/Grafana profile and AI metrics; content-free browser error reports; password reset and email verification with fragment-delivered single-use tokens | Accepted |
+| [0029](adr/0029-agentic-ai-orchestration.md) | Agentic care assistant: backend-owned turn loop over a bounded LangGraph planner; allow-listed backend tools on existing services; structured 24 h state, never transcripts; approval before any write (M13.4) | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

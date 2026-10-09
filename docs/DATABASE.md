@@ -26,6 +26,8 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261009000000_doctor_brief_rag` | `ai.doctor_briefs` (AI-scoped RLS; app: the appointment doctor while consent lasts), `brief_feedback` (own rows, consent), `ai_assist:use` |
 | `20261010000000_consultations_prescribing` | `consultations` (outcome immutable), `consultation_presence`, `clinical_notes` (encrypted, versioned, immutable when signed), `prescriptions` + `prescription_items` (hash + seal, frozen when signed, one-time PDF fields); `prescriptions` system purpose; timeline event types `consultation` / `prescription`; `consultations:conduct` |
 | `20261011000000_followups_notifications` | `follow_ups` (guarded transitions), `follow_up_responses` (append-only, encrypted note), `ai.follow_up_summaries`, `inbox_notifications` (owner may only mark read), `authz.doctor_recipient`; `followups` system purpose; `follow_up` timeline events; `followups:manage`, `followups:respond`, `notifications:read` |
+| `20261012000000_account_tokens` | `account_tokens` (single-use, hashed), session revoke reason `password_reset` |
+| `20261013000000_care_assistant` | `agent_sessions` (structured assistant state: owner-only RLS, immutable identity, 16 KB cap, 24 h lifetime), system purpose `assistant` for the retention sweep, `assistant:use` |
 
 ## Identity, RBAC and audit (M1)
 
@@ -477,3 +479,24 @@ The `timeline` purpose has read-only policies on `appointments`, `medical_docume
 - **Replacement:** issuing a new token consumes the user's open tokens for the same
   purpose. The partial index `(user_id, purpose) WHERE used_at IS NULL` supports this.
 - **Sessions:** `sessions.revoked_reason` also allows `password_reset`.
+
+## Care assistant (M13.1, ADR-0029)
+
+`agent_sessions` holds the HealthBridge Assistant's **structured** state between turns. It never stores message text or a transcript.
+
+| Column | Notes |
+|---|---|
+| `id` | Session ID |
+| `user_id` | The acting user (owner) |
+| `patient_id` | Self, or a guarded dependent. Fixed at creation, and re-checked by AccessPolicy every turn. |
+| `status` | `active` → `ended` (final) |
+| `state` | jsonb `CareAssistantState`, validated by the backend's strict schema. A JSON object of at most 16 KB. |
+| `version` | Optimistic concurrency: each turn writes `version + 1` only if unchanged |
+| `turn_count` | At most 60 (the app limit is 40) |
+| `last_run_id` | The `ai.ai_runs` record of the last message (metadata only) |
+| `expires_at` | At most 24 h after `created_at` |
+
+- **RLS:** SELECT, INSERT and UPDATE for the owner only. DELETE only under system purpose `assistant`, and only for expired rows (the maintenance sweep). `TRUNCATE` is revoked.
+- **Guard trigger:** the ID, user, patient, creation time and expiry are immutable, and an ended session stays ended.
+- **Indexes:** `(user_id, created_at DESC)` and `(expires_at)` for the sweep.
+- **AI runs:** recorded in the existing `ai.ai_runs` (workflow `care_assistant`, input hash only). `hb_ai` gains no privileges.

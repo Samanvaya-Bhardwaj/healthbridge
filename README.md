@@ -29,6 +29,7 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M10** | Follow-ups and notifications: check-ins, reminders, rule-based escalation, AI summary for doctors, in-app inbox | ✅ Complete |
 | **M11** | Admin UI (users, audit log, operations), Bull Board, metrics and dashboards, password reset and email verification, Playwright e2e, OWASP review | ✅ Complete |
 | **M12** | Deployment: production Compose + ECS manifests, TLS, encrypted backups with restore drill and DR rehearsal, staging rehearsal, CD pipeline | ✅ Complete |
+| **M13.1** | Agentic care assistant foundation: backend-owned turn loop over a bounded LangGraph planner, read-only tools, structured 24 h state, Assistant page (M13.2–M13.4 next) | ✅ Complete |
 
 ## Architecture at a glance
 

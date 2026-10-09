@@ -205,3 +205,16 @@ path has not been deployed from this repository.
 - The first scheduled backup ran before the bucket existed.
 - The storage bootstrap refused to run in staging on self-hosted MinIO.
 - An empty `S3_ENDPOINT` was rejected instead of treated as unset.
+
+## 9. Care assistant (M13.1)
+
+- **Metrics:** API and worker `/metrics` now include:
+  - `healthbridge_agent_runs_total{intent,outcome}`;
+  - `healthbridge_agent_tool_calls_total{tool,outcome}`;
+  - `healthbridge_agent_failures_total{kind}`;
+  - `healthbridge_agent_latency_seconds`;
+  - `healthbridge_agent_tool_latency_seconds`.
+
+  The AI service adds `ai_agent_steps_total`; model spend appears under workflow `care_assistant_intent`.
+- **What to watch:** a rising `healthbridge_agent_failures_total{kind="ai_unavailable"}` means the AI service or the model provider is down. The rest of the platform keeps working, and the assistant answers with a My Doctors fallback.
+- **Retention:** the `records-housekeeping` maintenance job (every minute) deletes expired `agent_sessions` (24 h).

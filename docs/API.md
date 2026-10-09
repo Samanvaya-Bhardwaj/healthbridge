@@ -329,3 +329,17 @@ Internal (AI service): `POST /v1/followups/summary` (scope purpose `follow_up_su
 - **Internal (AI service):** `GET /metrics` (private network; Prometheus text format).
 - **Worker:** Bull Board is on `:9466`, published to `127.0.0.1:${BULL_BOARD_HOST_PORT}`. It
   is read-only, uses HTTP Basic auth, and is disabled without `BULL_BOARD_PASSWORD`.
+
+## Endpoints (M13.1)
+
+The HealthBridge Assistant ([AGENTIC_AI.md](AGENTIC_AI.md), ADR-0029). All are `no-store`; a per-user budget of 120 requests per hour applies.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/assistant/sessions` | `assistant:use` (patient, or guardian for `patientId`) | `{ patientId? }`. Defaults to self. Answers `201` with `{ id, patientId, actingFor, status, version, turns, expiresAt }`. `404 profile_required` |
+| GET | `/assistant/sessions/:id` | owner | The session view. `409 assistant_session_ended` |
+| POST | `/assistant/sessions/:id/messages` | owner, with the scope re-checked | `{ text (≤500), version, timeZone }`. Answers `{ session, reply: { kind, message, cards, source: 'ai_assistant' }, understood: { intent, criteria }, degraded }`. Cards are `doctor` (public facts plus `careStatus`), `slot` (`bookable`, links to the existing booking page) or `link`. `409 assistant_session_changed` / `assistant_session_ended` / `assistant_turn_limit` |
+| DELETE | `/assistant/sessions/:id` | owner | Ends the session (`204`) |
+
+- **Message text:** never stored or logged. The server keeps only `CareAssistantState`, for 24 hours.
+- **Internal (AI service):** `POST /v1/agent/step` (scope purpose `care_assistant`). It takes either a `message` or a `toolResult`, and returns `{ state, action: { type: 'tool', tool, args } | { type: 'respond' }, reply, run }`.

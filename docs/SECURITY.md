@@ -409,3 +409,26 @@ Each layer is tested on its own:
   - the single-host RPO equals the backup interval (no WAL archiving);
   - the AWS path is defined and tested as manifests but has not been deployed from this
     repository.
+
+## Care assistant (M13.1, ADR-0029)
+
+- **Authority:** the backend owns the turn loop and executes every tool. The AI service:
+  - returns structured plans only;
+  - never calls back and holds no user credentials;
+  - is reachable only on the private network (service JWT plus a `care_assistant` patient-scope token).
+- **Scope:**
+  - the patient is fixed at session creation (self or a guarded dependent);
+  - AccessPolicy re-checks it on every turn;
+  - tool arguments can't name a patient (strict schemas), and model-produced IDs are ignored.
+- **Tools:** an explicit allow-list wrapping the existing domain services, so AccessPolicy, consent and RLS apply unchanged. M13.1 tools are read-only; writes (M13.4) will require explicit approval and idempotency keys.
+- **Untrusted output:**
+  - the model fills a fixed form and writes no free text that reaches the person;
+  - the backend validates the returned state, drops IDs it didn't return, and builds cards from its own data.
+- **Safety:** possible-emergency wording gets fixed 112/108 guidance without a model call. The assistant never diagnoses or prescribes.
+- **Privacy:**
+  - no message text or transcript is stored or logged;
+  - the state is structured, 16 KB at most, kept 24 h and deleted by the sweep;
+  - AI runs keep a hash of the input only;
+  - audit rows record the intent, tool names and counts.
+- **Abuse limits:** 120 requests per hour per user, 3 tool rounds and 1 model call per message, and 40 turns per session.
+- **Tests:** prompt injection, tool-argument manipulation, forged IDs, unknown and write tools, cross-user RLS, guardian revocation, roles that must be refused, and log checks.

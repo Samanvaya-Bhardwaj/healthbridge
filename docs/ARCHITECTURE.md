@@ -303,6 +303,19 @@ routes → controllers → application services → domain (pure rules) → repo
   after approval, using OIDC
   ([ADR-0028](adr/0028-deployment-tls-backups-cd.md)).
 
+### Agentic care assistant (M13.1)
+
+- **What it is:** the HealthBridge Assistant, which understands plain-language workflow requests ("a dermatologist tomorrow evening") and orchestrates existing capabilities. It never diagnoses or prescribes.
+- **Turn loop:**
+  - the backend (`modules/assistant`) owns it, calling the AI service's bounded LangGraph planner (`POST /v1/agent/step`) one step at a time;
+  - it executes the planner's allow-listed **read** tools through the existing care, doctor and availability services;
+  - it validates the returned state, builds the reply from its own data, and commits with an optimistic version check.
+- **The AI service** never calls back and never writes core data.
+- **State:** structured `CareAssistantState` in `agent_sessions` (owner-only RLS, 24 h). Never message text.
+- **Safety:** deterministic emergency wording gets fixed guidance.
+- **Failures** degrade to a My Doctors fallback.
+- **Next:** semantic doctor search (M13.2), recommendations (M13.3) and approved booking (M13.4) build on this ([ADR-0029](adr/0029-agentic-ai-orchestration.md), [AGENTIC_AI.md](AGENTIC_AI.md)).
+
 ## 6. Observability baseline
 
 - Structured JSON logs (pino and Python JSON) with a request ID propagated
