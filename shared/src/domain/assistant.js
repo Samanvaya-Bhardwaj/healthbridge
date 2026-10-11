@@ -126,3 +126,36 @@ export const careAssistantStateSchema = z
     lastTools: z.array(z.enum(ASSISTANT_TOOLS)).max(6).default([]),
   })
   .strict();
+
+/**
+ * Possible-emergency wording (ADR-0029). ONE rule, two runtimes: this is a byte-for-byte
+ * mirror of `ai-service/app/agents/care_safety.py` (a backend unit test fails if they
+ * drift). The backend applies it BEFORE any AI-service call, so a message that may describe
+ * an emergency gets the fixed guidance even when the AI service is down, slow or failing;
+ * the AI service keeps its own copy as a second line. This is not triage: it only stops
+ * the assistant from treating a possible emergency as a booking request.
+ */
+export const ASSISTANT_EMERGENCY_ALTERNATIVES = Object.freeze([
+  'chest pain|pain in (my|the) chest|',
+  "(can'?t|cannot|can not|unable to|difficulty|trouble|struggling to) breath(e|ing)?|",
+  'short(ness)? of breath|not breathing|',
+  'unconscious|passed out|fainted|collapsed|',
+  'seizure|convulsion|having a fit|',
+  'stroke|face (is )?drooping|slurred speech|',
+  "(severe|heavy|uncontrolled) bleeding|bleeding (heavily|a lot|won'?t stop)|",
+  String.raw`suicid\w*|kill myself|end my life|self[- ]harm|`,
+  'overdose|poison(ed|ing)?',
+]);
+const EMERGENCY_PATTERN = new RegExp(
+  String.raw`\b(` + ASSISTANT_EMERGENCY_ALTERNATIVES.join('') + String.raw`)\b`,
+  'i',
+);
+
+export const ASSISTANT_EMERGENCY_MESSAGE =
+  'If this might be an emergency, call 112 or 108 now, or go to the nearest emergency ' +
+  "department. Don't wait for an online consultation.";
+
+/** True when the text may describe an emergency (deterministic; no model involved). */
+export function isPossibleAssistantEmergency(text) {
+  return typeof text === 'string' && EMERGENCY_PATTERN.test(text);
+}

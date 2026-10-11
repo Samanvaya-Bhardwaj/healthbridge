@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
-from tests.test_care_assistant import PATIENT, SESSION, app_with, context, headers
+from tests.test_care_assistant import PATIENT, SESSION, app_with, context, digest, headers
 
 TODAY = date(2026, 10, 9)
 TOMORROW = (TODAY + timedelta(days=1)).isoformat()
@@ -76,7 +76,13 @@ EMERGENCIES = [
 def understand(client, text: str) -> dict:
     res = client.post(
         "/v1/agent/step",
-        json={"patientId": PATIENT, "sessionId": SESSION, "message": text, "context": context()},
+        json={
+            "patientId": PATIENT,
+            "sessionId": SESSION,
+            "message": text,
+            "messageDigest": digest(text),
+            "context": context(),
+        },
         headers=headers(),
     )
     assert res.status_code == 200, res.text

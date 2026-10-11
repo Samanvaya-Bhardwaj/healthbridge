@@ -1,5 +1,8 @@
 """Care assistant step (M13.1): bounded graph, backend-executed tools, safety, scope."""
 
+import hashlib
+import hmac
+import logging
 import uuid
 from datetime import date, timedelta
 
@@ -23,6 +26,13 @@ DERM_IN_TEAM = str(uuid.uuid4())
 DERM_NEW = str(uuid.uuid4())
 TODAY = date(2026, 10, 9)  # a Friday
 SPECIALTIES = ["General Medicine", "Dermatology", "Paediatrics", "Cardiology"]
+# Stands in for the backend's key; the AI service itself never holds one.
+BACKEND_KEY = b"test-only backend digest key, never sent to the AI service"
+
+
+def digest(text: str) -> str:
+    """What the backend sends with a message: HMAC-SHA256 under its own key."""
+    return hmac.new(BACKEND_KEY, text.encode(), hashlib.sha256).hexdigest()
 
 
 def context(acting_for: str = "self") -> dict:
@@ -73,6 +83,7 @@ def run_turn(client, message: str, tools: dict, state: dict | None = None, actin
             "patientId": PATIENT,
             "sessionId": SESSION,
             "message": message,
+            "messageDigest": digest(message),
             "state": state or {},
             "context": context(acting),
         },
@@ -336,7 +347,12 @@ def test_later_capabilities_point_to_existing_pages(text, kind, target):
 def test_requires_the_care_assistant_scope_for_the_same_patient():
     app, _, _ = app_with()
     with TestClient(app) as client:
-        base = {"sessionId": SESSION, "message": "hi", "context": context()}
+        base = {
+            "sessionId": SESSION,
+            "message": "hi",
+            "messageDigest": digest("hi"),
+            "context": context(),
+        }
         wrong_purpose = client.post(
             "/v1/agent/step",
             json={"patientId": PATIENT, **base},
@@ -387,6 +403,38 @@ def test_rejects_ambiguous_steps_and_unknown_tools():
         )
     assert both.status_code == 400
     assert unknown_tool.status_code == 422
+
+
+def test_run_record_keeps_the_backends_keyed_digest_never_the_text_or_plain_sha256(caplog):
+    message = "I need a dermatologist for my recurring rash since July"
+    app, db, _ = app_with()
+    caplog.set_level(logging.DEBUG)
+    with TestClient(app) as client:
+        res = step(client, message=message, messageDigest=digest(message))
+    assert res.status_code == 200, res.text
+    runs = [params for _, sql, params in db.statements if "INSERT INTO ai.ai_runs" in sql]
+    assert len(runs) == 1
+    stored = runs[0]
+    assert digest(message) in stored  # exactly what the backend sent
+    assert hashlib.sha256(message.encode()).hexdigest() not in stored  # not a plain digest
+    everything = repr(db.statements) + caplog.text
+    for fragment in ("rash", "July", message):
+        assert fragment not in everything  # neither persisted nor logged
+
+
+def test_a_message_step_must_carry_a_well_formed_digest_and_only_with_a_message():
+    app, _, _ = app_with()
+    with TestClient(app) as client:
+        missing = step(client, message="hello")
+        plain = step(client, message="hello", messageDigest="not-a-digest")
+        stray = step(
+            client,
+            messageDigest=digest("hello"),
+            toolResult={"name": "searchDoctors", "ok": True, "data": {}},
+        )
+    assert missing.status_code == 400
+    assert plain.status_code == 422
+    assert stray.status_code == 400
 
 
 def test_untrusted_state_is_parsed_strictly():

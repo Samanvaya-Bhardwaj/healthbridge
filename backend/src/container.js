@@ -46,7 +46,7 @@ import { createIntelligenceService } from './modules/intelligence/service.js';
 import { createTimelineProjector } from './modules/timeline/projector.js';
 import { createTimelineService } from './modules/timeline/service.js';
 import { createAssistService } from './modules/assist/service.js';
-import { createAssistantService } from './modules/assistant/service.js';
+import { createAssistantService, deriveMessageDigestKey } from './modules/assistant/service.js';
 import { createAssistantRepository } from './modules/assistant/repository.js';
 import { createEnvelope } from './core/crypto/envelope.js';
 import { createVideoProvider } from './modules/consultations/videoProvider.js';
@@ -285,6 +285,7 @@ export function createContainer({
     doctorService,
     availabilityService,
     logger,
+    messageDigestKey: deriveMessageDigestKey(config.clinicalData),
     ...(now ? { now } : {}),
   });
   const envelope = createEnvelope(config.clinicalData);

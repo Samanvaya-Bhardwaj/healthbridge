@@ -1,6 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { withActor } from '../../src/core/db/actorContext.js';
+import { ASSISTANT_EMERGENCY_MESSAGE } from '@healthbridge/shared';
+import { withActor, withSystem } from '../../src/core/db/actorContext.js';
+import { deriveMessageDigestKey } from '../../src/modules/assistant/service.js';
 import request from 'supertest';
 import { auditFor, authHeader, createHarness, createUser } from './harness.js';
 import {
@@ -309,5 +311,160 @@ describe('assistant sessions and the turn loop', () => {
     const purged = await h.container.assistantService.purgeExpired();
     expect(purged).toBeGreaterThanOrEqual(1);
     expect(await h.ownerKnex('agent_sessions').where({ id: s2.id }).first()).toBeUndefined();
+  });
+});
+
+describe('M13.1 pre-merge hardening', () => {
+  const insertAs = (userId, row) =>
+    withActor(h.knex, userId, (trx) => trx('agent_sessions').insert(row));
+  const sessionRow = (userId, patientId) => ({
+    id: randomUUID(),
+    user_id: userId,
+    patient_id: patientId,
+    state: {},
+    expires_at: new Date(Date.now() + 3_600_000),
+  });
+
+  it('answers possible emergencies itself: no AI call, no tools, even with the AI down', async () => {
+    const patient = await createPatient(h, 'asst-emergency');
+    const s = expectOk(await session(patient), 201);
+    script = () => {
+      throw Object.assign(new Error('AI service responded 503'), { status: 503 });
+    };
+    calls.length = 0;
+    const turn = expectOk(await say(patient, s, 'My mother has chest pain and fainted'));
+    expect(calls).toHaveLength(0); // the AI service was never asked
+    expect(turn.degraded).toBe(false);
+    expect(turn.reply).toEqual({
+      kind: 'emergency',
+      message: ASSISTANT_EMERGENCY_MESSAGE,
+      cards: [],
+      source: 'safety_rule',
+    });
+    expect(turn.session).toMatchObject({ version: 2, turns: 1 });
+    const audits = await auditFor(h.ownerKnex, { resource_id: s.id, action: 'assistant.turn' });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ reason: 'emergency' });
+    expect(JSON.stringify(audits)).not.toContain('chest');
+    // Even a stale version gets the guidance (and the session simply does not advance).
+    const stale = expectOk(await say(patient, s, 'I cannot breathe', 1));
+    expect(stale.reply.kind).toBe('emergency');
+    expect(stale.session.version).toBe(2);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('sends the AI service a keyed digest of the message, never a plain SHA-256', async () => {
+    const patient = await createPatient(h, 'asst-digest');
+    const doctor = await createVerifiedDoctor(h, admin, 'asst-digest-d');
+    await linkCare(h, patient, doctor);
+    const s = expectOk(await session(patient), 201);
+    script = planner();
+    calls.length = 0;
+    const text = 'a general physician for my eczema please';
+    expectOk(await say(patient, s, text));
+    const key = deriveMessageDigestKey(h.config.clinicalData);
+    expect(calls[0].messageDigest).toBe(createHmac('sha256', key).update(text).digest('hex'));
+    expect(calls[0].messageDigest).not.toBe(createHash('sha256').update(text).digest('hex'));
+    expect(JSON.stringify(calls)).not.toContain(key.toString('base64'));
+    expect(JSON.stringify(calls)).not.toContain(key.toString('hex'));
+    // Tool-result steps carry no message, so no digest either.
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.slice(1).every((c) => c.messageDigest === undefined)).toBe(true);
+    // Nothing the backend stores or logs holds the message or its digest.
+    const row = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+    const audits = await auditFor(h.ownerKnex, { resource_id: s.id });
+    const stored = JSON.stringify([row, audits, h.logs]);
+    expect(stored).not.toContain('eczema');
+    expect(stored).not.toContain(calls[0].messageDigest);
+  });
+
+  it('RLS: a session can never name a patient unrelated to the user', async () => {
+    const user = await createPatient(h, 'asst-rls-user');
+    const stranger = await createPatient(h, 'asst-rls-stranger');
+    // Creating one directly in the database, bypassing the API, is refused.
+    await expect(insertAs(user.id, sessionRow(user.id, stranger.patient.id))).rejects.toThrow(
+      /row-level security/,
+    );
+    // A row that somehow names an unrelated patient is invisible and unchangeable.
+    const planted = sessionRow(user.id, stranger.patient.id);
+    await h.ownerKnex('agent_sessions').insert(planted);
+    const seen = await withActor(h.knex, user.id, (trx) =>
+      trx('agent_sessions').where({ id: planted.id }).select('id'),
+    );
+    expect(seen).toEqual([]);
+    const updated = await withActor(h.knex, user.id, (trx) =>
+      trx('agent_sessions').where({ id: planted.id }).update({ status: 'ended' }),
+    );
+    expect(updated).toBe(0);
+    expect((await api(h, user).get(`/assistant/sessions/${planted.id}`)).status).toBe(404);
+    // Their own patient still works.
+    await insertAs(user.id, sessionRow(user.id, user.patient.id));
+  });
+
+  it('RLS: a revoked guardianship ends access to existing sessions in the database', async () => {
+    const guardian = await createPatient(h, 'asst-rls-guardian');
+    const dependent = expectOk(
+      await api(h, guardian).post('/patients/me/dependents', {
+        ...profileInput('Rls Child'),
+        relationshipType: 'parent',
+      }),
+      201,
+    );
+    const s = expectOk(await session(guardian, { patientId: dependent.id }), 201);
+    const visible = () =>
+      withActor(h.knex, guardian.id, (trx) =>
+        trx('agent_sessions').where({ id: s.id }).select('id'),
+      );
+    expect(await visible()).toHaveLength(1);
+
+    await h
+      .ownerKnex('patient_guardianships')
+      .where({ patient_id: dependent.id, guardian_user_id: guardian.id })
+      .update({ status: 'ended', ended_at: new Date() });
+
+    expect(await visible()).toEqual([]);
+    const updated = await withActor(h.knex, guardian.id, (trx) =>
+      trx('agent_sessions').where({ id: s.id }).update({ status: 'ended' }),
+    );
+    expect(updated).toBe(0);
+    await expect(insertAs(guardian.id, sessionRow(guardian.id, dependent.id))).rejects.toThrow(
+      /row-level security/,
+    );
+    expect((await api(h, guardian).get(`/assistant/sessions/${s.id}`)).status).toBe(404);
+    expect((await say(guardian, s, 'hello')).status).toBe(404);
+    // The retention sweep still sees it, so it is deleted on expiry.
+    const swept = await withSystem(h.knex, 'assistant', (trx) =>
+      trx('agent_sessions').where({ id: s.id }).select('id'),
+    );
+    expect(swept).toHaveLength(1);
+  });
+
+  it('a view-only guardian may still use the read-only assistant for the dependent', async () => {
+    const owner = await createPatient(h, 'asst-view-owner');
+    const viewer = await createPatient(h, 'asst-view-viewer');
+    const dependent = expectOk(
+      await api(h, owner).post('/patients/me/dependents', {
+        ...profileInput('View Child'),
+        relationshipType: 'parent',
+      }),
+      201,
+    );
+    await h.ownerKnex('patient_guardianships').insert({
+      id: randomUUID(),
+      patient_id: dependent.id,
+      guardian_user_id: viewer.id,
+      relationship_type: 'grandparent',
+      access_scope: 'view',
+      basis: 'legal_authority',
+      status: 'active',
+      started_at: new Date(),
+      created_by_user_id: owner.id,
+    });
+    const s = expectOk(await session(viewer, { patientId: dependent.id }), 201);
+    expect(s).toMatchObject({ actingFor: 'dependent', patientId: dependent.id });
+    script = planner();
+    const turn = expectOk(await say(viewer, s, 'a general physician for them'));
+    expect(turn.degraded).toBe(false);
+    expect(turn.session.version).toBe(2);
   });
 });

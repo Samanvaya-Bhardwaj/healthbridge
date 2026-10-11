@@ -1,5 +1,12 @@
+import { createHmac, hkdfSync } from 'node:crypto';
 import { z } from 'zod';
-import { ASSISTANT_SPECIALTIES, PERMISSIONS, careAssistantStateSchema } from '@healthbridge/shared';
+import {
+  ASSISTANT_EMERGENCY_MESSAGE,
+  ASSISTANT_SPECIALTIES,
+  PERMISSIONS,
+  careAssistantStateSchema,
+  isPossibleAssistantEmergency,
+} from '@healthbridge/shared';
 import { isUuid, newId } from '../../core/db/ids.js';
 import { withActor, withSystem } from '../../core/db/actorContext.js';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../core/http/errors.js';
@@ -18,6 +25,27 @@ const FALLBACK_REPLY = Object.freeze({
     'The assistant isn’t available right now. You can still find a doctor and book a time in My Doctors.',
   cards: [{ type: 'link', target: 'my_doctors' }],
 });
+
+/** Fixed emergency guidance (the shared rule's wording); never composed by a model. */
+const EMERGENCY_REPLY = Object.freeze({
+  kind: 'emergency',
+  message: ASSISTANT_EMERGENCY_MESSAGE,
+  cards: [],
+  source: 'safety_rule',
+});
+
+/**
+ * Key for the message digest kept with each AI run record (ADR-0012 reproducibility).
+ * Derived from the backend-only clinical data key with its own HKDF label, the same
+ * convention as the prescription integrity seal. The AI service never receives the key:
+ * it is handed only the finished digest, so it cannot compute (or confirm a guess of) a
+ * digest itself, and a plain SHA-256 dictionary lookup on stored digests is useless.
+ */
+export function deriveMessageDigestKey({ currentKeyId, keys }) {
+  const kek = keys.get(currentKeyId);
+  if (!kek) throw new Error(`clinical data key ${currentKeyId} is not configured`);
+  return Buffer.from(hkdfSync('sha256', kek, 'healthbridge', 'assistant-message-digest', 32));
+}
 
 // The AI step's answer is checked like any untrusted input before it is used.
 const cardSchema = z.object({
@@ -64,8 +92,15 @@ export function createAssistantService({
   doctorService,
   availabilityService,
   logger,
+  messageDigestKey,
   now = () => new Date(),
 }) {
+  if (!Buffer.isBuffer(messageDigestKey) || messageDigestKey.length < 32) {
+    throw new Error('assistant: a 32-byte message digest key is required');
+  }
+  /** Keyed HMAC-SHA256 of the message, hex. The message itself is never stored. */
+  const messageDigest = (text) => createHmac('sha256', messageDigestKey).update(text).digest('hex');
+
   /** The acting patient: self, or a dependent the user guards (AccessPolicy decides). */
   async function authorizeScope(trx, principal, patientId, req) {
     const decision = await accessPolicy.enforce({
@@ -215,11 +250,65 @@ export function createAssistantService({
     return { kind: reply.kind, message: reply.message, cards, source: 'ai_assistant' };
   }
 
+  /**
+   * A message that may describe an emergency is answered by the backend itself with the
+   * fixed guidance. No AI-service call, no tool and no booking flow runs, so the guidance
+   * cannot be lost to an AI outage, a timeout or a failed AI run-record write. It is not
+   * blocked by a stale version or the turn limit either (the session simply does not
+   * advance then), and a failure to record the turn is logged, never shown instead.
+   */
+  async function emergencyTurn(principal, { row, actingFor }, version, started, req) {
+    const previous =
+      careAssistantStateSchema.safeParse(row.state).data ?? careAssistantStateSchema.parse({});
+    let current = { version: row.version, turn_count: row.turn_count };
+    try {
+      const saved = await withActor(knex, principal.userId, async (trx) => {
+        const advanced =
+          row.version === version && row.turn_count < MAX_TURNS
+            ? await repository.advance(trx, row.id, version, { state: previous })
+            : null;
+        await audit.record(
+          {
+            category: 'data_access',
+            action: 'assistant.turn',
+            outcome: 'success',
+            resourceType: 'agent_session',
+            resourceId: row.id,
+            patientId: row.patient_id,
+            reason: 'emergency',
+            // Never the message: names and counts only. No AI call, no tools.
+            metadata: { intent: previous.intent, tools: [], cards: 0, actingFor, ai: false },
+          },
+          { req, trx },
+        );
+        return advanced;
+      });
+      if (saved) current = saved;
+    } catch (err) {
+      logger?.error({ errName: err?.name }, 'assistant emergency turn not recorded');
+    }
+    domainMetrics.agentRuns.inc({ intent: previous.intent ?? 'none', outcome: 'emergency' });
+    domainMetrics.agentLatency.observe(
+      { outcome: 'emergency' },
+      (performance.now() - started) / 1000,
+    );
+    return {
+      session: view({ ...row, ...current }, actingFor),
+      reply: { ...EMERGENCY_REPLY, cards: [] },
+      understood: { intent: previous.intent, criteria: previous.criteria },
+      degraded: false,
+    };
+  }
+
   async function sendMessage(principal, sessionId, { text, version, timeZone }, req) {
     const started = performance.now();
-    const { row, actingFor } = await withActor(knex, principal.userId, (trx) =>
+    // Screened before anything that involves the AI service (deterministic, shared rule).
+    const emergency = isPossibleAssistantEmergency(text);
+    const loaded = await withActor(knex, principal.userId, (trx) =>
       loadActive(trx, principal, sessionId, req),
     );
+    if (emergency) return emergencyTurn(principal, loaded, version, started, req);
+    const { row, actingFor } = loaded;
     if (row.version !== version) {
       throw new ConflictError(
         'This conversation changed in another window. Reload to continue.',
@@ -252,7 +341,8 @@ export function createAssistantService({
       if (!aiClient) throw Object.assign(new Error('AI client not configured'), { kind: 'ai' });
       step = stepSchema.parse(
         await aiClient.agentStep(
-          { ...base, message: text, state: previous },
+          // The AI service records only this keyed digest with its run, never the text.
+          { ...base, message: text, messageDigest: messageDigest(text), state: previous },
           { requestId: req?.id },
         ),
       );
