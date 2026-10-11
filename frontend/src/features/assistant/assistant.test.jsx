@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { App } from '../../app/App.jsx';
@@ -187,5 +187,149 @@ describe('HealthBridge Assistant', () => {
     open('/app/assistant');
     expect(await screen.findByText('The assistant isn’t available right now')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Find a doctor in My Doctors' })).toBeInTheDocument();
+  });
+});
+
+describe('switching between self and a dependent', () => {
+  const CHILD = '0192b6f0-0000-7000-8000-0000000000c1';
+  const sessionFor = (id, patientId, version = 1) => ({
+    ...sessionView(version),
+    id,
+    patientId,
+    actingFor: patientId === PATIENT ? 'self' : 'dependent',
+  });
+
+  /**
+   * A fake backend that behaves like the real one: each new session starts at version 1,
+   * and a message with any other version than the session's current one is refused (409).
+   */
+  function backend({ hold } = {}) {
+    const sessions = new Map();
+    let n = 0;
+    const calls = signedIn({
+      'GET /api/v1/patients/me/dependents': () =>
+        json(200, { data: [{ id: CHILD, fullName: 'Kabir Rao' }] }),
+      'POST /api/v1/assistant/sessions': (init) => {
+        n += 1;
+        const patientId = JSON.parse(init.body ?? '{}').patientId ?? PATIENT;
+        const id = `0192b6f0-0000-7000-8000-00000000f${String(n).padStart(3, '0')}`;
+        sessions.set(id, { patientId, version: 1 });
+        return json(201, { data: sessionFor(id, patientId) });
+      },
+    });
+    const fetchMock = globalThis.fetch.getMockImplementation();
+    globalThis.fetch.mockImplementation(async (url, init = {}) => {
+      const m = /\/assistant\/sessions\/([^/]+)(\/messages)?$/.exec(url);
+      if (!m) return fetchMock(url, init);
+      calls.push({ key: `${init.method ?? 'GET'} ${url}`, init });
+      const s = sessions.get(m[1]);
+      if (init.method === 'DELETE') return new Response(null, { status: 204 });
+      const body = JSON.parse(init.body);
+      if (hold && s.patientId === hold.patientId) await hold.promise;
+      if (body.version !== s.version) {
+        return problem(409, 'assistant_session_changed', 'This conversation changed.');
+      }
+      s.version += 1;
+      return json(200, {
+        data: {
+          session: sessionFor(m[1], s.patientId, s.version),
+          reply: { kind: 'help', message: `Reply for ${s.patientId} #${s.version}`, cards: [] },
+          understood: { intent: null, criteria: {} },
+          degraded: false,
+        },
+      });
+    });
+    const sent = () =>
+      calls
+        .filter((c) => c.key.endsWith('/messages'))
+        .map((c) => ({ session: c.key.split('/')[5], ...JSON.parse(c.init.body) }));
+    return { calls, sent, sessions };
+  }
+
+  const say = async (text) => {
+    await userEvent.type(await screen.findByLabelText('Your message'), `${text}{Enter}`);
+  };
+  const choose = async (label) => {
+    await userEvent.selectOptions(await screen.findByLabelText(/Showing records of/), label);
+  };
+
+  it('self → dependent → self: each patient gets a fresh session and its own version', async () => {
+    const api = backend();
+    open('/app/assistant');
+    await screen.findByRole('option', { name: 'Kabir Rao' });
+
+    // Two turns for self: the self session is now at version 3.
+    await say('hello me');
+    expect(await screen.findByText(`Reply for ${PATIENT} #2`)).toBeInTheDocument();
+    await say('again me');
+    expect(await screen.findByText(`Reply for ${PATIENT} #3`)).toBeInTheDocument();
+
+    await choose('Kabir Rao');
+    expect(await screen.findByText(/What can I help them with/)).toBeInTheDocument();
+    // Nothing of the self conversation is visible for the dependent.
+    expect(screen.queryByText('hello me')).not.toBeInTheDocument();
+    expect(screen.queryByText(`Reply for ${PATIENT} #3`)).not.toBeInTheDocument();
+    await say('hello child');
+    expect(await screen.findByText(`Reply for ${CHILD} #2`)).toBeInTheDocument();
+
+    await choose('Me');
+    expect(await screen.findByText(/What can I help you with/)).toBeInTheDocument();
+    expect(screen.queryByText('hello child')).not.toBeInTheDocument();
+    expect(screen.queryByText(`Reply for ${CHILD} #2`)).not.toBeInTheDocument();
+    await say('back to me');
+    expect(await screen.findByText(`Reply for ${PATIENT} #2`)).toBeInTheDocument();
+
+    // Every first message used the version its own new session was created with; no 409.
+    const sent = api.sent();
+    expect(sent.map((s) => [s.text, s.version])).toEqual([
+      ['hello me', 1],
+      ['again me', 2],
+      ['hello child', 1],
+      ['back to me', 1],
+    ]);
+    expect(new Set(sent.map((s) => s.session)).size).toBe(3);
+    expect(screen.queryByText(/changed in another window|conversation changed/i)).toBeNull();
+    // The sessions left behind were ended, not reused.
+    const ended = api.calls.filter((c) => c.key.startsWith('DELETE')).map((c) => c.key);
+    expect(ended).toEqual([
+      `DELETE /api/v1/assistant/sessions/${sent[0].session}`,
+      `DELETE /api/v1/assistant/sessions/${sent[2].session}`,
+    ]);
+    // The dependent's session was created for the dependent.
+    const created = api.calls.filter((c) => c.key === 'POST /api/v1/assistant/sessions');
+    expect(created.map((c) => JSON.parse(c.init.body ?? '{}').patientId ?? null)).toEqual([
+      expect.toBeOneOf([null, PATIENT]),
+      CHILD,
+      expect.toBeOneOf([null, PATIENT]),
+    ]);
+  });
+
+  it('a late reply for the previous patient never lands in the new conversation', async () => {
+    let release;
+    const hold = { patientId: PATIENT, promise: new Promise((r) => (release = r)) };
+    const api = backend({ hold });
+    open('/app/assistant');
+    await screen.findByRole('option', { name: 'Kabir Rao' });
+
+    await say('slow message for me'); // held by the backend
+    await choose('Kabir Rao');
+    expect(await screen.findByText(/What can I help them with/)).toBeInTheDocument();
+    expect(screen.queryByText('slow message for me')).not.toBeInTheDocument();
+    expect(screen.queryByText('The assistant is looking this up')).not.toBeInTheDocument();
+
+    // The dependent can send at once (the old request does not block the new session).
+    await say('hello child');
+    expect(await screen.findByText(`Reply for ${CHILD} #2`)).toBeInTheDocument();
+
+    release();
+    await waitFor(() => expect(api.sessions.get(api.sent()[0].session).version).toBe(2));
+    // Give React a chance to process the late response, then check it was dropped.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(`Reply for ${PATIENT} #2`)).not.toBeInTheDocument();
+    expect(screen.getByText(`Reply for ${CHILD} #2`)).toBeInTheDocument();
+    expect(api.sent().map((s) => [s.text, s.version])).toEqual([
+      ['slow message for me', 1],
+      ['hello child', 1],
+    ]);
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   CalendarDays,
@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { ASSISTANT_MAX_MESSAGE } from '@healthbridge/shared';
 import { assistantApi } from '../../lib/domainApi.js';
-import { useSafeMutation } from '../../lib/useSafeMutation.js';
 import { authErrorMessage, isConnectionProblem } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
@@ -226,10 +225,15 @@ function AssistantReply({ turn, patientId, actingFor }) {
 /** The HealthBridge Assistant: workflow help in plain words; never medical advice. */
 export function AssistantPage() {
   const { choices, patientId, setPatientId, isPending, missingProfile } = usePatientChoice();
-  const [turns, setTurns] = useState([]);
+  // Everything about one conversation belongs to one server session: its turns and the
+  // version the next message must carry. Keyed by the session ID, so a new session (another
+  // patient, or "Start over") can never inherit a previous one's turns or version, and a
+  // late reply for an earlier session is dropped instead of landing in the new one.
+  const [conversation, setConversation] = useState(null); // { sessionId, version, turns }
   const [text, setText] = useState('');
-  const [version, setVersion] = useState(null);
   const [restartKey, setRestartKey] = useState(0);
+  // Double-submit guard for the current session only (cleared when a fresh one starts).
+  const inFlight = useRef(null);
   const endRef = useRef(null);
 
   const session = useQuery({
@@ -242,15 +246,22 @@ export function AssistantPage() {
     refetchOnWindowFocus: false,
   });
 
-  const send = useSafeMutation({
-    mutationFn: (message) =>
-      assistantApi.send(session.data.id, {
-        text: message,
-        version: version ?? session.data.version,
-      }),
-    onSuccess: (result) => {
-      setVersion(result.session.version);
-      setTurns((list) => [...list, { id: crypto.randomUUID(), role: 'assistant', ...result }]);
+  const current = session.data && conversation?.sessionId === session.data.id ? conversation : null;
+  const turns = current?.turns ?? [];
+
+  const send = useMutation({
+    mutationFn: ({ sessionId, text: message, version }) =>
+      assistantApi.send(sessionId, { text: message, version }),
+    onSuccess: (result, { sessionId }) => {
+      setConversation((c) =>
+        c?.sessionId === sessionId
+          ? {
+              ...c,
+              version: result.session.version,
+              turns: [...c.turns, { id: crypto.randomUUID(), role: 'assistant', ...result }],
+            }
+          : c,
+      );
     },
   });
 
@@ -258,20 +269,38 @@ export function AssistantPage() {
     endRef.current?.scrollIntoView?.({ block: 'nearest' });
   }, [turns.length, send.isPending]);
 
-  const restart = () => {
+  /** Ends the current session and starts a fresh one; nothing of it carries over. */
+  const startFresh = () => {
     if (session.data) assistantApi.end(session.data.id).catch(() => {});
-    setTurns([]);
-    setVersion(null);
+    setConversation(null);
+    setText('');
+    inFlight.current = null;
     send.reset();
     setRestartKey((k) => k + 1);
   };
 
   const submit = (message) => {
     const clean = message.trim();
-    if (!clean || !session.data || send.isPending) return;
-    setTurns((list) => [...list, { id: crypto.randomUUID(), role: 'user', text: clean }]);
+    if (!clean || !session.data) return;
+    const sessionId = session.data.id;
+    if (inFlight.current === sessionId) return;
+    inFlight.current = sessionId;
+    // The first message of a session uses the version that session was created with.
+    const version = current?.version ?? session.data.version;
+    setConversation({
+      sessionId,
+      version,
+      turns: [...turns, { id: crypto.randomUUID(), role: 'user', text: clean }],
+    });
     setText('');
-    send.mutate(clean);
+    send.mutate(
+      { sessionId, text: clean, version },
+      {
+        onSettled: () => {
+          if (inFlight.current === sessionId) inFlight.current = null;
+        },
+      },
+    );
   };
 
   const actingFor = session.data?.actingFor ?? 'self';
@@ -286,7 +315,7 @@ export function AssistantPage() {
         description="Tell me what you need help with, in your own words. I can find a doctor and free times. I don’t diagnose or give medical advice: your doctor decides about your care."
         actions={
           turns.length > 0 && (
-            <Button variant="ghost" size="sm" icon={RotateCcw} onClick={restart}>
+            <Button variant="ghost" size="sm" icon={RotateCcw} onClick={startFresh}>
               Start over
             </Button>
           )
@@ -296,9 +325,11 @@ export function AssistantPage() {
         choices={choices}
         value={patientId}
         onChange={(id) => {
+          if (id === patientId) return;
+          // A different patient gets a brand-new session: the previous one is ended and
+          // none of its turns, draft, error or version is reused.
+          startFresh();
           setPatientId(id);
-          setTurns([]);
-          send.reset();
         }}
       />
       {missingProfile && (
@@ -383,7 +414,7 @@ export function AssistantPage() {
               className="mt-4"
               action={
                 ended && (
-                  <Button size="sm" variant="secondary" icon={RotateCcw} onClick={restart}>
+                  <Button size="sm" variant="secondary" icon={RotateCcw} onClick={startFresh}>
                     Start a new conversation
                   </Button>
                 )
