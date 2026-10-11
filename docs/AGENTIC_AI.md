@@ -34,12 +34,13 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 1. The browser sends `{ text, version, timeZone }` to `POST /api/v1/assistant/sessions/:id/messages`.
 2. The backend:
    1. authenticates and checks `assistant:use`;
-   2. loads the session (RLS: own sessions only);
+   2. loads the session (RLS: own sessions, for a patient on the user's side);
    3. re-checks the patient scope with AccessPolicy;
-   4. checks the version and the turn limit.
-3. The backend sends the AI step the message, the current state and a **calendar context**: today, tomorrow, the next weekdays and the horizon, computed by the backend in the person's time zone, plus the specialty list.
+   4. screens the message with the shared emergency rule. A possible emergency gets the fixed 112/108 guidance from the backend itself, and the turn ends there: no AI-service call, no tool and no booking flow, so the guidance survives an AI outage, a timeout or a failed AI run-record write. It is not blocked by a stale version or the turn limit;
+   5. checks the version and the turn limit.
+3. The backend sends the AI step the message, its keyed digest (HMAC-SHA256 under a backend-only key, for the run record), the current state and a **calendar context**: today, tomorrow, the next weekdays and the horizon, computed by the backend in the person's time zone, plus the specialty list.
 4. The graph runs:
-   - `safety`: possible emergency → fixed guidance, done;
+   - `safety`: possible emergency → fixed guidance, done (a second line: the backend already screened the message with the same rule);
    - `understand`: one fast-tier model call that fills the fixed form;
    - `validate`;
    - `route`: returns either a tool request or a reply.
@@ -138,7 +139,7 @@ There will be no second vector store and no duplicate indexing. Until then, thos
 
 | Failure | What the person sees | System behaviour |
 |---|---|---|
-| Possible emergency wording | Fixed 112/108 guidance | No model call |
+| Possible emergency wording | Fixed 112/108 guidance | Backend, before any AI-service call (works with the AI service down) |
 | LLM down, timeout, refusal, malformed output | "I couldn't understand that just now / isn't available…" plus My Doctors | `degraded: true`, metric `healthbridge_agent_failures_total` |
 | Tool error | A fallback reply | The error code goes to the AI; nothing leaks |
 | Tool loop | A fallback after 3 rounds | `tool_limit` |
@@ -151,11 +152,12 @@ There will be no second vector store and no duplicate indexing. Until then, thos
 
 | Layer | File | Covers |
 |---|---|---|
-| AI (pytest, fake model) | `ai-service/tests/test_care_assistant.py` | The bounded tool sequence, no message text in state, reply or run, no free model text reaching the person, emergency without a model call, prompt injection, forged IDs, malformed output, LLM down, values outside the form, tool failure, refinement across turns, dependent wording, scope purpose and patient, strict state |
+| AI (pytest, fake model) | `ai-service/tests/test_care_assistant.py` | The bounded tool sequence, no message text in state, reply or run, no free model text reaching the person, emergency without a model call, the run record keeps the backend's keyed digest (never the text or a plain SHA-256), prompt injection, forged IDs, malformed output, LLM down, values outside the form, tool failure, refinement across turns, dependent wording, scope purpose and patient, strict state |
 | AI evaluation | `ai-service/tests/test_care_eval.py` | A synthetic set: intent, specialty, day and window accuracy at 90% or more; emergency recall 100%; no diagnostic wording |
 | Backend unit | `backend/tests/unit/assistant.test.js` | Calendar in the person's time zone, tool registry (session patient only, strict arguments, permission, error mapping), state contract |
-| Backend integration | `backend/tests/integration/assistant.test.js` | The loop with a scripted planner, grounded cards, no text in the database or audit, argument manipulation, unknown and write tools, forged state and cards, AI down, malformed or looping, version conflicts, RLS between users, guardian scope and revocation, admin and support refused, end, expiry and purge |
-| Frontend | `frontend/src/features/assistant/assistant.test.jsx` | AI versus confirmed labelling, booking links to the existing flow, emergency and degraded replies, ended-session recovery, start-failure fallback |
+| Backend unit (safety) | `backend/tests/unit/assistantSafety.test.js` | The shared emergency rule mirrors the AI service's exactly; emergency guidance with the AI service unconfigured, unavailable, timing out or failing, with a stale version or a failed write; the keyed digest and its derived key |
+| Backend integration | `backend/tests/integration/assistant.test.js` | The loop with a scripted planner, grounded cards, no text in the database or audit, argument manipulation, unknown and write tools, forged state and cards, AI down, malformed or looping, version conflicts, RLS between users, RLS against unrelated patients and revoked guardianships, view-only guardians, emergencies answered without the AI service, the keyed message digest, admin and support refused, end, expiry and purge |
+| Frontend | `frontend/src/features/assistant/assistant.test.jsx` | AI versus confirmed labelling, booking links to the existing flow, emergency and degraded replies, ended-session recovery, start-failure fallback, switching between self and a dependent (fresh session and version, nothing leaks, late replies dropped) |
 | E2E | `e2e/tests/assistant.spec.js` | The real stack with the fake model: ask, grounded suggestions, existing booking page, emergency guidance |
 | Route security | `backend/tests/integration/routeSecurity.test.js` | The new routes deny anonymous access (automatic) |
 

@@ -424,11 +424,11 @@ Each layer is tested on its own:
 - **Untrusted output:**
   - the model fills a fixed form and writes no free text that reaches the person;
   - the backend validates the returned state, drops IDs it didn't return, and builds cards from its own data.
-- **Safety:** possible-emergency wording gets fixed 112/108 guidance without a model call. The assistant never diagnoses or prescribes.
+- **Safety:** possible-emergency wording gets fixed 112/108 guidance without a model call. The backend screens every message before any AI-service call, so the guidance still works when the AI service is down, slow or failing. The assistant never diagnoses or prescribes.
 - **Privacy:**
   - no message text or transcript is stored or logged;
   - the state is structured, 16 KB at most, kept 24 h and deleted by the sweep;
-  - AI runs keep a hash of the input only;
+  - AI runs keep only a keyed HMAC of the message. The key is derived from the backend-only clinical data key and is never sent to the AI service;
   - audit rows record the intent, tool names and counts.
 - **Abuse limits:** 120 requests per hour per user, 3 tool rounds and 1 model call per message, and 40 turns per session.
-- **Tests:** prompt injection, tool-argument manipulation, forged IDs, unknown and write tools, cross-user RLS, guardian revocation, roles that must be refused, and log checks.
+- **Tests:** prompt injection, tool-argument manipulation, forged IDs, unknown and write tools, cross-user RLS, RLS against unrelated patients, guardian revocation (API and database), emergencies with the AI service down, the keyed message digest, roles that must be refused, and log checks.

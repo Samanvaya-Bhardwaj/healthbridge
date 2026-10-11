@@ -311,7 +311,7 @@ routes → controllers → application services → domain (pure rules) → repo
   - it executes the planner's allow-listed **read** tools through the existing care, doctor and availability services;
   - it validates the returned state, builds the reply from its own data, and commits with an optimistic version check.
 - **The AI service** never calls back and never writes core data.
-- **State:** structured `CareAssistantState` in `agent_sessions` (owner-only RLS, 24 h). Never message text.
+- **State:** structured `CareAssistantState` in `agent_sessions` (RLS: the owner, for a patient on their side; 24 h). Never message text.
 - **Safety:** deterministic emergency wording gets fixed guidance.
 - **Failures** degrade to a My Doctors fallback.
 - **Next:** semantic doctor search (M13.2), recommendations (M13.3) and approved booking (M13.4) build on this ([ADR-0029](adr/0029-agentic-ai-orchestration.md), [AGENTIC_AI.md](AGENTIC_AI.md)).

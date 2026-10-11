@@ -52,7 +52,7 @@ START ─┬─(tool result)─► observe ────────────�
 
 | Node | What it does |
 |---|---|
-| **`safety`** | Deterministic. Wording that may signal an emergency gets fixed 112/108 guidance, with no model call and no booking prompt. This is not triage: clinical urgency stays with the rule-based follow-up escalation and the doctor. |
+| **`safety`** | Deterministic. Wording that may signal an emergency gets fixed 112/108 guidance, with no model call and no booking prompt. The backend applies the same rule (a mirror in `@healthbridge/shared`, held identical by a test) **before** it calls the AI service, so the guidance never depends on the AI service; this node is the second line. This is not triage: clinical urgency stays with the rule-based follow-up escalation and the doctor. |
 | **`understand`** | The only model call: the fast tier, with structured output. It fills a fixed form: an intent enum, a specialty from the backend's list, a consultation mode, a day reference, a time window, a language, a city and a doctor's name. The message is delimited as untrusted data. |
 | **`validate`** | Keeps only enum values, allowed specialties, regex-checked names, and days the backend resolved in the person's time zone (today, tomorrow, weekdays, horizon). Anything else is dropped. Malformed output leads to a fallback reply. |
 | **`route`** | Deterministic. Composes the next tool and its arguments **in code, from validated state**: the care team, then search, then slots. The model never writes tool arguments, never sees a patient identifier and cannot add tools. |
@@ -92,13 +92,13 @@ How the backend handles each tool call:
   - the tools used.
 - **What is not stored.** No message text and no transcript: the browser keeps the visible conversation.
 - **Validation and size.** State is validated with a strict shared schema on every write, so unknown keys such as `patientId` are rejected. It's capped at 16 KB and expires 24 hours after creation; the existing maintenance sweep deletes it (system purpose `assistant`).
-- **AI run records.** Each message has an `ai.ai_runs` record with metadata and a SHA-256 hash of the message, never the text.
+- **AI run records.** Each message has an `ai.ai_runs` record with metadata and a keyed digest of the message, never the text. The backend computes HMAC-SHA256 under a key derived (HKDF, label `assistant-message-digest`) from the backend-only clinical data key, and sends only the digest. The AI service never holds the key, and the stored value cannot be matched by hashing guessed messages.
 - **Not a medical record.** Nothing in a chat becomes part of the medical record.
 
 ### 5. Security boundaries
 
 1. **Scope.** The patient scope is fixed when the session is created: self, or a dependent through an active guardianship. AccessPolicy re-checks it on every turn, so a revoked guardianship ends access at once. Only `patient_self` and `guardian_dependent` relationships may use the assistant. Doctors, clinic staff, platform admins and support have no `assistant:use` permission.
-2. **RLS.** Sessions are visible only to their user: SELECT, INSERT and UPDATE are restricted to the owner, and only the sweep can DELETE.
+2. **RLS.** SELECT, INSERT and UPDATE require the owning user **and** `authz.is_patient_side(patient_id)` (the patient, or an active `view` or `manage` guardian). A row can't name an unrelated patient, and when a guardianship ends its sessions disappear for the former guardian in the database itself. Only the sweep can DELETE.
 3. **Consent.** All patient-data access stays behind AccessPolicy and RLS through the existing services. Record and medication tools (later phases) inherit consent checks unchanged.
 4. **Untrusted AI output.** The backend validates the returned state and the reply shape. It drops doctor and slot IDs it didn't produce, and builds every card from its own evidence.
 5. **The AI service** stays internal (service JWT plus a patient-scope token with purpose `care_assistant`). `hb_ai` gets no new grants.

@@ -28,6 +28,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261011000000_followups_notifications` | `follow_ups` (guarded transitions), `follow_up_responses` (append-only, encrypted note), `ai.follow_up_summaries`, `inbox_notifications` (owner may only mark read), `authz.doctor_recipient`; `followups` system purpose; `follow_up` timeline events; `followups:manage`, `followups:respond`, `notifications:read` |
 | `20261012000000_account_tokens` | `account_tokens` (single-use, hashed), session revoke reason `password_reset` |
 | `20261013000000_care_assistant` | `agent_sessions` (structured assistant state: owner-only RLS, immutable identity, 16 KB cap, 24 h lifetime), system purpose `assistant` for the retention sweep, `assistant:use` |
+| `20261013000001_agent_sessions_patient_side` | `agent_sessions` RLS also requires `authz.is_patient_side(patient_id)` (no unrelated patients; revoked guardianships lose access) |
 
 ## Identity, RBAC and audit (M1)
 
@@ -496,7 +497,7 @@ The `timeline` purpose has read-only policies on `appointments`, `medical_docume
 | `last_run_id` | The `ai.ai_runs` record of the last message (metadata only) |
 | `expires_at` | At most 24 h after `created_at` |
 
-- **RLS:** SELECT, INSERT and UPDATE for the owner only. DELETE only under system purpose `assistant`, and only for expired rows (the maintenance sweep). `TRUNCATE` is revoked.
+- **RLS:** SELECT, INSERT and UPDATE for the owner only, and only while `authz.is_patient_side(patient_id)` holds (the patient, or an active `view` or `manage` guardian). A revoked guardianship hides its sessions from the former guardian at once. DELETE only under system purpose `assistant`, and only for expired rows (the maintenance sweep). `TRUNCATE` is revoked.
 - **Guard trigger:** the ID, user, patient, creation time and expiry are immutable, and an ended session stays ended.
 - **Indexes:** `(user_id, created_at DESC)` and `(expires_at)` for the sweep.
-- **AI runs:** recorded in the existing `ai.ai_runs` (workflow `care_assistant`, input hash only). `hb_ai` gains no privileges.
+- **AI runs:** recorded in the existing `ai.ai_runs` (workflow `care_assistant`; `input_hash` is the backend's keyed HMAC of the message, never the text or a plain SHA-256). `hb_ai` gains no privileges.
