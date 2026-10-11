@@ -52,7 +52,7 @@ START ─┬─(tool result)─► observe ────────────�
 
 | Node | What it does |
 |---|---|
-| **`safety`** | Deterministic. Wording that may signal an emergency gets fixed 112/108 guidance, with no model call and no booking prompt. The backend applies the same rule (a mirror in `@healthbridge/shared`, held identical by a test) **before** it calls the AI service, so the guidance never depends on the AI service; this node is the second line. This is not triage: clinical urgency stays with the rule-based follow-up escalation and the doctor. |
+| **`safety`** | Deterministic. Wording that may signal an emergency gets fixed 112/108 guidance, with no model call and no booking prompt. The backend applies the same rule (a mirror in `@healthbridge/shared`, held identical by a test and by shared test cases, including the normalisation of curly apostrophes, NFKC and whitespace) **before** it calls the AI service, so the guidance never depends on the AI service; this node is the second line. This is not triage: clinical urgency stays with the rule-based follow-up escalation and the doctor. |
 | **`understand`** | The only model call: the fast tier, with structured output. It fills a fixed form: an intent enum, a specialty from the backend's list, a consultation mode, a day reference, a time window, a language, a city and a doctor's name. The message is delimited as untrusted data. |
 | **`validate`** | Keeps only enum values, allowed specialties, regex-checked names, and days the backend resolved in the person's time zone (today, tomorrow, weekdays, horizon). Anything else is dropped. Malformed output leads to a fallback reply. |
 | **`route`** | Deterministic. Composes the next tool and its arguments **in code, from validated state**: the care team, then search, then slots. The model never writes tool arguments, never sees a patient identifier and cannot add tools. |
@@ -92,7 +92,7 @@ How the backend handles each tool call:
   - the tools used.
 - **What is not stored.** No message text and no transcript: the browser keeps the visible conversation.
 - **Validation and size.** State is validated with a strict shared schema on every write, so unknown keys such as `patientId` are rejected. It's capped at 16 KB and expires 24 hours after creation; the existing maintenance sweep deletes it (system purpose `assistant`).
-- **AI run records.** Each message has an `ai.ai_runs` record with metadata and a keyed digest of the message, never the text. The backend computes HMAC-SHA256 under a key derived (HKDF, label `assistant-message-digest`) from the backend-only clinical data key, and sends only the digest. The AI service never holds the key, and the stored value cannot be matched by hashing guessed messages.
+- **AI run records.** Each message has an `ai.ai_runs` record with metadata and a keyed digest of the message, never the text. The backend computes HMAC-SHA256 under the dedicated backend-only `AI_INPUT_DIGEST_KEY` (purpose subkey `care_assistant_message`) and sends only `{ keyId, value }`. The AI service never holds the key, and the stored value cannot be matched by hashing guessed messages (ADR-0012, input digests).
 - **Not a medical record.** Nothing in a chat becomes part of the medical record.
 
 ### 5. Security boundaries

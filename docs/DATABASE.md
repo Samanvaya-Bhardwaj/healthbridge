@@ -29,6 +29,7 @@ changes are Knex migrations in `backend/migrations/` (ADR-0003).
 | `20261012000000_account_tokens` | `account_tokens` (single-use, hashed), session revoke reason `password_reset` |
 | `20261013000000_care_assistant` | `agent_sessions` (structured assistant state: owner-only RLS, immutable identity, 16 KB cap, 24 h lifetime), system purpose `assistant` for the retention sweep, `assistant:use` |
 | `20261013000001_agent_sessions_patient_side` | `agent_sessions` RLS also requires `authz.is_patient_side(patient_id)` (no unrelated patients; revoked guardianships lose access) |
+| `20261013000002_ai_input_digest_keys` | `ai.ai_runs.input_digest_key_id`; free-text workflows (`care_assistant`, `record_question`, `follow_up_summary`) must use a keyed digest (constraint); legacy plain digests of free text cleared |
 
 ## Identity, RBAC and audit (M1)
 
@@ -500,4 +501,4 @@ The `timeline` purpose has read-only policies on `appointments`, `medical_docume
 - **RLS:** SELECT, INSERT and UPDATE for the owner only, and only while `authz.is_patient_side(patient_id)` holds (the patient, or an active `view` or `manage` guardian). A revoked guardianship hides its sessions from the former guardian at once. DELETE only under system purpose `assistant`, and only for expired rows (the maintenance sweep). `TRUNCATE` is revoked.
 - **Guard trigger:** the ID, user, patient, creation time and expiry are immutable, and an ended session stays ended.
 - **Indexes:** `(user_id, created_at DESC)` and `(expires_at)` for the sweep.
-- **AI runs:** recorded in the existing `ai.ai_runs` (workflow `care_assistant`; `input_hash` is the backend's keyed HMAC of the message, never the text or a plain SHA-256). `hb_ai` gains no privileges.
+- **AI runs:** recorded in the existing `ai.ai_runs` (workflow `care_assistant`; `input_hash` is the backend's keyed HMAC of the message and `input_digest_key_id` its key, never the text or a plain SHA-256). `hb_ai` gains no privileges.

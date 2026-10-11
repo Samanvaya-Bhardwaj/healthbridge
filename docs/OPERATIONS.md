@@ -165,6 +165,7 @@ Restore S3 from versioning or replication.
 |---|---|
 | `AUTH_JWT_PRIVATE_KEY` | Generate a new Ed25519 key. Move the old **public** key (SPKI PEM, base64) to `AUTH_JWT_PREVIOUS_PUBLIC_KEYS`, deploy, and remove it after one access-token TTL (10 min). |
 | `CLINICAL_DATA_KEY` | Add a new key with a new `CLINICAL_DATA_KEY_ID`. Keep the old one in `CLINICAL_DATA_PREVIOUS_KEYS` (`keyId:base64`) so existing records still decrypt. New records use the new key. Never delete a previous key while records encrypted with it exist. |
+| `AI_INPUT_DIGEST_KEY` | Generate a new key (base64, 32 bytes) with a new `AI_INPUT_DIGEST_KEY_ID` and deploy the API and worker. No previous key is kept: these digests are telemetry, so runs before and after the rotation simply can't be compared. Never give this key to the AI service. **Upgrade note (M13.1):** add it to the production `.env` (compose) or Secrets Manager (`healthbridge/<env>`) before deploying; the API, worker and migrate task refuse to start without it outside development/test. |
 | `PAYMENT_WEBHOOK_SECRET` | Rotate in the provider dashboard and in the secret at the same time. Webhooks are retried by the provider. |
 | Database, Redis and MinIO passwords | Change in the service, then in the secret or env file. Restart the dependants. |
 | Backup key | Create a new age key pair and update `BACKUP_AGE_RECIPIENT`. **Keep the old identity** for as long as backups encrypted with it are retained. |
