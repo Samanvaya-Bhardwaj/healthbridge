@@ -80,7 +80,7 @@ def understand(client, text: str) -> dict:
             "patientId": PATIENT,
             "sessionId": SESSION,
             "message": text,
-            "messageDigest": digest(text),
+            "inputDigest": digest(text),
             "context": context(),
         },
         headers=headers(),

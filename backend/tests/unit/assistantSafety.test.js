@@ -1,21 +1,28 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ASSISTANT_EMERGENCY_ALTERNATIVES,
+  ASSISTANT_EMERGENCY_APOSTROPHES,
   ASSISTANT_EMERGENCY_MESSAGE,
+  ASSISTANT_EMERGENCY_WHITESPACE,
   careAssistantStateSchema,
   isPossibleAssistantEmergency,
+  normalizeForEmergencyScreening,
 } from '@healthbridge/shared';
+import { createAssistantService } from '../../src/modules/assistant/service.js';
 import {
-  createAssistantService,
-  deriveMessageDigestKey,
-} from '../../src/modules/assistant/service.js';
+  AI_INPUT_DIGEST_PURPOSES,
+  createInputDigester,
+} from '../../src/core/crypto/inputDigest.js';
+import { loadConfig } from '../../src/config/index.js';
+import { validEnv } from '../helpers.js';
 
 const SESSION = '01a10227-3be6-7744-b9a6-1b48433f85e1';
 const PATIENT = '01a10227-3be6-7744-b9a6-1b48433f85e2';
 const KEY = randomBytes(32);
+const DIGESTER = createInputDigester({ currentKeyId: 'd1', keys: new Map([['d1', KEY]]) });
 
 describe('emergency wording: one rule shared by the backend and the AI service', () => {
   // The backend screens with the shared JS copy; the AI service keeps the Python copy as
@@ -37,36 +44,68 @@ describe('emergency wording: one rule shared by the backend and the AI service',
     expect(python).toMatch(/re\.I\b/); // case-insensitive in both
   });
 
-  it.each([
-    'I have chest pain',
-    "I can't breathe",
-    'my father fainted',
-    'thinking about suicide',
-    'SEVERE BLEEDING from a cut',
-    'she is having a seizure',
-  ])('flags "%s"', (text) => {
+  it('normalises text exactly like care_safety.py (apostrophes, NFKC, whitespace)', () => {
+    // Python string literal → its characters (\uXXXX, \t, \n, \r, \f, \v escapes only).
+    const decode = (literal) =>
+      JSON.parse(`"${literal.replaceAll(String.raw`\v`, String.raw`\u000b`)}"`);
+    const constant = (name) => {
+      const m = python.match(new RegExp(`^${name} = "((?:[^"\\\\]|\\\\.)*)"$`, 'm'));
+      expect(m, name).not.toBeNull();
+      return decode(m[1]);
+    };
+    expect(constant('APOSTROPHES')).toBe(ASSISTANT_EMERGENCY_APOSTROPHES);
+    expect(constant('WHITESPACE')).toBe(ASSISTANT_EMERGENCY_WHITESPACE);
+    expect(python).toContain(
+      'unicodedata.normalize("NFKC", text.translate(_APOSTROPHE_MAP))', // same order
+    );
+    expect(normalizeForEmergencyScreening('I can’t \n breathe')).toBe("I can't breathe");
+  });
+
+  // The same cases run in the AI service's pytest suite, so both implementations must agree.
+  const cases = JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL('../../../ai-service/tests/fixtures/emergency_cases.json', import.meta.url),
+      ),
+      'utf8',
+    ),
+  );
+
+  it.each(cases.emergency)('flags %j', (text) => {
     expect(isPossibleAssistantEmergency(text)).toBe(true);
   });
 
-  it.each(['I want a dermatologist tomorrow evening', 'a doctor for my cough', ''])(
-    'does not flag "%s"',
-    (text) => {
-      expect(isPossibleAssistantEmergency(text)).toBe(false);
-    },
-  );
+  it.each(cases.not_emergency)('does not flag %j', (text) => {
+    expect(isPossibleAssistantEmergency(text)).toBe(false);
+  });
+
+  it('covers curly and straight apostrophes, case and punctuation', () => {
+    const all = cases.emergency.join('\n');
+    for (const needle of ["can't", 'can’t', 'CAN’T'.toLowerCase(), 'CHEST PAIN', '!!!']) {
+      expect(all.toLowerCase()).toContain(needle.toLowerCase());
+    }
+    expect(cases.emergency.length).toBeGreaterThanOrEqual(30);
+  });
 });
 
 /** A service over fakes: a pass-through transaction, and AI/tool spies. */
-function harness({ aiClient = null, advance, version = 1, turns = 0 } = {}) {
+function harness({
+  aiClient = null,
+  advance,
+  version = 1,
+  turns = 0,
+  status = 'active',
+  expiresInMs = 3_600_000,
+} = {}) {
   const row = {
     id: SESSION,
     user_id: 'u1',
     patient_id: PATIENT,
-    status: 'active',
+    status,
     state: careAssistantStateSchema.parse({ intent: 'find_doctor' }),
     version,
     turn_count: turns,
-    expires_at: new Date(Date.now() + 3_600_000),
+    expires_at: new Date(Date.now() + expiresInMs),
   };
   const deps = {
     knex: { transaction: async (fn) => fn({ raw: async () => {} }) },
@@ -83,7 +122,7 @@ function harness({ aiClient = null, advance, version = 1, turns = 0 } = {}) {
     doctorService: { directory: vi.fn(), publicProfile: vi.fn() },
     availabilityService: { slots: vi.fn() },
     logger: { warn: vi.fn(), error: vi.fn() },
-    messageDigestKey: KEY,
+    inputDigester: DIGESTER,
   };
   return { service: createAssistantService(deps), deps };
 }
@@ -163,6 +202,21 @@ describe('emergency guidance survives AI-service failure (backend-owned)', () =>
     expect(aiClient.agentStep).not.toHaveBeenCalled();
   });
 
+  it('answers even in an ended or expired conversation (without advancing it)', async () => {
+    for (const opts of [{ status: 'ended' }, { expiresInMs: -1000 }]) {
+      const aiClient = { agentStep: vi.fn() };
+      const { service, deps } = harness({ aiClient, ...opts });
+      const res = await send(service);
+      expectFixedGuidanceWithoutAiOrTools(res, deps);
+      expect(deps.repository.advance).not.toHaveBeenCalled();
+      expect(aiClient.agentStep).not.toHaveBeenCalled();
+      // Ordinary messages are still refused there.
+      await expect(send(service, 'a dermatologist please')).rejects.toMatchObject({
+        code: 'assistant_session_ended',
+      });
+    }
+  });
+
   it('still answers when recording the turn fails', async () => {
     const { service, deps } = harness({
       advance: async () => {
@@ -188,8 +242,11 @@ describe('emergency guidance survives AI-service failure (backend-owned)', () =>
   });
 });
 
-describe('message digest kept with the AI run record', () => {
-  it('is a keyed HMAC from a backend-only key, never a plain SHA-256 of the text', async () => {
+describe('keyed digests of free-text AI inputs', () => {
+  const subkey = (key, purpose) =>
+    Buffer.from(hkdfSync('sha256', key, 'healthbridge', `ai-input-digest/${purpose}/v1`, 32));
+
+  it('the assistant sends a keyed digest with its key ID, never a plain SHA-256', async () => {
     const text = 'I need a dermatologist for my rash';
     const aiClient = {
       agentStep: vi.fn(async (input) => ({
@@ -201,9 +258,12 @@ describe('message digest kept with the AI run record', () => {
     const { service, deps } = harness({ aiClient });
     await send(service, text);
     const sent = aiClient.agentStep.mock.calls[0][0];
-    expect(sent.messageDigest).toMatch(/^[0-9a-f]{64}$/);
-    expect(sent.messageDigest).toBe(createHmac('sha256', KEY).update(text).digest('hex'));
-    expect(sent.messageDigest).not.toBe(createHash('sha256').update(text).digest('hex'));
+    expect(sent.messageDigest).toBeUndefined();
+    expect(sent.inputDigest).toEqual({
+      keyId: 'd1',
+      value: createHmac('sha256', subkey(KEY, 'care_assistant_message')).update(text).digest('hex'),
+    });
+    expect(sent.inputDigest.value).not.toBe(createHash('sha256').update(text).digest('hex'));
     // The key itself never travels to the AI service.
     const wire = JSON.stringify(sent);
     expect(wire).not.toContain(KEY.toString('hex'));
@@ -216,17 +276,61 @@ describe('message digest kept with the AI run record', () => {
       deps.logger.error.mock.calls,
     ]);
     expect(recorded).not.toContain('rash');
-    expect(recorded).not.toContain(sent.messageDigest);
+    expect(recorded).not.toContain(sent.inputDigest.value);
   });
 
-  it('derives a dedicated key from the clinical data key, and requires one', () => {
-    const kek = randomBytes(32);
-    const clinicalData = { currentKeyId: 'k1', keys: new Map([['k1', kek]]) };
-    const key = deriveMessageDigestKey(clinicalData);
-    expect(key).toHaveLength(32);
-    expect(key.equals(kek)).toBe(false); // purpose-separated, not the key-encryption key
-    expect(deriveMessageDigestKey(clinicalData).equals(key)).toBe(true); // stable
-    expect(() => deriveMessageDigestKey({ currentKeyId: 'k2', keys: new Map() })).toThrow();
-    expect(() => createAssistantService({ messageDigestKey: null })).toThrow(/digest key/);
+  it('separates purposes, is stable for one key, and changes with the key', () => {
+    const text = 'same words';
+    const values = AI_INPUT_DIGEST_PURPOSES.map((p) => DIGESTER.digest(p, text).value);
+    expect(new Set(values).size).toBe(AI_INPUT_DIGEST_PURPOSES.length);
+    expect(DIGESTER.digest('record_question', text)).toEqual(
+      DIGESTER.digest('record_question', text),
+    );
+    const rotated = createInputDigester({
+      currentKeyId: 'd2',
+      keys: new Map([['d2', randomBytes(32)]]),
+    }).digest('record_question', text);
+    expect(rotated.keyId).toBe('d2');
+    expect(rotated.value).not.toBe(DIGESTER.digest('record_question', text).value);
+    // Structured input is encoded as JSON (the follow-up summary's [id, texts]).
+    expect(DIGESTER.digest('follow_up_summary', ['f1', ['a', 'b']]).value).toBe(
+      createHmac('sha256', subkey(KEY, 'follow_up_summary'))
+        .update(JSON.stringify(['f1', ['a', 'b']]))
+        .digest('hex'),
+    );
+    expect(() => DIGESTER.digest('telemetry', text)).toThrow(/unknown/);
+    expect(() =>
+      createInputDigester({ currentKeyId: 'd1', keys: new Map([['d1', Buffer.alloc(16)]]) }),
+    ).toThrow(/32 bytes/);
+    expect(() => createAssistantService({ inputDigester: null })).toThrow(/digester/);
+  });
+
+  it('uses a dedicated secret: required outside development/test, never the clinical key', () => {
+    const issues = (env) => {
+      try {
+        loadConfig({ ...validEnv, ...env });
+        return [];
+      } catch (err) {
+        return err.issues.map((i) => i.variable);
+      }
+    };
+    expect(issues({ APP_ENV: 'staging' })).toContain('AI_INPUT_DIGEST_KEY');
+    expect(issues({ AI_INPUT_DIGEST_KEY: Buffer.alloc(16).toString('base64') })).toContain(
+      'AI_INPUT_DIGEST_KEY',
+    );
+    const key = randomBytes(32);
+    const config = loadConfig({
+      ...validEnv,
+      AI_INPUT_DIGEST_KEY: key.toString('base64'),
+      AI_INPUT_DIGEST_KEY_ID: 'd7',
+    });
+    expect(config.aiInputDigest.currentKeyId).toBe('d7');
+    expect(config.aiInputDigest.keys.get('d7').equals(key)).toBe(true);
+    // Without one (development/test): a random per-process key, unrelated to other secrets.
+    const dev = loadConfig(validEnv);
+    const devKey = dev.aiInputDigest.keys.get('d1');
+    expect(devKey).toHaveLength(32);
+    expect(devKey.equals(dev.clinicalData.keys.get('k1'))).toBe(false);
+    expect(devKey.equals(loadConfig(validEnv).aiInputDigest.keys.get('d1'))).toBe(false);
   });
 });

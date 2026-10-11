@@ -2,7 +2,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ASSISTANT_EMERGENCY_MESSAGE } from '@healthbridge/shared';
 import { withActor, withSystem } from '../../src/core/db/actorContext.js';
-import { deriveMessageDigestKey } from '../../src/modules/assistant/service.js';
+import { createInputDigester } from '../../src/core/crypto/inputDigest.js';
 import request from 'supertest';
 import { auditFor, authHeader, createHarness, createUser } from './harness.js';
 import {
@@ -295,6 +295,10 @@ describe('assistant sessions and the turn loop', () => {
       .set(authHeader(patient.session));
     expect(del.status).toBe(204);
     expect((await say(patient, s, 'hello')).body.code).toBe('assistant_session_ended');
+    // A possible emergency still gets the fixed guidance in an ended conversation.
+    const late = expectOk(await say(patient, s, 'I can’t breathe'));
+    expect(late.reply.kind).toBe('emergency');
+    expect(late.session.status).toBe('ended');
 
     // Expired sessions are refused and deleted by the retention sweep.
     const s2 = expectOk(await session(patient), 201);
@@ -362,20 +366,48 @@ describe('M13.1 pre-merge hardening', () => {
     calls.length = 0;
     const text = 'a general physician for my eczema please';
     expectOk(await say(patient, s, text));
-    const key = deriveMessageDigestKey(h.config.clinicalData);
-    expect(calls[0].messageDigest).toBe(createHmac('sha256', key).update(text).digest('hex'));
-    expect(calls[0].messageDigest).not.toBe(createHash('sha256').update(text).digest('hex'));
+    const key = h.config.aiInputDigest.keys.get(h.config.aiInputDigest.currentKeyId);
+    expect(calls[0].inputDigest).toEqual(
+      createInputDigester(h.config.aiInputDigest).digest('care_assistant_message', text),
+    );
+    expect(calls[0].inputDigest.value).not.toBe(createHash('sha256').update(text).digest('hex'));
+    expect(calls[0].inputDigest.value).not.toBe(
+      createHmac('sha256', key).update(text).digest('hex'),
+    );
     expect(JSON.stringify(calls)).not.toContain(key.toString('base64'));
     expect(JSON.stringify(calls)).not.toContain(key.toString('hex'));
     // Tool-result steps carry no message, so no digest either.
     expect(calls.length).toBeGreaterThan(1);
-    expect(calls.slice(1).every((c) => c.messageDigest === undefined)).toBe(true);
+    expect(calls.slice(1).every((c) => c.inputDigest === undefined)).toBe(true);
     // Nothing the backend stores or logs holds the message or its digest.
     const row = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
     const audits = await auditFor(h.ownerKnex, { resource_id: s.id });
     const stored = JSON.stringify([row, audits, h.logs]);
     expect(stored).not.toContain('eczema');
-    expect(stored).not.toContain(calls[0].messageDigest);
+    expect(stored).not.toContain(calls[0].inputDigest.value);
+  });
+
+  it('the database refuses an unkeyed digest of free text in AI run records', async () => {
+    const patient = await createPatient(h, 'asst-ai-runs');
+    const run = (workflow, extra) => ({
+      id: randomUUID(),
+      workflow,
+      patient_id: patient.patient.id,
+      status: 'ok',
+      input_hash: createHash('sha256').update('free text').digest('hex'),
+      ...extra,
+    });
+    for (const workflow of ['care_assistant', 'record_question', 'follow_up_summary']) {
+      await expect(h.ownerKnex('ai.ai_runs').insert(run(workflow))).rejects.toThrow(
+        /ai_runs_free_text_digest_keyed/,
+      );
+      await h.ownerKnex('ai.ai_runs').insert(run(workflow, { input_digest_key_id: 'd1' }));
+    }
+    // Identifier-only inputs (doctor brief) may keep a plain digest.
+    await h.ownerKnex('ai.ai_runs').insert(run('doctor_brief'));
+    await expect(
+      h.ownerKnex('ai.ai_runs').insert(run('care_assistant', { input_digest_key_id: 'Bad Id' })),
+    ).rejects.toThrow(/ai_runs_digest_key_id_format/);
   });
 
   it('RLS: a session can never name a patient unrelated to the user', async () => {

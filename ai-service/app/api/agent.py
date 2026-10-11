@@ -23,6 +23,7 @@ from app.agents.care_assistant import (
     parse_state,
 )
 from app.agents.care_prompts import CARE_PROMPT_VERSION
+from app.core.digest import InputDigest
 from app.core.errors import ProblemError
 from app.core.logging import log_event, request_id_ctx
 from app.core.metrics import AGENT_STEPS
@@ -45,7 +46,7 @@ class StepRequest(BaseModel):
     sessionId: Uuid
     message: Annotated[str, Field(min_length=1, max_length=500)] | None = None
     # HMAC-SHA256 of the message under a backend-only key; required with a message.
-    messageDigest: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    inputDigest: InputDigest | None = None
     state: dict[str, Any] = Field(default_factory=dict)
     toolResult: ToolResult | None = None
     toolsThisTurn: Annotated[list[ToolName], Field(max_length=MAX_TOOL_ROUNDS)] = []
@@ -61,7 +62,7 @@ async def step(body: StepRequest, scope: ScopeDep, request: Request) -> dict:
         raise ProblemError(
             400, "invalid_step", "Invalid step", "Send either a message or a tool result."
         )
-    if (body.message is None) != (body.messageDigest is None):
+    if (body.message is None) != (body.inputDigest is None):
         raise ProblemError(
             400, "invalid_step", "Invalid step", "A message step needs its digest (and only it)."
         )
@@ -102,7 +103,8 @@ async def step(body: StepRequest, scope: ScopeDep, request: Request) -> dict:
                 totals=totals,
                 started_at=started_wall,
                 prompt_version=CARE_PROMPT_VERSION,
-                input_hash=body.messageDigest,
+                input_hash=body.inputDigest.value if body.inputDigest else None,
+                input_digest_key_id=body.inputDigest.keyId if body.inputDigest else None,
                 validation="rejected" if error_kind else "schema_valid",
                 injection_flags=detect_injection(body.message),
                 error_kind=error_kind,

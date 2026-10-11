@@ -54,20 +54,21 @@ async def insert_run(
     totals: RunTotals,
     started_at: datetime,
     prompt_version: str,
-    input_hash: str,
+    input_hash: str | None,
     validation: str | None,
     injection_flags: list[str],
     error_kind: str | None,
     request_id: str | None,
+    input_digest_key_id: str | None = None,
 ) -> None:
     ended = datetime.now(UTC)
     await conn.execute(
         """INSERT INTO ai.ai_runs (id, workflow, agent, patient_id, provider, requested_model,
              model, status, error_kind, output_validation_status, prompt_version, input_hash,
-             llm_calls, input_tokens, output_tokens, cache_read_input_tokens,
+             input_digest_key_id, llm_calls, input_tokens, output_tokens, cache_read_input_tokens,
              cache_creation_input_tokens, estimated_cost_usd, latency_ms, injection_flags,
              request_id, started_at, ended_at)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
         (
             run_id,
             workflow,
@@ -81,6 +82,7 @@ async def insert_run(
             validation,
             prompt_version,
             input_hash,
+            input_digest_key_id,
             totals.calls,
             totals.input_tokens,
             totals.output_tokens,

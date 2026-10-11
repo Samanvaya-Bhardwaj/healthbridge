@@ -240,6 +240,10 @@
           "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:CLINICAL_DATA_KEY::"
         },
         {
+          "name": "AI_INPUT_DIGEST_KEY",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:AI_INPUT_DIGEST_KEY::"
+        },
+        {
           "name": "CLINICAL_DATA_PREVIOUS_KEYS",
           "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:healthbridge/${HB_ENV}:CLINICAL_DATA_PREVIOUS_KEYS::"
         },

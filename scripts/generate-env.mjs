@@ -138,6 +138,8 @@ const values = {
 
   // Consultations (ADR-0025): key-encryption key for clinical notes; mock video locally.
   CLINICAL_DATA_KEY: randomBytes(32).toString('base64'),
+  // AI run records: HMAC key for digests of free-text AI inputs (backend-only).
+  AI_INPUT_DIGEST_KEY: randomBytes(32).toString('base64'),
   VIDEO_PROVIDER: 'mock',
   // Local LiveKit server (`npm start -- --video` switches VIDEO_PROVIDER to livekit).
   LIVEKIT_URL: 'ws://localhost:7880',

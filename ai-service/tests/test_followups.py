@@ -1,3 +1,7 @@
+import hashlib
+import hmac
+import json
+import logging
 import uuid
 
 from fastapi.testclient import TestClient
@@ -22,6 +26,18 @@ FACTS = [
 ]
 
 
+# Stands in for the backend's key; the AI service itself never holds one.
+BACKEND_KEY = b"test-only backend digest key, never sent to the AI service"
+
+
+def keyed(data: str) -> dict:
+    """What the backend sends: HMAC-SHA256 under its own key, and the key's ID."""
+    return {
+        "keyId": "d1",
+        "value": hmac.new(BACKEND_KEY, data.encode(), hashlib.sha256).hexdigest(),
+    }
+
+
 def app_with(responses: dict | None = None):
     db = FakeDatabase()
     llm = FakeLLMProvider({**DEFAULT_HANDLERS, **(responses or {})})
@@ -44,6 +60,7 @@ def summarize(
             "followUpId": FOLLOW_UP,
             "doctorUserId": DOCTOR,
             "facts": [{"id": RESPONSE, "text": t} for t in facts],
+            "inputDigest": keyed(json.dumps([FOLLOW_UP, list(facts)])),
         },
         headers={
             "Authorization": f"Bearer {make_token()}",
@@ -119,3 +136,18 @@ def test_metrics_record_metadata_only() -> None:
     # No identifiers or patient content in metric labels.
     for secret in (PATIENT, FOLLOW_UP, DOCTOR, "cough", "breathing"):
         assert secret not in body
+
+
+def test_summary_run_keeps_the_backends_keyed_digest_never_plain_sha256(caplog) -> None:
+    app, db, _ = app_with()
+    caplog.set_level(logging.DEBUG)
+    with TestClient(app) as client:
+        assert summarize(client).status_code == 200
+    runs = [params for _, sql, params in db.statements if "INSERT INTO ai.ai_runs" in sql]
+    assert len(runs) == 1
+    sent = keyed(json.dumps([FOLLOW_UP, list(FACTS)]))
+    assert sent["value"] in runs[0] and sent["keyId"] in runs[0]
+    legacy = hashlib.sha256(json.dumps([FOLLOW_UP, list(FACTS)]).encode()).hexdigest()
+    assert legacy not in runs[0]
+    for fact in FACTS:
+        assert fact not in caplog.text

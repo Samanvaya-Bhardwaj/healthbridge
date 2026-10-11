@@ -284,6 +284,7 @@ describe('payment and notification configuration', () => {
     SMTP_HOST: 'smtp.example.test',
     // M9: a dedicated clinical data key and a real video provider (test-only values).
     CLINICAL_DATA_KEY: Buffer.alloc(32, 7).toString('base64'),
+    AI_INPUT_DIGEST_KEY: Buffer.alloc(32, 8).toString('base64'),
     VIDEO_PROVIDER: 'livekit',
     LIVEKIT_URL: 'wss://video.example.test',
     LIVEKIT_API_KEY: 'test-key',

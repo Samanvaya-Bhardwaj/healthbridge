@@ -18,7 +18,10 @@ const BRIEFABLE = ['pending_payment', 'confirmed', 'checked_in', 'in_consultatio
  * doctor (their consent's document types) and verified lab facts only — never unverified
  * proposals, intake reasons or other patients' data. Question text is never stored.
  */
-export function createAssistService({ knex, aiClient, accessPolicy, audit }) {
+export function createAssistService({ knex, aiClient, accessPolicy, audit, inputDigester }) {
+  if (typeof inputDigester?.digest !== 'function') {
+    throw new Error('assist: an AI input digester is required');
+  }
   async function context(trx, principal, patientId, req) {
     if (!isUuid(patientId)) throw new NotFoundError();
     const decision = await accessPolicy.enforce({
@@ -84,7 +87,14 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit }) {
     );
     if (!aiClient) throw new Error('AI service client not configured');
     const result = await aiClient.askRecord(
-      { patientId, question, documentIds: ctx.documentIds, facts: ctx.facts },
+      {
+        patientId,
+        question,
+        // Kept with the AI run instead of the question: a keyed digest, never plain SHA-256.
+        inputDigest: inputDigester.digest('record_question', question),
+        documentIds: ctx.documentIds,
+        facts: ctx.facts,
+      },
       { requestId: req?.id },
     );
     await audit.record(

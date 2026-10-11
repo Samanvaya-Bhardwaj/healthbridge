@@ -1,4 +1,3 @@
-import { createHmac, hkdfSync } from 'node:crypto';
 import { z } from 'zod';
 import {
   ASSISTANT_EMERGENCY_MESSAGE,
@@ -33,19 +32,6 @@ const EMERGENCY_REPLY = Object.freeze({
   cards: [],
   source: 'safety_rule',
 });
-
-/**
- * Key for the message digest kept with each AI run record (ADR-0012 reproducibility).
- * Derived from the backend-only clinical data key with its own HKDF label, the same
- * convention as the prescription integrity seal. The AI service never receives the key:
- * it is handed only the finished digest, so it cannot compute (or confirm a guess of) a
- * digest itself, and a plain SHA-256 dictionary lookup on stored digests is useless.
- */
-export function deriveMessageDigestKey({ currentKeyId, keys }) {
-  const kek = keys.get(currentKeyId);
-  if (!kek) throw new Error(`clinical data key ${currentKeyId} is not configured`);
-  return Buffer.from(hkdfSync('sha256', kek, 'healthbridge', 'assistant-message-digest', 32));
-}
 
 // The AI step's answer is checked like any untrusted input before it is used.
 const cardSchema = z.object({
@@ -92,14 +78,12 @@ export function createAssistantService({
   doctorService,
   availabilityService,
   logger,
-  messageDigestKey,
+  inputDigester,
   now = () => new Date(),
 }) {
-  if (!Buffer.isBuffer(messageDigestKey) || messageDigestKey.length < 32) {
-    throw new Error('assistant: a 32-byte message digest key is required');
+  if (typeof inputDigester?.digest !== 'function') {
+    throw new Error('assistant: an AI input digester is required');
   }
-  /** Keyed HMAC-SHA256 of the message, hex. The message itself is never stored. */
-  const messageDigest = (text) => createHmac('sha256', messageDigestKey).update(text).digest('hex');
 
   /** The acting patient: self, or a dependent the user guards (AccessPolicy decides). */
   async function authorizeScope(trx, principal, patientId, req) {
@@ -164,11 +148,17 @@ export function createAssistantService({
     });
   }
 
-  async function loadActive(trx, principal, sessionId, req) {
+  /**
+   * `allowEnded`: for possible-emergency messages only. The guidance is shown even in a
+   * conversation that has ended or expired; the session itself is not advanced (the
+   * conditional update refuses ended and expired rows). Access is still checked.
+   */
+  async function loadActive(trx, principal, sessionId, req, { allowEnded = false } = {}) {
     if (!isUuid(sessionId)) throw new NotFoundError();
     const row = await repository.find(trx, sessionId); // RLS: own sessions only
     if (!row) throw new NotFoundError();
-    if (row.status !== 'active' || new Date(row.expires_at) <= now()) {
+    const ended = row.status !== 'active' || new Date(row.expires_at) <= now();
+    if (ended && !allowEnded) {
       throw new ConflictError(
         'This conversation has ended. Start a new one.',
         'assistant_session_ended',
@@ -264,7 +254,10 @@ export function createAssistantService({
     try {
       const saved = await withActor(knex, principal.userId, async (trx) => {
         const advanced =
-          row.version === version && row.turn_count < MAX_TURNS
+          row.status === 'active' &&
+          new Date(row.expires_at) > now() &&
+          row.version === version &&
+          row.turn_count < MAX_TURNS
             ? await repository.advance(trx, row.id, version, { state: previous })
             : null;
         await audit.record(
@@ -305,7 +298,7 @@ export function createAssistantService({
     // Screened before anything that involves the AI service (deterministic, shared rule).
     const emergency = isPossibleAssistantEmergency(text);
     const loaded = await withActor(knex, principal.userId, (trx) =>
-      loadActive(trx, principal, sessionId, req),
+      loadActive(trx, principal, sessionId, req, { allowEnded: emergency }),
     );
     if (emergency) return emergencyTurn(principal, loaded, version, started, req);
     const { row, actingFor } = loaded;
@@ -342,7 +335,12 @@ export function createAssistantService({
       step = stepSchema.parse(
         await aiClient.agentStep(
           // The AI service records only this keyed digest with its run, never the text.
-          { ...base, message: text, messageDigest: messageDigest(text), state: previous },
+          {
+            ...base,
+            message: text,
+            inputDigest: inputDigester.digest('care_assistant_message', text),
+            state: previous,
+          },
           { requestId: req?.id },
         ),
       );

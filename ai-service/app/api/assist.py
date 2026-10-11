@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.assist_agent import build_answer_agent, build_brief_agent
 from app.agents.prompts import ASSIST_PROMPT_VERSION
+from app.core.digest import InputDigest
 from app.core.errors import ProblemError
 from app.core.logging import log_event, request_id_ctx
 from app.core.scope import PatientScope, ScopeDep
@@ -35,6 +36,8 @@ class Fact(BaseModel):
 class AnswerRequest(BaseModel):
     patientId: Uuid
     question: Annotated[str, Field(min_length=3, max_length=500)]
+    # The backend's keyed digest of the question (this service never hashes free text).
+    inputDigest: InputDigest
     documentIds: Annotated[list[Uuid], Field(max_length=200)] = []
     facts: Annotated[list[Fact], Field(max_length=60)] = []
 
@@ -71,6 +74,7 @@ async def _record(
     status: str,
     validation: str,
     input_hash: str,
+    input_digest_key_id: str | None,
     cited: list[dict[str, Any]],
     error_kind: str | None,
 ) -> None:
@@ -85,6 +89,7 @@ async def _record(
         started_at=started,
         prompt_version=ASSIST_PROMPT_VERSION,
         input_hash=input_hash,
+        input_digest_key_id=input_digest_key_id,
         validation=validation,
         injection_flags=[],
         error_kind=error_kind,
@@ -122,8 +127,7 @@ async def answer(body: AnswerRequest, scope: ScopeDep, request: Request) -> dict
         config={"configurable": {"thread_id": run_id}},
     )
     cited = [c for s in state["sentences"] for c in s["citations"]]
-    # Only a hash of the question is kept: the question text is never stored or logged.
-    input_hash = hashlib.sha256(body.question.encode()).hexdigest()
+    # Only the backend's keyed digest of the question is kept; never the text.
     async with db.patient_scope(scope.patient_id) as conn:
         await _record(
             conn,
@@ -137,7 +141,8 @@ async def answer(body: AnswerRequest, scope: ScopeDep, request: Request) -> dict
             validation="citations_valid"
             if state["status"] == "answered"
             else "insufficient_evidence",
-            input_hash=input_hash,
+            input_hash=body.inputDigest.value,
+            input_digest_key_id=body.inputDigest.keyId,
             cited=cited,
             error_kind=state.get("error_kind"),
         )
@@ -209,7 +214,9 @@ async def brief(body: BriefRequest, scope: ScopeDep, request: Request) -> dict:
             started=started,
             status="error" if state["status"] == "failed" else "ok",
             validation="citations_valid" if state["status"] == "ready" else "insufficient_evidence",
+            # Identifiers only (no free text), so a plain SHA-256 reveals nothing new.
             input_hash=input_hash,
+            input_digest_key_id=None,
             cited=cited,
             error_kind=state.get("error_kind"),
         )

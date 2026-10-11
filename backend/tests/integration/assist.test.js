@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createInputDigester } from '../../src/core/crypto/inputDigest.js';
 import { auditFor, createHarness } from './harness.js';
 import {
   api,
@@ -118,6 +120,16 @@ describe('record questions (patient-scoped RAG)', () => {
     const sent = ai.calls.slice(before).find((c) => c.kind === 'question');
     expect(sent.documentIds).toEqual([s.xray.id]);
     expect(sent.facts).toEqual([]); // lab values come from a lab report outside the consent
+    // The AI run keeps the backend's keyed digest of the question, never a plain SHA-256.
+    expect(sent.inputDigest).toEqual(
+      createInputDigester(h.config.aiInputDigest).digest(
+        'record_question',
+        'Secret question about WBC?',
+      ),
+    );
+    expect(sent.inputDigest.value).not.toBe(
+      createHash('sha256').update('Secret question about WBC?').digest('hex'),
+    );
     expect(res).toMatchObject({
       status: 'insufficient_information',
       answer: 'Insufficient information. Please consult the doctor.',

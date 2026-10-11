@@ -82,6 +82,8 @@ const values = {
   RAZORPAY_KEY_SECRET: '',
   CLINICAL_DATA_KEY: randomBytes(32).toString('base64'),
   CLINICAL_DATA_KEY_ID: 'k1',
+  AI_INPUT_DIGEST_KEY: randomBytes(32).toString('base64'),
+  AI_INPUT_DIGEST_KEY_ID: 'd1',
   VIDEO_PROVIDER: 'mock',
   LLM_PROVIDER: 'fake',
   LLM_EXTERNAL_PROCESSING_APPROVED: 'false',

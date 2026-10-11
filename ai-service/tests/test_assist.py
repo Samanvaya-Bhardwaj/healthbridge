@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import logging
 import uuid
 
 from fastapi.testclient import TestClient
@@ -33,6 +36,18 @@ CHUNKS = [
 ]
 
 
+# Stands in for the backend's key; the AI service itself never holds one.
+BACKEND_KEY = b"test-only backend digest key, never sent to the AI service"
+
+
+def keyed(data: str) -> dict:
+    """What the backend sends: HMAC-SHA256 under its own key, and the key's ID."""
+    return {
+        "keyId": "d1",
+        "value": hmac.new(BACKEND_KEY, data.encode(), hashlib.sha256).hexdigest(),
+    }
+
+
 def app_with(responses: dict | None = None):
     db = FakeDatabase()
     db.chunks = [dict(c) for c in CHUNKS]
@@ -61,6 +76,7 @@ def ask(
         json={
             "patientId": PATIENT,
             "question": question,
+            "inputDigest": keyed(question),
             "documentIds": list(docs),
             "facts": [{"id": f[0], "text": f[1]} for f in facts],
         },
@@ -243,3 +259,26 @@ class TestBrief:
         assert data["status"] == "insufficient_information"
         assert data["message"] == INSUFFICIENT
         assert llm.calls == []
+
+
+def test_record_question_run_keeps_the_backends_keyed_digest_never_plain_sha256(caplog) -> None:
+    question = "Why was my blood sugar flagged in August?"
+    app, db, _ = app_with()
+    caplog.set_level(logging.DEBUG)
+    with TestClient(app) as client:
+        assert ask(client, question).status_code == 200
+        missing = client.post(
+            "/v1/assist/answer",
+            json={"patientId": PATIENT, "question": question, "documentIds": []},
+            headers=headers("record_question", []),
+        )
+    assert missing.status_code == 422  # no digest, no run: this service never hashes text
+    runs = [params for _, sql, params in db.statements if "INSERT INTO ai.ai_runs" in sql]
+    assert len(runs) == 1
+    sent = keyed(question)
+    assert sent["value"] in runs[0] and sent["keyId"] in runs[0]
+    assert hashlib.sha256(question.encode()).hexdigest() not in runs[0]
+    # Persisted rows and logs only (the retrieval query is a read, never stored).
+    writes = [st for st in db.statements if st[1].startswith("INSERT")]
+    everything = repr(writes) + caplog.text
+    assert "blood sugar" not in everything and question not in everything

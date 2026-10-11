@@ -2,15 +2,18 @@
 
 import hashlib
 import hmac
+import json
 import logging
 import uuid
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.care_assistant import build_care_assistant, parse_state
-from app.agents.care_safety import is_possible_emergency
+from app.agents.care_safety import EMERGENCY_MESSAGE, is_possible_emergency
+from app.core.digest import InputDigest
 from app.embeddings import HashingEmbeddingProvider
 from app.llm.base import LLMError, LLMErrorKind, LLMProvider, LLMResponse, ModelTier
 from app.llm.fake_handlers import DEFAULT_HANDLERS
@@ -30,9 +33,16 @@ SPECIALTIES = ["General Medicine", "Dermatology", "Paediatrics", "Cardiology"]
 BACKEND_KEY = b"test-only backend digest key, never sent to the AI service"
 
 
-def digest(text: str) -> str:
-    """What the backend sends with a message: HMAC-SHA256 under its own key."""
-    return hmac.new(BACKEND_KEY, text.encode(), hashlib.sha256).hexdigest()
+def digest(text: str) -> dict:
+    """What the backend sends with a message: HMAC-SHA256 under its own key, and its ID."""
+    value = hmac.new(BACKEND_KEY, text.encode(), hashlib.sha256).hexdigest()
+    return InputDigest(keyId="d1", value=value).model_dump()
+
+
+# Shared with the backend's screening test: both implementations must agree on each case.
+SCREENING_CASES = json.loads(
+    (Path(__file__).parent / "fixtures" / "emergency_cases.json").read_text(encoding="utf-8")
+)
 
 
 def context(acting_for: str = "self") -> dict:
@@ -83,7 +93,7 @@ def run_turn(client, message: str, tools: dict, state: dict | None = None, actin
             "patientId": PATIENT,
             "sessionId": SESSION,
             "message": message,
-            "messageDigest": digest(message),
+            "inputDigest": digest(message),
             "state": state or {},
             "context": context(acting),
         },
@@ -206,6 +216,26 @@ def test_emergency_wording(text):
 
 def test_ordinary_requests_are_not_emergencies():
     assert not is_possible_emergency("I want a dermatologist tomorrow evening")
+
+
+@pytest.mark.parametrize("text", SCREENING_CASES["emergency"])
+def test_shared_cases_flag_emergencies_across_apostrophes_case_and_punctuation(text):
+    assert is_possible_emergency(text)
+
+
+@pytest.mark.parametrize("text", SCREENING_CASES["not_emergency"])
+def test_shared_cases_leave_ordinary_requests_alone(text):
+    assert not is_possible_emergency(text)
+
+
+@pytest.mark.parametrize("text", ["I can\u2019t breathe", "CHEST\u00a0PAIN!"])
+def test_curly_or_spaced_emergency_wording_never_reaches_the_model(text):
+    app, _, llm = app_with()
+    with TestClient(app) as client:
+        body, executed = run_turn(client, text, TOOLS)
+    assert executed == []
+    assert body["reply"] == {"kind": "emergency", "message": EMERGENCY_MESSAGE, "cards": []}
+    assert llm.calls == []
 
 
 def test_prompt_injection_cannot_add_tools_or_switch_patient():
@@ -350,7 +380,7 @@ def test_requires_the_care_assistant_scope_for_the_same_patient():
         base = {
             "sessionId": SESSION,
             "message": "hi",
-            "messageDigest": digest("hi"),
+            "inputDigest": digest("hi"),
             "context": context(),
         }
         wrong_purpose = client.post(
@@ -410,12 +440,13 @@ def test_run_record_keeps_the_backends_keyed_digest_never_the_text_or_plain_sha2
     app, db, _ = app_with()
     caplog.set_level(logging.DEBUG)
     with TestClient(app) as client:
-        res = step(client, message=message, messageDigest=digest(message))
+        res = step(client, message=message, inputDigest=digest(message))
     assert res.status_code == 200, res.text
     runs = [params for _, sql, params in db.statements if "INSERT INTO ai.ai_runs" in sql]
     assert len(runs) == 1
     stored = runs[0]
-    assert digest(message) in stored  # exactly what the backend sent
+    sent = digest(message)
+    assert sent["value"] in stored and sent["keyId"] in stored  # exactly what was sent
     assert hashlib.sha256(message.encode()).hexdigest() not in stored  # not a plain digest
     everything = repr(db.statements) + caplog.text
     for fragment in ("rash", "July", message):
@@ -426,10 +457,10 @@ def test_a_message_step_must_carry_a_well_formed_digest_and_only_with_a_message(
     app, _, _ = app_with()
     with TestClient(app) as client:
         missing = step(client, message="hello")
-        plain = step(client, message="hello", messageDigest="not-a-digest")
+        plain = step(client, message="hello", inputDigest={"keyId": "d1", "value": "x"})
         stray = step(
             client,
-            messageDigest=digest("hello"),
+            inputDigest=digest("hello"),
             toolResult={"name": "searchDoctors", "ok": True, "data": {}},
         )
     assert missing.status_code == 400

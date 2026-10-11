@@ -140,6 +140,7 @@ describe('SMTP transport (M12)', () => {
       DOCUMENT_SCANNER: 'clamav',
       CLAMAV_HOST: 'clamav',
       CLINICAL_DATA_KEY: Buffer.alloc(32, 3).toString('base64'),
+      AI_INPUT_DIGEST_KEY: Buffer.alloc(32, 4).toString('base64'),
     });
     expect(staging.mail.requireTls).toBe(true);
     expect(() => loadConfig({ ...validEnv, SMTP_USER: 'only-user' })).toThrow(/SMTP_PASSWORD/);

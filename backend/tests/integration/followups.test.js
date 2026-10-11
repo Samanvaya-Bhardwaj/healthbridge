@@ -13,6 +13,7 @@ import {
 import { outboxOf } from './m4fixtures.js';
 import { asUser } from './m5fixtures.js';
 import { stubAiClient } from './m6fixtures.js';
+import { createInputDigester } from '../../src/core/crypto/inputDigest.js';
 import { templateForEvent } from '../../src/modules/notifications/notificationService.js';
 
 let offsetMs = 0;
@@ -226,6 +227,14 @@ describe('check-ins', () => {
         })
       ).outcome,
     ).toBe('summarized');
+    // The AI run keeps a keyed digest of the facts (they include the patient's note).
+    const sent = ai.calls.filter((c) => c.followUpId === f.id).at(-1);
+    expect(sent.inputDigest).toEqual(
+      createInputDigester(h.config.aiInputDigest).digest('follow_up_summary', [
+        f.id,
+        sent.facts.map((x) => x.text),
+      ]),
+    );
 
     const forDoctor = expectOk(await api(h, doctor).get(`/follow-ups/${f.id}`));
     expect(forDoctor.response).toMatchObject({

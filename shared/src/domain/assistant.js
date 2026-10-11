@@ -155,7 +155,23 @@ export const ASSISTANT_EMERGENCY_MESSAGE =
   'If this might be an emergency, call 112 or 108 now, or go to the nearest emergency ' +
   "department. Don't wait for an online consultation.";
 
+/**
+ * Matching normalisation, mirrored exactly from care_safety.py (constants and shared test
+ * cases are checked by a backend test): apostrophe look-alikes people type (curly quotes,
+ * modifier letter, prime, backtick, acute, fullwidth) become "'", then Unicode NFKC folds
+ * compatibility forms (fullwidth letters, no-break spaces), then any run of whitespace
+ * becomes one space. The patterns themselves are unchanged.
+ */
+export const ASSISTANT_EMERGENCY_APOSTROPHES = '‘’‛ʼʹ′`´＇';
+export const ASSISTANT_EMERGENCY_WHITESPACE = ' \t\n\r\f\v\u0085  ';
+const APOSTROPHE_LIKE = new RegExp(`[${ASSISTANT_EMERGENCY_APOSTROPHES}]`, 'g');
+const SPACES = new RegExp(`[${ASSISTANT_EMERGENCY_WHITESPACE}]+`, 'g');
+
+export function normalizeForEmergencyScreening(text) {
+  return text.replace(APOSTROPHE_LIKE, "'").normalize('NFKC').replace(SPACES, ' ');
+}
+
 /** True when the text may describe an emergency (deterministic; no model involved). */
 export function isPossibleAssistantEmergency(text) {
-  return typeof text === 'string' && EMERGENCY_PATTERN.test(text);
+  return typeof text === 'string' && EMERGENCY_PATTERN.test(normalizeForEmergencyScreening(text));
 }

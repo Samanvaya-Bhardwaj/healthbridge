@@ -63,6 +63,24 @@ describe('ECS task definitions (M12)', () => {
     expect(api.image).toBe(`${ENV.IMAGE_REGISTRY}/healthbridge-backend:v1.0.0`);
   });
 
+  it('give the AI input digest key to the backend only, never to the AI service', () => {
+    const names = (file) =>
+      renderAll(ENV)
+        .find((r) => r.file === file)
+        .def.containerDefinitions.flatMap((c) => [...(c.secrets ?? []), ...(c.environment ?? [])])
+        .map((s) => s.name);
+    for (const file of ['api.json', 'worker.json', 'migrate.json']) {
+      expect(names(file)).toContain('AI_INPUT_DIGEST_KEY');
+    }
+    expect(names('ai-service.json')).not.toContain('AI_INPUT_DIGEST_KEY');
+    expect(names('ai-service.json')).not.toContain('CLINICAL_DATA_KEY');
+    for (const path of ['../../../docker-compose.yml', '../../../infra/deploy/compose.prod.yml']) {
+      const compose = readFileSync(new URL(path, import.meta.url), 'utf8');
+      const aiService = compose.split(/^ {2}ai-service:$/m)[1].split(/^ {2}[a-z][a-z0-9-]*:$/m)[0];
+      expect(aiService).not.toMatch(/AI_INPUT_DIGEST_KEY|CLINICAL_DATA_KEY|backend-env/);
+    }
+  });
+
   it('refuse missing values and plain-text secrets', () => {
     const { IMAGE_TAG: _omit, ...partial } = ENV;
     expect(() => renderAll(partial)).toThrow(/missing values: IMAGE_TAG/);

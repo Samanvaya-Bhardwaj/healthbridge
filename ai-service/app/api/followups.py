@@ -5,7 +5,6 @@ The result is cited and validated, stored in `ai.follow_up_summaries`, shown onl
 doctor and labelled as AI-generated. It never contacts the patient and never escalates.
 """
 
-import hashlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -16,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.assist_agent import build_followup_agent
 from app.agents.prompts import FOLLOWUP_PROMPT_VERSION
+from app.core.digest import InputDigest
 from app.core.errors import ProblemError
 from app.core.logging import log_event, request_id_ctx
 from app.core.scope import ScopeDep
@@ -41,6 +41,8 @@ class SummaryRequest(BaseModel):
     followUpId: Uuid
     doctorUserId: Uuid
     facts: Annotated[list[CheckInFact], Field(max_length=12)] = []
+    # The backend's keyed digest of the input (this service never hashes free text).
+    inputDigest: InputDigest
 
 
 @router.post("/summary")
@@ -59,10 +61,7 @@ async def summary(body: SummaryRequest, scope: ScopeDep, request: Request) -> di
         {"run_id": run_id, "request_id": request_id_ctx.get(), "sources": sources},
         config={"configurable": {"thread_id": run_id}},
     )
-    # Only a hash of the input is kept with the run; the facts are not logged.
-    input_hash = hashlib.sha256(
-        json.dumps([body.followUpId, [f.text for f in body.facts]]).encode()
-    ).hexdigest()
+    # Only the backend's keyed digest of the input is kept with the run; never the facts.
     summary_id = ai_store.new_id()
     async with db.patient_scope(scope.patient_id) as conn:
         await ai_store.insert_run(
@@ -75,7 +74,8 @@ async def summary(body: SummaryRequest, scope: ScopeDep, request: Request) -> di
             totals=totals,
             started_at=started,
             prompt_version=FOLLOWUP_PROMPT_VERSION,
-            input_hash=input_hash,
+            input_hash=body.inputDigest.value,
+            input_digest_key_id=body.inputDigest.keyId,
             validation="citations_valid" if state["status"] == "ready" else "insufficient_evidence",
             injection_flags=[],
             error_kind=state.get("error_kind"),

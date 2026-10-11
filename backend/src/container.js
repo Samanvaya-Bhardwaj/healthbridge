@@ -46,7 +46,8 @@ import { createIntelligenceService } from './modules/intelligence/service.js';
 import { createTimelineProjector } from './modules/timeline/projector.js';
 import { createTimelineService } from './modules/timeline/service.js';
 import { createAssistService } from './modules/assist/service.js';
-import { createAssistantService, deriveMessageDigestKey } from './modules/assistant/service.js';
+import { createAssistantService } from './modules/assistant/service.js';
+import { createInputDigester } from './core/crypto/inputDigest.js';
 import { createAssistantRepository } from './modules/assistant/repository.js';
 import { createEnvelope } from './core/crypto/envelope.js';
 import { createVideoProvider } from './modules/consultations/videoProvider.js';
@@ -273,7 +274,9 @@ export function createContainer({
   const accessLogService = createAccessLogService({ knex, accessPolicy });
   const timelineProjector = createTimelineProjector({ knex, logger });
   const timelineService = createTimelineService({ knex, accessPolicy, audit });
-  const assistService = createAssistService({ knex, aiClient, accessPolicy, audit });
+  // Keyed digests of free-text AI inputs for AI run records (backend-only key).
+  const inputDigester = createInputDigester(config.aiInputDigest);
+  const assistService = createAssistService({ knex, aiClient, accessPolicy, audit, inputDigester });
   // M13.1: the care assistant orchestrates existing read services; the AI only plans.
   const assistantService = createAssistantService({
     knex,
@@ -285,7 +288,7 @@ export function createContainer({
     doctorService,
     availabilityService,
     logger,
-    messageDigestKey: deriveMessageDigestKey(config.clinicalData),
+    inputDigester,
     ...(now ? { now } : {}),
   });
   const envelope = createEnvelope(config.clinicalData);
@@ -303,6 +306,7 @@ export function createContainer({
     audit,
     envelope,
     aiClient,
+    inputDigester,
     logger,
     ...(now ? { now } : {}),
   });

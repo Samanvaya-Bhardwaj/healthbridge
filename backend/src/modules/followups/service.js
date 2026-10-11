@@ -47,9 +47,13 @@ export function createFollowUpService({
   audit,
   envelope,
   aiClient,
+  inputDigester,
   logger,
   now = () => new Date(),
 }) {
+  if (typeof inputDigester?.digest !== 'function') {
+    throw new Error('followups: an AI input digester is required');
+  }
   function view(row, { response = null, summary = null, party } = {}) {
     return {
       id: row.id,
@@ -461,6 +465,8 @@ export function createFollowUpService({
         followUpId: f.id,
         doctorUserId: f.doctor_user_id,
         facts,
+        // Kept with the AI run instead of the facts (which include the patient's note).
+        inputDigest: inputDigester.digest('follow_up_summary', [f.id, facts.map((x) => x.text)]),
       },
       { requestId },
     );

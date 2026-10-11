@@ -97,6 +97,14 @@ const envSchema = z
       .default('k1'),
     // Previous keys during rotation: "keyId:base64,keyId:base64".
     CLINICAL_DATA_PREVIOUS_KEYS: csv.default([]),
+    // HMAC key (base64, 32 bytes) for the keyed digests of free-text AI inputs kept with
+    // AI run records (ADR-0012, ADR-0029). Backend-only: never sent to the AI service.
+    // Required outside development/test; there a random per-process key is used.
+    AI_INPUT_DIGEST_KEY: optional(z.base64()),
+    AI_INPUT_DIGEST_KEY_ID: z
+      .string()
+      .regex(/^[a-z0-9_-]{1,32}$/)
+      .default('d1'),
 
     // ── Authentication (ADR-0015) ──
     // Ed25519 private key, PKCS#8 PEM, base64-encoded onto one line.
@@ -247,6 +255,16 @@ const envSchema = z
     }
     if (env.CLINICAL_DATA_KEY && Buffer.from(env.CLINICAL_DATA_KEY, 'base64').length !== 32) {
       ctx.addIssue({ code: 'custom', path: ['CLINICAL_DATA_KEY'], message: 'must be 32 bytes' });
+    }
+    if (['staging', 'production'].includes(env.APP_ENV) && !env.AI_INPUT_DIGEST_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AI_INPUT_DIGEST_KEY'],
+        message: 'a dedicated AI input digest key is required outside development/test',
+      });
+    }
+    if (env.AI_INPUT_DIGEST_KEY && Buffer.from(env.AI_INPUT_DIGEST_KEY, 'base64').length !== 32) {
+      ctx.addIssue({ code: 'custom', path: ['AI_INPUT_DIGEST_KEY'], message: 'must be 32 bytes' });
     }
     if (env.APP_ENV === 'production' && env.VIDEO_PROVIDER === 'mock') {
       ctx.addIssue({
@@ -454,6 +472,17 @@ export function loadConfig(env = process.env) {
     },
     // Map of Buffers (not frozen by deepFreeze).
     clinicalData: loadClinicalKeys(e),
+    // Map with one Buffer: the current AI input digest key (no previous keys are needed:
+    // digests are never verified, only stored with the key ID that produced them).
+    aiInputDigest: {
+      currentKeyId: e.AI_INPUT_DIGEST_KEY_ID,
+      keys: new Map([
+        [
+          e.AI_INPUT_DIGEST_KEY_ID,
+          e.AI_INPUT_DIGEST_KEY ? Buffer.from(e.AI_INPUT_DIGEST_KEY, 'base64') : randomBytes(32),
+        ],
+      ]),
+    },
     auth: {
       // KeyObjects are not frozen (deepFreeze skips non-plain objects).
       signingKeys: keys,
