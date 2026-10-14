@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DOCTOR_SPECIALTIES, PRACTICE_AREA_CODES } from './doctorSearch.js';
 
 /**
  * Care assistant contracts (M13, ADR-0029).
@@ -9,22 +10,7 @@ import { z } from 'zod';
  */
 
 /** Kinds of doctor the assistant can look for (the backend sends this list to the AI). */
-export const ASSISTANT_SPECIALTIES = Object.freeze([
-  'General Medicine',
-  'Family Medicine',
-  'Dermatology',
-  'Paediatrics',
-  'Gynaecology',
-  'Cardiology',
-  'Orthopaedics',
-  'ENT',
-  'Ophthalmology',
-  'Psychiatry',
-  'Neurology',
-  'Gastroenterology',
-  'Endocrinology',
-  'Pulmonology',
-]);
+export const ASSISTANT_SPECIALTIES = DOCTOR_SPECIALTIES;
 
 export const ASSISTANT_INTENTS = Object.freeze([
   'find_doctor',
@@ -82,6 +68,8 @@ const uuid = z.uuid();
 export const assistantCriteriaSchema = z
   .object({
     specialty: z.enum(ASSISTANT_SPECIALTIES).nullable().default(null),
+    // M13.2: areas of practice (a doctor's listed focus), only those that fit the specialty.
+    areas: z.array(z.enum(PRACTICE_AREA_CODES)).max(3).default([]),
     consultationMode: z.enum(['online', 'in_clinic']).nullable().default(null),
     // A calendar day the backend resolved in the user's time zone.
     date: isoDay.nullable().default(null),

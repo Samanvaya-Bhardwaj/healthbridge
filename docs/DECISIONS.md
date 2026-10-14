@@ -36,5 +36,6 @@ old one.
 | [0027](adr/0027-admin-observability-account-recovery.md) | Admin UI (users, audit viewer, operations); read-only loopback Bull Board; Prometheus/Grafana profile and AI metrics; content-free browser error reports; password reset and email verification with fragment-delivered single-use tokens | Accepted |
 | [0029](adr/0029-agentic-ai-orchestration.md) | Agentic care assistant: backend-owned turn loop over a bounded LangGraph planner; allow-listed backend tools on existing services; structured 24 h state, never transcripts; approval before any write (M13.4) | Accepted |
 | [0030](adr/0030-one-eligibility-rule.md) | One eligibility rule (doctor account, profile, verification; open practice site) in PostgreSQL for the directory, slots and booking; a booking guard under row locks; ineligible future bookings withdrawn by the system with a full refund | Accepted |
+| [0031](adr/0031-doctor-search.md) | Doctor search: shared specialty terms and areas of practice (database copies checked against them); one SQL search with hard filters (eligibility, specialty, city, language, mode, name), a deterministic ranking and reasons; no-match told apart from search unavailable | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

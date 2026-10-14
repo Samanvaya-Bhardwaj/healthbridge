@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   DOCTOR_REGISTRATION_FIELDS,
+  PRACTICE_AREAS,
+  canonicalSpecialties,
   doctorProfileSchema,
   doctorProfileUpdateSchema,
 } from '@healthbridge/shared';
@@ -55,6 +57,7 @@ const toForm = (p) => ({
   institution: p?.qualifications?.[0]?.institution ?? '',
   qualificationYear: p?.qualifications?.[0]?.year ?? '',
   languages: p?.languages?.join(', ') ?? '',
+  areasOfPractice: p?.areasOfPractice ?? [],
   bio: p?.bio ?? '',
 });
 
@@ -73,8 +76,46 @@ const fromForm = (v) => ({
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  areasOfPractice: [v.areasOfPractice ?? []].flat().filter(Boolean),
   bio: v.bio,
 });
+
+/**
+ * Areas of practice (M13.2): what the doctor chooses to be found for. Areas that fit the
+ * speciality come first; the rest are one click away. Never a patient's condition.
+ */
+function AreasOfPractice({ register, speciality, selected, error }) {
+  const mine = canonicalSpecialties(speciality ?? '');
+  const fits = (a) => a.specialties.some((s) => mine.includes(s));
+  const first = PRACTICE_AREAS.filter((a) => fits(a) || selected.includes(a.code));
+  const rest = PRACTICE_AREAS.filter((a) => !first.includes(a));
+  const box = (a) => (
+    <label key={a.code} className="flex items-center gap-2 text-sm text-text">
+      <input type="checkbox" value={a.code} {...register('areasOfPractice')} />
+      {a.label}
+    </label>
+  );
+  return (
+    <fieldset>
+      <legend className="mb-1 text-sm font-semibold text-text">Areas of practice (optional)</legend>
+      <p className="mb-3 text-sm text-text-muted">
+        Up to 8 areas you want patients to find you for. They appear on your profile.
+      </p>
+      {first.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">{first.map(box)}</div>
+      )}
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm font-medium text-primary">More areas</summary>
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">{rest.map(box)}</div>
+      </details>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          Choose at most 8 areas from the list.
+        </p>
+      )}
+    </fieldset>
+  );
+}
 
 function DoctorForm({ profile, onSaved }) {
   const [message, setMessage] = useState(null);
@@ -83,6 +124,7 @@ function DoctorForm({ profile, onSaved }) {
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: toForm(profile),
@@ -107,6 +149,8 @@ function DoctorForm({ profile, onSaved }) {
     },
   });
 
+  const speciality = useWatch({ control, name: 'primarySpecialization' });
+  const chosenAreas = useWatch({ control, name: 'areasOfPractice' });
   const extraQualifications = profile?.qualifications?.slice(1) ?? [];
   const onSubmit = async (values) => {
     setMessage(null);
@@ -170,6 +214,12 @@ function DoctorForm({ profile, onSaved }) {
         </label>
         <textarea id="doctor-bio" rows={3} className={controlClass()} {...register('bio')} />
       </div>
+      <AreasOfPractice
+        register={register}
+        speciality={speciality}
+        selected={[chosenAreas ?? []].flat()}
+        error={errors.areasOfPractice}
+      />
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? 'Saving…' : profile ? 'Save changes' : 'Create doctor profile'}
       </Button>

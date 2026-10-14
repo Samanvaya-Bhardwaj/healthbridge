@@ -5,12 +5,23 @@ import {
   VERIFICATION_REASON_CODES,
   doctorProfileSchema,
   doctorProfileUpdateSchema,
+  doctorSearchCriteriaSchema,
   verificationDecisionSchema,
 } from '@healthbridge/shared';
 import { validate } from '../../core/http/validate.js';
 import { paginationQuery } from '../../core/http/pagination.js';
 
 const idParam = (name) => z.object({ [name]: z.string().max(64) });
+
+// M13.2: query-string form of the shared search criteria (areas as a comma list).
+const searchQuery = z.preprocess(
+  (q) => ({
+    ...q,
+    ...(typeof q?.areas === 'string' ? { areas: q.areas.split(',').filter(Boolean) } : {}),
+    ...(typeof q?.limit === 'string' ? { limit: Number(q.limit) } : {}),
+  }),
+  doctorSearchCriteriaSchema.omit({ excludeDoctorIds: true }),
+);
 
 const directoryQuery = z
   .object({
@@ -40,7 +51,8 @@ const suspendBody = z
  * @param {ReturnType<typeof import('../../container.js').createContainer>} container
  */
 export function doctorRoutes(container) {
-  const { authenticate, accessPolicy, doctorService, clinicService } = container;
+  const { authenticate, accessPolicy, doctorService, doctorSearchService, clinicService } =
+    container;
   const router = Router();
   const can = (permission, options) => [
     authenticate(),
@@ -93,6 +105,11 @@ export function doctorRoutes(container) {
   router.get('/doctors', directory, validate({ query: directoryQuery }), async (req, res) => {
     const page = await doctorService.directory(req.valid.query);
     res.json({ data: page.items, meta: { nextCursor: page.nextCursor } });
+  });
+  // Structured search with match reasons (eligible doctors only; ADR-0030).
+  router.get('/doctors/search', directory, validate({ query: searchQuery }), async (req, res) => {
+    const result = await doctorSearchService.search(req.valid.query);
+    res.json({ data: result.doctors, meta: { status: result.status } });
   });
   router.get(
     '/doctors/:doctorId',

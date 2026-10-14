@@ -68,6 +68,25 @@ describe('assistant tool registry', () => {
         return { id, professionalName: 'Dr. Synthetic', primarySpecialization: 'Dermatology' };
       }),
     },
+    doctorSearchService: {
+      search: vi.fn(async (criteria, { careTeamDoctorIds }) => ({
+        status: 'ok',
+        doctors: [
+          {
+            id: DOCTOR,
+            professionalName: 'Dr. Synthetic',
+            primarySpecialization: 'Dermatology',
+            languages: ['Hindi'],
+            modes: ['online'],
+            clinics: [],
+            reasons: [
+              { code: 'specialty', value: criteria.specialty },
+              ...(careTeamDoctorIds.includes(DOCTOR) ? [{ code: 'care_team', value: null }] : []),
+            ],
+          },
+        ],
+      })),
+    },
     availabilityService: { slots: vi.fn(async () => []) },
     ...overrides,
   });
@@ -93,21 +112,52 @@ describe('assistant tool registry', () => {
     });
   });
 
-  it('filters search by language and marks care-team doctors; returns no patient data', async () => {
-    const tools = ctx(deps());
+  it('searches with the shared criteria and the care team; returns no patient data', async () => {
+    const d = deps();
+    const tools = ctx(d);
     const res = await tools.execute('searchDoctors', {
       specialty: 'Dermatology',
       language: 'Hindi',
+      city: 'Pune',
+      mode: 'online',
+      areas: ['acne'],
     });
+    expect(d.doctorSearchService.search).toHaveBeenCalledWith(
+      {
+        specialty: 'Dermatology',
+        language: 'Hindi',
+        city: 'Pune',
+        mode: 'online',
+        areas: ['acne'],
+        limit: 10,
+      },
+      { careTeamDoctorIds: [DOCTOR] },
+    );
     expect(res).toEqual({
       ok: true,
       data: {
+        status: 'ok',
         doctors: [
-          { doctorId: DOCTOR, specialty: 'Dermatology', languages: ['Hindi'], inCareTeam: true },
+          {
+            doctorId: DOCTOR,
+            specialty: 'Dermatology',
+            languages: ['Hindi'],
+            modes: ['online'],
+            inCareTeam: true,
+            reasons: ['specialty', 'care_team'],
+          },
         ],
       },
     });
-    expect(tools.evidence.doctors.get(DOCTOR).professionalName).toBe('Dr. Synthetic');
+    // The card shows backend data, including why the doctor was suggested.
+    expect(tools.evidence.doctors.get(DOCTOR)).toMatchObject({
+      professionalName: 'Dr. Synthetic',
+      modes: ['online'],
+      reasons: [
+        { code: 'specialty', value: 'Dermatology' },
+        { code: 'care_team', value: null },
+      ],
+    });
   });
 
   it('refuses unknown tools, bad arguments, missing permission and maps domain errors', async () => {
@@ -118,20 +168,34 @@ describe('assistant tool registry', () => {
     const tools = ctx(deps());
     expect((await tools.execute('cancelAppointment', {})).errorCode).toBe('tool_unknown');
     expect((await tools.execute('__proto__', {})).errorCode).toBe('tool_unknown');
-    expect((await tools.execute('searchDoctors', {})).errorCode).toBe('tool_invalid_arguments');
-    expect((await tools.execute('searchDoctors', { specialty: 'Astrology' })).errorCode).toBe(
-      'tool_invalid_arguments',
-    );
+    // No criteria is a broad search of eligible doctors (public data), not an error.
+    expect((await tools.execute('searchDoctors', {})).ok).toBe(true);
+    for (const bad of [
+      { specialty: 'Astrology' },
+      { areas: ['bogus'] },
+      { city: 'Pune; DROP' },
+      { language: 'Hindi', patientId: OTHER },
+      { limit: 500 },
+    ]) {
+      expect((await tools.execute('searchDoctors', bad)).errorCode).toBe('tool_invalid_arguments');
+    }
     expect((await tools.execute('getDoctorProfile', { doctorId: OTHER })).errorCode).toBe(
       'not_found',
     );
   });
 
-  it('never throws on unexpected failures', async () => {
-    const tools = ctx(
-      deps({ doctorService: { directory: async () => Promise.reject(new Error('db down')) } }),
+  it('never throws on unexpected failures; a failed search is told apart from no match', async () => {
+    const down = ctx(
+      deps({ doctorSearchService: { search: async () => Promise.reject(new Error('db down')) } }),
     );
-    expect(await tools.execute('searchDoctors', { specialty: 'Dermatology' })).toEqual({
+    expect(await down.execute('searchDoctors', { specialty: 'Dermatology' })).toEqual({
+      ok: false,
+      errorCode: 'search_unavailable',
+    });
+    const slotsDown = ctx(
+      deps({ availabilityService: { slots: async () => Promise.reject(new Error('db down')) } }),
+    );
+    expect(await slotsDown.execute('findAvailableSlots', { doctorId: DOCTOR })).toEqual({
       ok: false,
       errorCode: 'tool_failed',
     });

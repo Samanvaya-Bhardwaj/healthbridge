@@ -30,6 +30,22 @@ DERM_IN_TEAM = str(uuid.uuid4())
 DERM_NEW = str(uuid.uuid4())
 TODAY = date(2026, 10, 9)  # a Friday
 SPECIALTIES = ["General Medicine", "Dermatology", "Paediatrics", "Cardiology"]
+# A slice of the backend's areas of practice (@healthbridge/shared PRACTICE_AREAS).
+AREAS = [
+    {"code": "acne", "label": "Acne", "specialties": ["Dermatology"]},
+    {"code": "eczema", "label": "Eczema and dermatitis", "specialties": ["Dermatology"]},
+    {"code": "heart_rhythm", "label": "Heart rhythm", "specialties": ["Cardiology"]},
+    {
+        "code": "fever_infections",
+        "label": "Fever and infections",
+        "specialties": ["General Medicine"],
+    },
+    {
+        "code": "childhood_infections",
+        "label": "Childhood infections",
+        "specialties": ["Paediatrics"],
+    },
+]
 # Stands in for the backend's key; the AI service itself never holds one.
 BACKEND_KEY = b"test-only backend digest key, never sent to the AI service"
 
@@ -57,6 +73,7 @@ def context(acting_for: str = "self") -> dict:
         "weekdays": weekdays,
         "horizon": (TODAY + timedelta(days=60)).isoformat(),
         "specialties": SPECIALTIES,
+        "areas": AREAS,
         "actingFor": acting_for,
     }
 
@@ -325,6 +342,7 @@ def test_values_outside_the_form_are_dropped():
     crit = body["state"]["criteria"]
     assert crit == {
         "specialty": None,
+        "areas": [],
         "consultationMode": None,
         "date": None,
         "timeWindow": None,
@@ -508,3 +526,99 @@ def test_the_message_cannot_close_or_reopen_its_delimiters(text):
     assert block.count("<message>") == 1
     assert body.endswith("\n</message>")
     assert "message" not in body[: -len("\n</message>")].lower()
+
+
+# ── M13.2: areas of practice, every criterion in the search, distinct outcomes ──────
+
+
+def _search_args(tools: dict) -> list[dict]:
+    seen: list[dict] = []
+    wrapped = dict(tools)
+    original = tools["searchDoctors"]
+
+    def search(args):
+        seen.append(args)
+        return original(args)
+
+    wrapped["searchDoctors"] = search
+    return seen, wrapped
+
+
+def test_wording_that_fits_an_area_searches_with_it():
+    app, _, _ = app_with()
+    seen, tools = _search_args(TOOLS)
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "I have pimples on my face, need a skin doctor", tools)
+    assert body["state"]["criteria"]["specialty"] == "Dermatology"
+    assert body["state"]["criteria"]["areas"] == ["acne"]
+    assert seen == [{"specialty": "Dermatology", "areas": ["acne"]}]
+    assert "who list Acne" in body["reply"]["message"]
+    assert "acne" not in body["reply"]["message"].lower().replace("list acne", "")
+
+
+def test_a_new_specialty_drops_areas_that_do_not_fit_it():
+    app, _, _ = app_with()
+    state = {"intent": "find_doctor", "criteria": {"specialty": "Dermatology", "areas": ["acne"]}}
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "Actually I want a cardiologist", TOOLS, state=state)
+    assert body["state"]["criteria"]["specialty"] == "Cardiology"
+    assert body["state"]["criteria"]["areas"] == []
+
+
+def test_city_mode_and_language_reach_the_search():
+    app, _, _ = app_with()
+    seen, tools = _search_args(TOOLS)
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "A dermatologist in Pune who speaks Hindi, online", tools)
+    assert seen == [
+        {"specialty": "Dermatology", "city": "Pune", "language": "Hindi", "mode": "online"}
+    ]
+    assert "in Pune" in body["reply"]["message"]
+    assert "who speak Hindi" in body["reply"]["message"]
+
+
+def test_nobody_matching_is_an_answer_with_a_way_to_widen_it():
+    app, _, _ = app_with()
+    tools = {
+        **TOOLS,
+        "searchDoctors": lambda _a: {"ok": True, "data": {"status": "no_match", "doctors": []}},
+    }
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "A cardiologist who speaks Kannada", tools)
+    assert body["reply"]["kind"] == "answer"
+    assert body["reply"]["message"].startswith(
+        "I couldn't find a verified doctor for Cardiology, who speak Kannada."
+    )
+    assert "without the language preference" in body["reply"]["message"]
+
+
+def test_search_unavailable_is_not_reported_as_nobody_matching():
+    app, _, _ = app_with()
+    tools = {
+        **TOOLS,
+        "searchDoctors": lambda _a: {"ok": False, "errorCode": "search_unavailable"},
+    }
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "A cardiologist please", tools)
+    assert body["reply"]["kind"] == "fallback"
+    assert "isn't available right now" in body["reply"]["message"]
+    assert "couldn't find" not in body["reply"]["message"]
+
+
+def test_unknown_areas_from_the_model_are_dropped():
+    app, _, _ = app_with(
+        {
+            "care_assistant_intent": lambda _r: {
+                "intent": "find_doctor",
+                "specialty": "Dermatology",
+                "specialtyFromConcern": False,
+                "dayKind": "none",
+                "timeWindow": None,
+                "areas": ["acne", "bogus", "heart_rhythm"],
+            }
+        }
+    )
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "skin", TOOLS)
+    # bogus is not an area; heart_rhythm does not fit Dermatology.
+    assert body["state"]["criteria"]["areas"] == ["acne"]

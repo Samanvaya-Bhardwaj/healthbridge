@@ -30,7 +30,7 @@ const sessionView = (version = 1) => ({
   turns: version - 1,
   expiresAt: '2026-10-10T05:00:00Z',
 });
-const doctor = (id, name, careStatus) => ({
+const doctor = (id, name, careStatus, reasons = []) => ({
   type: 'doctor',
   careStatus,
   doctor: {
@@ -40,6 +40,7 @@ const doctor = (id, name, careStatus) => ({
     languages: ['English', 'Hindi'],
     yearsOfExperience: 9,
     clinics: [],
+    reasons,
   },
 });
 
@@ -83,7 +84,13 @@ describe('HealthBridge Assistant', () => {
               source: 'ai_assistant',
               cards: [
                 doctor(DOCTOR, 'Dr. Meera Iyer', 'active'),
-                doctor(NEW_DOCTOR, 'Dr. New', 'none'),
+                doctor(NEW_DOCTOR, 'Dr. New', 'none', [
+                  { code: 'specialty', value: 'Dermatology' },
+                  { code: 'area', value: 'Acne' },
+                  { code: 'city', value: 'Pune' },
+                  { code: 'mode', value: 'online' },
+                  { code: 'care_team', value: null },
+                ]),
                 {
                   type: 'slot',
                   doctorId: DOCTOR,
@@ -113,6 +120,12 @@ describe('HealthBridge Assistant', () => {
     expect(screen.getByText(/What I understood:/).closest('p')).toHaveTextContent('Dermatology');
     expect(screen.getByText('In your care team')).toBeInTheDocument();
     expect(screen.getByText('Not in your care team yet')).toBeInTheDocument();
+    // Why each doctor was suggested, from the backend's reasons only.
+    expect(
+      screen.getByText(
+        'Why suggested: Dermatology · Lists Acne · Practises in Pune · Online consultations',
+      ),
+    ).toBeInTheDocument();
     // Booking stays the existing, confirmed flow.
     expect(screen.getByRole('link', { name: 'Book with Dr. Meera Iyer' })).toHaveAttribute(
       'href',

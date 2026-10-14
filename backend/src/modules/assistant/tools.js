@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { ASSISTANT_SPECIALTIES, ASSISTANT_TIME_WINDOWS, PERMISSIONS } from '@healthbridge/shared';
+import {
+  ASSISTANT_TIME_WINDOWS,
+  PERMISSIONS,
+  doctorSearchCriteriaSchema,
+} from '@healthbridge/shared';
 import { AppError } from '../../core/http/errors.js';
 import { domainMetrics } from '../../core/metrics/domain.js';
 import { slotQuery } from './calendar.js';
@@ -23,20 +27,8 @@ const MAX_SLOTS = 6;
 const TOOL_ARGS = {
   getPatientContext: z.object({}).strict(),
   getPatientCareTeam: z.object({}).strict(),
-  searchDoctors: z
-    .object({
-      specialty: z.enum(ASSISTANT_SPECIALTIES).optional(),
-      name: z
-        .string()
-        .regex(/^[A-Za-z][A-Za-z .'-]{1,59}$/)
-        .optional(),
-      language: z
-        .string()
-        .regex(/^[A-Za-z][A-Za-z ]{1,29}$/)
-        .optional(),
-    })
-    .strict()
-    .refine((a) => a.specialty || a.name || a.language, 'Search needs a criterion.'),
+  // M13.2: the shared, structured search criteria (no free text); none means "any doctor".
+  searchDoctors: doctorSearchCriteriaSchema.omit({ limit: true, excludeDoctorIds: true }),
   getDoctorProfile: z.object({ doctorId: uuid }).strict(),
   findAvailableSlots: z
     .object({
@@ -68,6 +60,9 @@ const doctorFacts = (d) => ({
   languages: d.languages ?? [],
   yearsOfExperience: d.yearsOfExperience ?? null,
   clinics: (d.clinics ?? []).map((c) => ({ id: c.id, name: c.name, city: c.city ?? null })),
+  // M13.2: what the doctor offers and why the search suggested them (backend data only).
+  modes: d.modes ?? [],
+  reasons: d.reasons ?? [],
 });
 
 /**
@@ -75,7 +70,7 @@ const doctorFacts = (d) => ({
  * @param {{ principal: object, patientId: string, actingFor: 'self'|'dependent', timeZone: string, req?: object }} turn
  */
 export function createToolContext(
-  { accessPolicy, careService, doctorService, availabilityService, logger },
+  { accessPolicy, careService, doctorService, doctorSearchService, availabilityService, logger },
   { principal, patientId, actingFor, timeZone, req },
 ) {
   const evidence = { doctors: new Map(), slots: new Map(), careTeam: null };
@@ -114,24 +109,34 @@ export function createToolContext(
           .map(([doctorId, status]) => ({ doctorId, status })),
       };
     },
-    async searchDoctors({ specialty, name, language }) {
-      const page = await doctorService.directory({
-        ...(name ? { q: name } : {}),
-        ...(specialty ? { specialization: specialty } : {}),
-        limit: 50,
-      });
+    async searchDoctors(criteria) {
       const team = await careTeam();
-      const wanted = language?.toLowerCase();
-      const doctors = page.items
-        .filter((d) => !wanted || (d.languages ?? []).some((l) => l.toLowerCase() === wanted))
-        .slice(0, MAX_DOCTORS);
-      for (const d of doctors) evidence.doctors.set(d.id, doctorFacts(d));
+      const active = [...team.entries()].filter(([, s]) => s === 'active').map(([id]) => id);
+      let found;
+      try {
+        found = await doctorSearchService.search(
+          { ...criteria, limit: MAX_DOCTORS },
+          { careTeamDoctorIds: active },
+        );
+      } catch (err) {
+        // Search failed, which is not the same as nobody matching: say so distinctly.
+        logger?.warn({ errName: err?.name }, 'assistant doctor search unavailable');
+        throw new AppError({
+          status: 503,
+          code: 'search_unavailable',
+          title: 'Search unavailable',
+        });
+      }
+      for (const d of found.doctors) evidence.doctors.set(d.id, doctorFacts(d));
       return {
-        doctors: doctors.map((d) => ({
+        status: found.status,
+        doctors: found.doctors.map((d) => ({
           doctorId: d.id,
           specialty: d.primarySpecialization,
-          languages: d.languages ?? [],
+          languages: d.languages,
+          modes: d.modes,
           inCareTeam: team.get(d.id) === 'active',
+          reasons: d.reasons.map((r) => r.code),
         })),
       };
     },

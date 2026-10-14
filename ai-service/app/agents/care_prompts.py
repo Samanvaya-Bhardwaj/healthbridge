@@ -38,11 +38,14 @@ INTENT_SYSTEM = (
     "4. day: 'today', 'tomorrow', a weekday name, or an explicit date as YYYY-MM-DD; "
     "otherwise 'none'. timeWindow: morning, afternoon or evening, or null.\n"
     "5. language, city and doctorName only if the person states them; never guess.\n"
+    "6. areas: up to 3 codes from the allowed areas of practice, only when the person's own "
+    "words clearly fit an area (for example pimples -> acne). Areas describe what a doctor "
+    "lists on their profile; choosing one is not a diagnosis. Otherwise an empty list.\n"
     "Answer only with the JSON form."
 )
 
 
-def intent_schema(specialties: list[str]) -> dict:
+def intent_schema(specialties: list[str], areas: list[str] | None = None) -> dict:
     nullable = lambda values: {"type": ["string", "null"], "enum": [*values, None]}  # noqa: E731
     return {
         "type": "object",
@@ -58,6 +61,11 @@ def intent_schema(specialties: list[str]) -> dict:
             "language": {"type": ["string", "null"]},
             "city": {"type": ["string", "null"]},
             "doctorName": {"type": ["string", "null"]},
+            "areas": {
+                "type": "array",
+                "items": {"type": "string", "enum": list(areas or [])},
+                "maxItems": 3,
+            },
         },
         "required": ["intent", "specialty", "specialtyFromConcern", "dayKind", "timeWindow"],
         "additionalProperties": False,
@@ -75,8 +83,12 @@ def _strip_delimiters(text: str) -> str:
     return text
 
 
-def message_block(text: str, specialties: list[str]) -> str:
+def message_block(
+    text: str, specialties: list[str], areas: list[tuple[str, str]] | None = None
+) -> str:
+    listed = "; ".join(f"{code}={label}" for code, label in areas or [])
     return (
-        f"Allowed specialties: {', '.join(specialties)}\n\n"
+        f"Allowed specialties: {', '.join(specialties)}\n"
+        f"Allowed areas of practice: {listed}\n\n"
         f"<message>\n{_strip_delimiters(text)}\n</message>"
     )

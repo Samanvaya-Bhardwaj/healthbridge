@@ -38,3 +38,4 @@ export * from './domain/consultations.js';
 export * from './domain/followups.js';
 export { plainValidationMessage } from './validationMessages.js';
 export * from './domain/assistant.js';
+export * from './domain/doctorSearch.js';

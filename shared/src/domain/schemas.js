@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { PRACTICE_AREA_CODES } from './doctorSearch.js';
 
 // ── Enumerations ─────────────────────────────────────────────────
 
@@ -170,6 +171,8 @@ const doctorProfileFields = {
   qualifications: z.array(qualificationSchema).min(1).max(10),
   yearsOfExperience: z.number().int().min(0).max(70),
   languages: z.array(z.string().trim().min(2).max(35)).max(10).optional(),
+  // M13.2: the doctor's own listed focus, from a controlled list (never a diagnosis).
+  areasOfPractice: z.array(z.enum(PRACTICE_AREA_CODES)).max(8).optional(),
   bio: optionalText(1000),
 };
 

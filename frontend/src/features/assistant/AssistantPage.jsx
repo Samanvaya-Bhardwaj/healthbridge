@@ -75,8 +75,22 @@ function Understood({ understood }) {
   );
 }
 
+/** Why the search suggested a doctor, from the backend's reasons only. */
+const REASON_TEXT = {
+  specialty: (r) => r.value,
+  area: (r) => `Lists ${r.value}`,
+  city: (r) => `Practises in ${r.value}`,
+  language: (r) => `Speaks ${r.value}`,
+  mode: (r) => (r.value === 'online' ? 'Online consultations' : 'In-clinic visits'),
+  name: (r) => (r.approximate ? 'Closest name match' : null),
+};
+
 function DoctorCard({ card, patientId, actingFor }) {
   const d = card.doctor;
+  const why = (d.reasons ?? [])
+    .map((r) => REASON_TEXT[r.code]?.(r))
+    .filter(Boolean)
+    .join(' · ');
   const detail = [
     d.primarySpecialization,
     d.yearsOfExperience ? `${d.yearsOfExperience} yrs experience` : null,
@@ -92,6 +106,7 @@ function DoctorCard({ card, patientId, actingFor }) {
     <li className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-surface-raised p-3">
       <div className="min-w-0 flex-1">
         <PersonIdentity name={d.professionalName} verified detail={detail} />
+        {why && <p className="mt-1 text-sm text-text-muted">Why suggested: {why}</p>}
         <p className="mt-2">
           {card.careStatus === 'active' ? (
             <Badge tone="success">In {team} care team</Badge>

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   ASSISTANT_EMERGENCY_MESSAGE,
   ASSISTANT_SPECIALTIES,
+  PRACTICE_AREAS,
   PERMISSIONS,
   careAssistantStateSchema,
   isPossibleAssistantEmergency,
@@ -76,6 +77,7 @@ export function createAssistantService({
   repository,
   careService,
   doctorService,
+  doctorSearchService,
   availabilityService,
   logger,
   inputDigester,
@@ -319,10 +321,23 @@ export function createAssistantService({
     const context = {
       ...calendarContext(timeZone, now()),
       specialties: [...ASSISTANT_SPECIALTIES],
+      // M13.2: the areas of practice the AI may pick from (codes and labels; never text).
+      areas: PRACTICE_AREAS.map((a) => ({
+        code: a.code,
+        label: a.label,
+        specialties: a.specialties,
+      })),
       actingFor,
     };
     const tools = createToolContext(
-      { accessPolicy, careService, doctorService, availabilityService, logger },
+      {
+        accessPolicy,
+        careService,
+        doctorService,
+        doctorSearchService,
+        availabilityService,
+        logger,
+      },
       { principal, patientId: row.patient_id, actingFor, timeZone, req },
     );
     const base = { patientId: row.patient_id, sessionId: row.id, context };

@@ -10,6 +10,7 @@ const FIELD_TO_COLUMN = {
   qualifications: 'qualifications',
   yearsOfExperience: 'years_of_experience',
   languages: 'languages',
+  areasOfPractice: 'areas_of_practice',
   bio: 'bio',
 };
 
@@ -36,6 +37,8 @@ export function toDoctorView(row) {
     qualifications: row.qualifications,
     yearsOfExperience: row.years_of_experience,
     languages: row.languages,
+    areasOfPractice: row.areas_of_practice ?? [],
+    specialties: row.specialties ?? [],
     bio: row.bio,
     profileStatus: row.profile_status,
     verificationStatus: row.verification_status,
@@ -56,6 +59,8 @@ export function toPublicDoctorView(row) {
     qualifications: row.qualifications,
     yearsOfExperience: row.years_of_experience,
     languages: row.languages,
+    areasOfPractice: row.areas_of_practice ?? [],
+    specialties: row.specialties ?? [],
     bio: row.bio,
     registrationCouncil: row.registration_council,
     registrationNumber: row.registration_number,

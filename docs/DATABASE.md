@@ -516,3 +516,16 @@ One rule decides whether a doctor can be found, offered and booked.
 | `notification_deliveries.template` | Adds `appointment_withdrawn` |
 
 The directory, public profile and availability rules (and so slots) filter with these functions. Open future bookings that stop being eligible are cancelled by the `scheduler` system purpose, with party `system` and reason `clinic_closed` or `doctor_unavailable`.
+
+## Doctor search (M13.2, ADR-0031)
+
+| Object | Purpose |
+|---|---|
+| `specialty_terms (term, specialty)` | The words doctors use for a specialisation → canonical specialty (a copy of the shared vocabulary; a test keeps them equal) |
+| `practice_areas (code, label, specialties)` | The areas of practice a doctor may list, and the kinds of doctor that cover each |
+| `doctors.specialties` | Canonical specialties, kept by trigger `doctors_search_maintain` from the free-text specialisations |
+| `doctors.areas_of_practice` | Up to 8 area codes chosen by the doctor (unknown codes are refused) |
+| `doctors.search_document` | Weighted full text: name and specialties A, areas B, qualifications C, bio D (GIN index) |
+| `doctor_canonical_specialties(text[])` | The free text → canonical rule, shared by the trigger and tests |
+
+Indexes: GIN on `search_document`, `specialties` and `areas_of_practice`; a trigram index on `professional_name`; `lower(clinics.city)`.

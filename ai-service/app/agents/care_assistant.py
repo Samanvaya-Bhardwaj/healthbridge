@@ -89,6 +89,8 @@ SPECIALTY_PHRASE = {
 class Criteria(BaseModel):
     model_config = ConfigDict(extra="forbid")
     specialty: str | None = None
+    # M13.2: areas of practice (codes from the backend's list) that fit the specialty.
+    areas: list[str] = Field(default_factory=list, max_length=3)
     consultationMode: Literal["online", "in_clinic"] | None = None
     date: str | None = None
     timeWindow: Literal["morning", "afternoon", "evening"] | None = None
@@ -112,6 +114,15 @@ class CareState(BaseModel):
     lastTools: list[ToolName] = Field(default_factory=list, max_length=6)
 
 
+class AreaRef(BaseModel):
+    """An area of practice the AI may choose: code, label, kinds of doctor that cover it."""
+
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(pattern=r"^[a-z_]{2,40}$")
+    label: str = Field(min_length=2, max_length=60)
+    specialties: list[str] = Field(default_factory=list, max_length=20)
+
+
 class StepContext(BaseModel):
     """Calendar facts the backend resolved in the person's time zone."""
 
@@ -121,6 +132,7 @@ class StepContext(BaseModel):
     weekdays: dict[str, date]  # next occurrence of each weekday, from today
     horizon: date  # last bookable day
     specialties: list[str] = Field(min_length=1, max_length=40)
+    areas: list[AreaRef] = Field(default_factory=list, max_length=120)
     actingFor: Literal["self", "dependent"] = "self"
 
 
@@ -155,6 +167,8 @@ class GraphState(TypedDict, total=False):
     tools_this_turn: list[str]
     raw: Any
     tool_failed: bool
+    tool_error: str | None
+    search_status: str | None
     action: dict[str, Any]
     reply: Reply | None
     error_kind: str | None
@@ -204,6 +218,45 @@ def _day_label(iso: str | None) -> str:
     return f"{d.strftime('%A')}, {d.day} {d.strftime('%B')}"
 
 
+def _criteria_summary(crit: Criteria, ctx: StepContext) -> str:
+    """What was searched for, in plain words (fixed phrasing; values are validated)."""
+    labels = {a.code: a.label for a in ctx.areas}
+    parts: list[str] = []
+    if crit.specialty:
+        parts.append(f"for {crit.specialty}")
+    if crit.areas:
+        listed = " or ".join(labels.get(a, a) for a in crit.areas)
+        parts.append(f"who list {listed}")
+    if crit.language:
+        parts.append(f"who speak {crit.language}")
+    if crit.city:
+        parts.append(f"in {crit.city}")
+    if crit.consultationMode:
+        parts.append(
+            "for online consultations"
+            if crit.consultationMode == "online"
+            else "for in-clinic visits"
+        )
+    if crit.doctorName:
+        parts.append(f"named {crit.doctorName}")
+    return ", ".join(parts)
+
+
+def _relax_hint(crit: Criteria) -> str:
+    """One concrete way to widen a search that found nobody (deterministic order)."""
+    if crit.doctorName:
+        return "Check the doctor's name, or search by kind of doctor instead."
+    if crit.consultationMode:
+        return "You could try both online and in-clinic visits."
+    if crit.language:
+        return "You could try without the language preference."
+    if crit.city:
+        return "You could try online consultations, or another city."
+    if crit.areas:
+        return "You could try any doctor of that kind."
+    return "Try another kind of doctor, or browse all doctors in My Doctors."
+
+
 def _plural(n: int, one: str, many: str) -> str:
     return f"{n} {one if n == 1 else many}"
 
@@ -241,10 +294,14 @@ def build_care_assistant(llm: LLMProvider):
                     messages=[
                         LLMMessage(
                             role="user",
-                            content=message_block(state["message"] or "", ctx.specialties),
+                            content=message_block(
+                                state["message"] or "",
+                                ctx.specialties,
+                                [(a.code, a.label) for a in ctx.areas],
+                            ),
                         )
                     ],
-                    json_schema=intent_schema(ctx.specialties),
+                    json_schema=intent_schema(ctx.specialties, [a.code for a in ctx.areas]),
                     tier=ModelTier.FAST,
                     max_tokens=300,
                     run_id=state["run_id"],
@@ -291,18 +348,29 @@ def build_care_assistant(llm: LLMProvider):
         )
         # New details refine the previous ones; a different doctor search starts afresh.
         merged = current.criteria.model_copy(
-            update={k: v for k, v in found.model_dump().items() if v is not None}
+            update={k: v for k, v in found.model_dump().items() if v is not None and k != "areas"}
         )
+        # Areas: new ones replace the old; only known areas that fit the specialty stay.
+        known = {a.code: a for a in ctx.areas}
+        raw_areas = raw.get("areas") if isinstance(raw.get("areas"), list) else []
+        picked = [a for a in raw_areas if isinstance(a, str) and a in known]
+        areas = [
+            a
+            for a in dict.fromkeys(picked or current.criteria.areas)
+            if a in known and (merged.specialty is None or merged.specialty in known[a].specialties)
+        ][:3]
+        merged = merged.model_copy(update={"areas": areas})
         search_changed = any(
             getattr(merged, k) != getattr(current.criteria, k)
-            for k in ("specialty", "doctorName", "language")
+            for k in ("specialty", "areas", "doctorName", "language", "city", "consultationMode")
         )
         day_changed = any(
-            getattr(merged, k) != getattr(current.criteria, k)
-            for k in ("date", "timeWindow", "consultationMode")
+            getattr(merged, k) != getattr(current.criteria, k) for k in ("date", "timeWindow")
         )
         intent = raw["intent"]
-        refinement = any(v is not None for v in found.model_dump().values())
+        refinement = bool(picked) or any(
+            v is not None for k, v in found.model_dump().items() if k != "areas"
+        )
         if intent in ("unsupported", "greeting") and refinement and current.intent in SEARCHING:
             # "tomorrow evening" on its own refines the search already under way.
             intent = current.intent
@@ -321,7 +389,7 @@ def build_care_assistant(llm: LLMProvider):
     async def node_observe(state: GraphState) -> GraphState:
         result, current = state["tool_result"], state["state"]
         if result is None or not result.ok:
-            return {"tool_failed": True}
+            return {"tool_failed": True, "tool_error": result.errorCode if result else None}
         data = result.data
         if result.name == "getPatientCareTeam":
             active = [
@@ -339,7 +407,8 @@ def build_care_assistant(llm: LLMProvider):
             return {
                 "state": current.model_copy(
                     update={"candidateDoctorIds": _uuid_list(ordered, 5), "slotStarts": []}
-                )
+                ),
+                "search_status": "no_match" if data.get("status") == "no_match" else "ok",
             }
         if result.name == "findAvailableSlots":
             doctor = data.get("doctorId")
@@ -375,7 +444,14 @@ def build_care_assistant(llm: LLMProvider):
 
         intent = current.intent
         if intent in SEARCHING:
-            wants_search = bool(crit.specialty or crit.doctorName or crit.language)
+            wants_search = bool(
+                crit.specialty
+                or crit.areas
+                or crit.doctorName
+                or crit.language
+                or crit.city
+                or crit.consultationMode
+            )
             if len(used) < MAX_TOOL_ROUNDS and not state.get("tool_failed"):
                 if "getPatientCareTeam" not in used:
                     return tool("getPatientCareTeam", {})
@@ -384,8 +460,11 @@ def build_care_assistant(llm: LLMProvider):
                         k: v
                         for k, v in {
                             "specialty": crit.specialty,
-                            "name": crit.doctorName,
+                            "areas": list(crit.areas),
+                            "city": crit.city,
                             "language": crit.language,
+                            "mode": crit.consultationMode,
+                            "name": crit.doctorName,
                         }.items()
                         if v
                     }
@@ -403,6 +482,14 @@ def build_care_assistant(llm: LLMProvider):
                     if crit.consultationMode:
                         args["mode"] = crit.consultationMode
                     return tool("findAvailableSlots", args)
+            if state.get("tool_failed") and state.get("tool_error") == "search_unavailable":
+                # Search itself failed: not the same as nobody matching.
+                return respond(
+                    "fallback",
+                    "Doctor search isn't available right now, so I can't suggest doctors. "
+                    "You can still browse doctors in My Doctors, or try again in a few minutes.",
+                    [Card(type="link", target="my_doctors")],
+                )
             if state.get("tool_failed"):
                 return respond(
                     "fallback",
@@ -422,17 +509,17 @@ def build_care_assistant(llm: LLMProvider):
             if current.specialtyFromConcern and crit.specialty in SPECIALTY_PHRASE:
                 parts.append(SPECIALTY_PHRASE[crit.specialty])
             candidates = current.candidateDoctorIds
+            summary = _criteria_summary(crit, ctx)
             if not candidates:
-                parts.append(
-                    "I couldn't find a verified doctor matching that. Try another kind of "
-                    "doctor, or browse all doctors in My Doctors."
-                )
+                # Genuinely nobody matches (the search worked): say what, and how to widen it.
+                found_text = f"I couldn't find a verified doctor {summary}".rstrip() + "."
+                parts.append(f"{found_text} {_relax_hint(crit)}")
                 return respond("answer", " ".join(parts), [Card(type="link", target="my_doctors")])
             one = len(candidates) == 1
             parts.append(
                 f"Here {'is' if one else 'are'} "
-                f"{_plural(len(candidates), 'verified doctor', 'verified doctors')} "
-                f"who {'matches' if one else 'match'}."
+                f"{_plural(len(candidates), 'verified doctor', 'verified doctors')}"
+                + (f" {summary}." if summary else ".")
                 + ("" if one else f" Doctors already in {theirs} care team are listed first.")
             )
             cards = [Card(type="doctor", doctorId=d) for d in candidates]

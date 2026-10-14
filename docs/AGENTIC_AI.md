@@ -9,7 +9,7 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 | Phase | Scope | Status |
 |---|---|---|
 | **M13.1** Foundation | Sessions, the bounded graph, read-only tools, safety check, Assistant page | Done |
-| M13.2 Semantic doctor search | Hybrid metadata, full-text and pgvector search over public doctor profiles; transparent ranking | Planned |
+| **M13.2** Doctor search | Shared specialty terms and areas of practice; one SQL search with eligibility, specialty, city, language, mode and name filters; deterministic ranking with reasons; no-match told apart from search unavailable (ADR-0031). Vector ranking added on top. | Done |
 | M13.3 Recommendations | A small ranked list with grounded explanations | Planned |
 | M13.4 Appointment orchestration | Pending approval → explicit confirmation → `appointmentService.book` (idempotent), existing payment and notifications | Planned |
 | M13.5–M13.7 | Reschedule and cancel, calendar adapter, medication schedule and reminders | Later |
@@ -72,7 +72,7 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 | Field | Meaning |
 |---|---|
 | `intent` | `find_doctor`, `book_appointment`, `view_appointments`, `reschedule`, `cancel`, `ask_records`, `view_medications`, `greeting`, `unsupported` |
-| `criteria` | `specialty` (allowed list), `consultationMode`, `date` (resolved ISO day), `timeWindow`, `language`, `city`, `doctorName` |
+| `criteria` | `specialty` (allowed list), `areas` (up to 3 areas of practice that fit the specialty, M13.2), `consultationMode`, `date` (resolved ISO day), `timeWindow`, `language`, `city`, `doctorName` |
 | `specialtyFromConcern` | The specialty was inferred from a described concern (shows "Skin concerns are usually seen by dermatologists."). A flag only. |
 | `careTeamDoctorIds`, `candidateDoctorIds`, `selectedDoctorId`, `slotStarts` | References that backend tools returned |
 | `lastTools` | Tool names used in the last turn |
@@ -90,7 +90,7 @@ Limits:
 |---|---|---|---|
 | `getPatientContext` | none | `assistant:use` | `{ actingFor }` |
 | `getPatientCareTeam` | none | `care_relationships:read` (AccessPolicy on the session's patient) | `{ doctors: [{ doctorId, status }] }` |
-| `searchDoctors` | `specialty?`, `name?`, `language?` (one required) | `doctors:read` | `{ doctors: [{ doctorId, specialty, languages, inCareTeam }] }`, at most 10 |
+| `searchDoctors` | `specialty?`, `areas?`, `city?`, `language?`, `mode?`, `name?` (none: any eligible doctor) | `doctors:read` | `{ status: 'ok' or 'no_match', doctors: [{ doctorId, specialty, languages, modes, inCareTeam, reasons }] }`, at most 10. A failed search is `search_unavailable`. |
 | `getDoctorProfile` | `doctorId` | `doctors:read` | `{ doctorId, specialty, languages }` |
 | `findAvailableSlots` | `doctorId`, `date?`, `timeWindow?`, `mode?` | `doctors:read` | `{ doctorId, slots: [{ startsAt, mode }] }`, at most 6, filtered to the local day and window |
 
@@ -102,6 +102,7 @@ Rejected calls never throw. They come back as error codes:
 | `tool_invalid_arguments` | Arguments fail the strict schema (for example, a `patientId`) |
 | `tool_forbidden` | The user lacks the permission |
 | A domain code, such as `not_found` | The domain service refused |
+| `search_unavailable` | The doctor search itself failed. The assistant says so; it never reports this as "nobody matches". |
 | `tool_failed` | An unexpected failure |
 
 ## Who may use it

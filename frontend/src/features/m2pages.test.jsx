@@ -141,6 +141,40 @@ describe('doctor workspace', () => {
     expect(calls.some((c) => c.key === 'POST /api/v1/doctors/me/verification')).toBe(true);
   });
 
+  it('a doctor lists areas of practice, those of their speciality first', async () => {
+    const profile = {
+      id: 'd1',
+      professionalName: 'Dr. Applicant',
+      registrationNumber: 'REG-1',
+      registrationCouncil: 'Council',
+      registrationYear: 2018,
+      primarySpecialization: 'Consultant Dermatologist',
+      qualifications: [{ degree: 'MBBS', institution: 'College', year: 2017 }],
+      yearsOfExperience: 5,
+      languages: ['English'],
+      areasOfPractice: [],
+      verificationStatus: 'unverified',
+      updatedAt: 'x',
+    };
+    const calls = signedIn(makeUser(['PATIENT']), {
+      'GET /api/v1/doctors/me': () => json(200, { data: profile }),
+      'GET /api/v1/doctors/me/verification': () => json(200, { data: [] }),
+      'PATCH /api/v1/doctors/me': () =>
+        json(200, { data: { ...profile, areasOfPractice: ['acne'] } }),
+    });
+    renderAt('/app/doctor-profile');
+    const acne = await screen.findByRole('checkbox', { name: 'Acne' });
+    expect(acne).toBeVisible();
+    // Areas of other specialities are one click away, not mixed in.
+    expect(screen.getByRole('checkbox', { name: 'Heart rhythm', hidden: true })).not.toBeVisible();
+    const ue = userEvent.setup();
+    await ue.click(acne);
+    await ue.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Saved.');
+    const patch = calls.find((c) => c.key === 'PATCH /api/v1/doctors/me');
+    expect(JSON.parse(patch.init.body).areasOfPractice).toEqual(['acne']);
+  });
+
   it('a doctor sees pending requests (shared name only) and active patients', async () => {
     signedIn(makeUser(['DOCTOR', 'PATIENT']), {
       'GET /api/v1/doctors/me/patients': () =>

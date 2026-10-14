@@ -12,6 +12,43 @@ from app.llm.base import LLMRequest
 
 _MESSAGE = re.compile(r"<message>\n?(.*?)\n?</message>", re.S)
 _ALLOWED = re.compile(r"^Allowed specialties: (.*)$", re.M)
+_ALLOWED_AREAS = re.compile(r"^Allowed areas of practice: (.*)$", re.M)
+
+# M13.2: wording that fits an area of practice (the validator keeps only areas that fit
+# the specialty, so a few candidates per message is fine).
+_AREAS = [
+    (r"pimple|acne|breakout", "acne"),
+    (r"eczema|dermatitis", "eczema"),
+    (r"psoriasis", "psoriasis"),
+    (r"hair ?(fall|loss)|losing (my )?hair|bald", "hair_loss"),
+    (r"rash|hives|itch|skin allerg", "skin_allergies"),
+    (r"pigment|dark spots", "pigmentation"),
+    (r"diabet|blood sugar|sugar level", "diabetes"),
+    (r"blood pressure|\bbp\b|hypertension", "blood_pressure"),
+    (r"thyroid", "thyroid"),
+    (r"asthma|wheez", "asthma"),
+    (r"(long|persistent|lasting) cough|cough for (weeks|a month)", "long_cough"),
+    (r"headache|migraine", "headache_migraine"),
+    (r"anxiety|anxious|panic", "anxiety"),
+    (r"depress|low mood", "depression"),
+    (r"can'?t sleep|insomnia|sleep problem", "sleep"),
+    (r"joint|knee", "joint_pain"),
+    (r"back pain|neck pain", "back_neck_pain"),
+    (r"sprain|sports injur", "sports_injuries"),
+    (r"pregnan|expecting a baby", "pregnancy_care"),
+    (r"\bperiods?\b|menstrua", "menstrual_health"),
+    (r"pcos|pcod", "pcos"),
+    (r"growth|development|milestone", "child_growth"),
+    (r"vaccin|immuni[sz]", "vaccinations"),
+    (r"acidity|heartburn|reflux", "acidity_reflux"),
+    (r"stomach (pain|ache)|abdominal pain", "stomach_pain"),
+    (r"glasses|blurry|vision", "vision"),
+    (r"hearing|ear ?ache|ear pain", "ear_hearing"),
+    (r"sinus", "sinus"),
+    (r"cholesterol", "cholesterol"),
+    (r"fever|infection", "fever_infections"),
+    (r"fever|infection", "childhood_infections"),
+]
 
 _NAMED = [
     (r"dermatolog", "Dermatology"),
@@ -86,6 +123,13 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
     low = text.lower()
     allowed_line = _ALLOWED.search(content)
     allowed = {s.strip() for s in allowed_line.group(1).split(",")} if allowed_line else set()
+    areas_line = _ALLOWED_AREAS.search(content)
+    allowed_areas = (
+        {item.split("=", 1)[0].strip() for item in areas_line.group(1).split(";") if "=" in item}
+        if areas_line
+        else set()
+    )
+    areas = [code for pattern, code in _AREAS if re.search(pattern, low) and code in allowed_areas]
 
     specialty, from_concern = None, False
     for pattern, name in _NAMED:
@@ -141,4 +185,5 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
         "language": language,
         "city": city,
         "doctorName": name.group(1) if name else None,
+        "areas": list(dict.fromkeys(areas))[:3],
     }
