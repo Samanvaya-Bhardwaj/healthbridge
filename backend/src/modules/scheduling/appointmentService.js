@@ -6,7 +6,7 @@ import {
 } from '@healthbridge/shared';
 import { DateTime } from 'luxon';
 import { isUuid, newId } from '../../core/db/ids.js';
-import { withActor } from '../../core/db/actorContext.js';
+import { withActor, withSystem } from '../../core/db/actorContext.js';
 import { appendOutboxEvent } from '../../core/events/outbox.js';
 import { ConflictError, NotFoundError } from '../../core/http/errors.js';
 import { appointmentTransition, initialStatus } from './domain/appointmentStateMachine.js';
@@ -17,9 +17,9 @@ const DATA = 'data_access';
 const PG_EXCLUSION_VIOLATION = '23P01';
 const PG_UNIQUE_VIOLATION = '23505';
 
+const PG_CHECK_VIOLATION = '23514';
+
 const PARTY = { patient_party: 'patient', doctor_party: 'doctor', clinic_scheduler: 'clinic' };
-const isBookableDoctor = (d) =>
-  d && d.verification_status === 'verified' && d.profile_status === 'active';
 
 /**
  * Booking and the appointment lifecycle (ADR-0019).
@@ -51,6 +51,19 @@ export function createAppointmentService({
   });
 
   function mapConstraintError(err) {
+    // appointments_eligibility_guard: the database's final word at booking time.
+    if (err.code === PG_CHECK_VIOLATION && err.constraint === 'appointments_doctor_bookable') {
+      return new ConflictError(
+        'This doctor is not taking bookings right now.',
+        'doctor_unavailable',
+      );
+    }
+    if (err.code === PG_CHECK_VIOLATION && err.constraint === 'appointments_practice_site_open') {
+      return new ConflictError(
+        'This clinic is no longer taking bookings with this doctor. Please choose another time.',
+        'practice_site_closed',
+      );
+    }
     if (err.code === PG_EXCLUSION_VIOLATION) {
       return err.constraint === 'appointments_no_patient_overlap'
         ? new ConflictError(
@@ -89,8 +102,11 @@ export function createAppointmentService({
     { patientId, doctorId, startsAt, mode, clinicId, reason, idempotencyKey, rescheduledFromId },
     req,
   ) {
+    // The shared eligibility rule; the database guard re-checks it under row locks.
+    if (!(await doctors.isBookable(doctorId, trx))) {
+      throw new NotFoundError('Verified doctor not found.');
+    }
     const doctor = await doctors.findById(doctorId, trx);
-    if (!isBookableDoctor(doctor)) throw new NotFoundError('Verified doctor not found.');
 
     // Continuity first: bookings are made with a doctor in the patient's care team.
     const relationship = await care.findOpen(trx, patientId, doctorId);
@@ -457,5 +473,64 @@ export function createAppointmentService({
     );
   }
 
-  return { book, get, act, reschedule, listForPatient, listForDoctor, listForClinic };
+  /**
+   * Cancels, as the system, future bookings that stopped being eligible: the doctor's
+   * profile, verification or account changed, the clinic closed, or the doctor no longer
+   * practises there. Runs after such a change (outbox event `practice.changed`) and as a
+   * periodic safety net. Idempotent: a cancelled booking is no longer selected. Each one
+   * gets a full refund (payments) and the patient notice `appointment_withdrawn`.
+   * @param {{ doctorId?: string|null, clinicId?: string|null, limit?: number }} [scope]
+   */
+  async function withdrawIneligible({ doctorId = null, clinicId = null, limit = 200 } = {}) {
+    return withSystem(knex, 'scheduler', async (trx) => {
+      const rows = await appointments.lockIneligibleFuture(trx, { doctorId, clinicId, limit });
+      const at = now();
+      for (const row of rows) {
+        const next = appointmentTransition(row, 'cancel', 'system', at);
+        const patch = {
+          status: next,
+          cancelled_at: at,
+          cancelled_by_user_id: null,
+          cancelled_by_party: 'system',
+          cancel_reason: row.withdraw_reason,
+        };
+        delete row.withdraw_reason;
+        await appointments.update(trx, row.id, patch);
+        await audit.record(
+          {
+            category: DATA,
+            action: 'appointment.cancel',
+            outcome: 'success',
+            actor: 'system',
+            resourceType: 'appointment',
+            resourceId: row.id,
+            patientId: row.patient_id,
+            metadata: {
+              from: row.status,
+              to: next,
+              party: 'system',
+              cancelReason: patch.cancel_reason,
+            },
+          },
+          { trx },
+        );
+        await emit(trx, { ...row, ...patch }, 'appointment.cancelled', null, {
+          party: 'system',
+          reason: patch.cancel_reason,
+        });
+      }
+      return { withdrawn: rows.length };
+    });
+  }
+
+  return {
+    book,
+    get,
+    act,
+    reschedule,
+    listForPatient,
+    listForDoctor,
+    listForClinic,
+    withdrawIneligible,
+  };
 }

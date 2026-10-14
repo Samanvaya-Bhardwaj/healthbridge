@@ -61,6 +61,8 @@ export const NOTIFICATION_TEMPLATES = Object.freeze([
   'follow_up_due',
   'follow_up_attention',
   'follow_up_urgent',
+  // Step 4: a booking withdrawn because the doctor or clinic stopped being eligible
+  'appointment_withdrawn',
 ]);
 
 export const manualRefundSchema = z

@@ -1,6 +1,6 @@
 import { QUEUE_NAMES } from './queues.js';
 
-const { NOTIFICATIONS, PAYMENTS, DOCUMENTS, TIMELINE, FOLLOWUPS } = QUEUE_NAMES;
+const { NOTIFICATIONS, PAYMENTS, DOCUMENTS, TIMELINE, FOLLOWUPS, APPOINTMENTS } = QUEUE_NAMES;
 
 /**
  * Outbox event type → consuming queues. An event with no consumer is marked dispatched.
@@ -10,6 +10,9 @@ const { NOTIFICATIONS, PAYMENTS, DOCUMENTS, TIMELINE, FOLLOWUPS } = QUEUE_NAMES;
  */
 export const EVENT_ROUTES = Object.freeze({
   'appointment.booked': [NOTIFICATIONS, TIMELINE],
+  // Step 4: a doctor, clinic or membership change that can make future bookings
+  // ineligible (they are withdrawn: full refund, patient notice).
+  'practice.changed': [APPOINTMENTS],
   'appointment.cancelled': [PAYMENTS, NOTIFICATIONS, TIMELINE],
   'appointment.expired': [PAYMENTS, NOTIFICATIONS, TIMELINE],
   'appointment.confirmed': [TIMELINE],

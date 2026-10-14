@@ -1,6 +1,7 @@
 import { DOCTOR_REGISTRATION_FIELDS, PERMISSIONS, ROLES } from '@healthbridge/shared';
 import { isUuid, newId } from '../../core/db/ids.js';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../core/http/errors.js';
+import { recordPracticeChange } from '../scheduling/practiceEvents.js';
 import { REGISTRATION_LOCKED_STATUSES, nextVerificationStatus } from './domain/verification.js';
 import {
   toDoctorColumns,
@@ -326,6 +327,7 @@ export function createDoctorService({ knex, doctors, roles, accessPolicy, audit 
         trx,
       );
       const roleRemoved = await roles.revoke(doctor.user_id, ROLES.DOCTOR, trx);
+      await recordPracticeChange(trx, { doctorId: doctor.id, cause: 'doctor_suspended' }, req);
       await audit.record(
         {
           category: ADMIN,
@@ -343,6 +345,11 @@ export function createDoctorService({ knex, doctors, roles, accessPolicy, audit 
   }
 
   // ── Directory ─────────────────────────────────────────────────────
+
+  /** The doctor profile ID of a user account, if it has one. */
+  async function doctorIdForUser(userId) {
+    return (await doctors.findByUserId(userId))?.id ?? null;
+  }
 
   async function directory(filter) {
     return doctors.listDirectory(filter);
@@ -366,6 +373,7 @@ export function createDoctorService({ knex, doctors, roles, accessPolicy, audit 
     startReview,
     decide,
     suspend,
+    doctorIdForUser,
     directory,
     publicProfile,
   };

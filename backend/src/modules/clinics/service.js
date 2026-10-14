@@ -2,6 +2,7 @@ import { PERMISSIONS, ROLES } from '@healthbridge/shared';
 import { isUuid, newId } from '../../core/db/ids.js';
 import { hasPermission } from '../../core/authz/principal.js';
 import { ConflictError, NotFoundError } from '../../core/http/errors.js';
+import { recordPracticeChange } from '../scheduling/practiceEvents.js';
 import { toClinicColumns, toClinicView, toMembershipView } from './repository.js';
 
 const ADMIN = 'administration';
@@ -65,6 +66,9 @@ export function createClinicService({ knex, clinics, users, roles, doctors, acce
     return knex.transaction(async (trx) => {
       await requireClinic(clinicId, trx);
       await clinics.update(clinicId, { status }, trx);
+      if (status !== 'active') {
+        await recordPracticeChange(trx, { clinicId, cause: 'clinic_closed' }, req);
+      }
       await audit.record(
         {
           category: ADMIN,
@@ -257,6 +261,12 @@ export function createClinicService({ knex, clinics, users, roles, doctors, acce
         },
         trx,
       );
+      if (membership.member_role === ROLES.DOCTOR) {
+        const doctorId = (await doctors.findByUserId(membership.user_id, trx))?.id;
+        if (doctorId) {
+          await recordPracticeChange(trx, { doctorId, clinicId, cause: 'membership_ended' }, req);
+        }
+      }
       await audit.record(
         {
           category: ADMIN,

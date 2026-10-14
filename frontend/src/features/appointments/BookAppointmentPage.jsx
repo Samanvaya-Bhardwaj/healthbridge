@@ -177,6 +177,13 @@ function Policies({ slot, mode, rescheduling }) {
   );
 }
 
+const STALE_SLOT_CODES = new Set([
+  'slot_unavailable',
+  'slot_not_offered',
+  'practice_site_closed',
+  'patient_double_booked',
+]);
+
 /**
  * Booking flow, one decision at a time: consultation type → date → time → reason →
  * confirm (and pay). Reached from My Doctors; the server also requires an active care
@@ -235,6 +242,14 @@ export function BookAppointmentPage() {
             },
             idempotencyKey,
           ),
+    // The chosen time is no longer bookable (taken meanwhile, no longer offered, or the
+    // doctor stopped practising at that clinic): show the current free times instead.
+    onError: (error) => {
+      if (STALE_SLOT_CODES.has(error?.code)) {
+        setSelected(null);
+        slots.refetch();
+      }
+    },
     onSuccess: (appointment) =>
       appointment?.status === 'pending_payment'
         ? navigate(`/app/appointments/${appointment.id}/pay`)

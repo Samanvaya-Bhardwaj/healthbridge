@@ -15,6 +15,13 @@ const reminderJob = z.object({ reminderId: uuid }).strict();
 const documentJob = outboxJob.refine((j) => uuid.safeParse(j.payload?.documentId).success);
 const prescriptionJob = outboxJob.refine((j) => uuid.safeParse(j.payload?.prescriptionId).success);
 const maintenanceJob = z.looseObject({});
+const practiceJob = outboxJob.refine(
+  (j) =>
+    ['doctorId', 'clinicId', 'userId'].some((k) => uuid.safeParse(j.payload?.[k]).success) &&
+    ['doctorId', 'clinicId', 'userId'].every(
+      (k) => (j.payload?.[k] ?? null) === null || uuid.safeParse(j.payload[k]).success,
+    ),
+);
 
 export const MAINTENANCE_JOBS = Object.freeze({
   EXPIRE_HOLDS: 'expire-holds',
@@ -22,6 +29,8 @@ export const MAINTENANCE_JOBS = Object.freeze({
   RECORDS_HOUSEKEEPING: 'records-housekeeping',
   TIMELINE_BACKFILL: 'timeline-backfill',
   FOLLOW_UP_SWEEP: 'follow-up-sweep',
+  // Step 4: safety net for practice.changed (e.g. a status changed outside the app).
+  ELIGIBILITY_SWEEP: 'eligibility-sweep',
 });
 
 /**
@@ -45,6 +54,8 @@ export function createJobProcessors(container, queues) {
     prescriptionService,
     followUpService,
     assistantService,
+    appointmentService,
+    doctorService,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -82,8 +93,17 @@ export function createJobProcessors(container, queues) {
     },
     [QUEUE_NAMES.APPOINTMENTS]: {
       concurrency: 4,
-      schemas: { 'appointment.reminder': reminderJob },
-      handle: (job) => notificationService.sendReminder(job.data.reminderId),
+      schemas: { 'appointment.reminder': reminderJob, 'practice.changed': practiceJob },
+      async handle(job) {
+        if (job.name === 'practice.changed') {
+          const { doctorId, clinicId, userId } = job.data.payload;
+          const doctor = doctorId ?? (userId ? await doctorService.doctorIdForUser(userId) : null);
+          // An account that is not a doctor's has no bookings to withdraw.
+          if (userId && !doctor) return { withdrawn: 0 };
+          return appointmentService.withdrawIneligible({ doctorId: doctor, clinicId });
+        }
+        return notificationService.sendReminder(job.data.reminderId);
+      },
     },
     // M5: quarantine → scan → promotion. Idempotent: see modules/documents/pipeline.js.
     [QUEUE_NAMES.DOCUMENTS]: {
@@ -125,11 +145,15 @@ export function createJobProcessors(container, queues) {
         [MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING]: maintenanceJob,
         [MAINTENANCE_JOBS.TIMELINE_BACKFILL]: maintenanceJob,
         [MAINTENANCE_JOBS.FOLLOW_UP_SWEEP]: maintenanceJob,
+        [MAINTENANCE_JOBS.ELIGIBILITY_SWEEP]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
         if (job.name === MAINTENANCE_JOBS.TIMELINE_BACKFILL) return timelineProjector.backfill();
         if (job.name === MAINTENANCE_JOBS.FOLLOW_UP_SWEEP) return followUpService.sweep();
+        if (job.name === MAINTENANCE_JOBS.ELIGIBILITY_SWEEP) {
+          return appointmentService.withdrawIneligible();
+        }
         if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
           return {
             consents: await consentService.expireDue(),
@@ -177,6 +201,11 @@ export async function registerSchedules(queues, workers) {
     MAINTENANCE_JOBS.FOLLOW_UP_SWEEP,
     { every: workers.reminderSweepIntervalMs },
     { name: MAINTENANCE_JOBS.FOLLOW_UP_SWEEP, data: {}, opts: { attempts: 1 } },
+  );
+  await maintenance.upsertJobScheduler(
+    MAINTENANCE_JOBS.ELIGIBILITY_SWEEP,
+    { every: workers.holdSweepIntervalMs },
+    { name: MAINTENANCE_JOBS.ELIGIBILITY_SWEEP, data: {}, opts: { attempts: 1 } },
   );
   await maintenance.upsertJobScheduler(
     MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,

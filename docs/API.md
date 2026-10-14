@@ -189,7 +189,7 @@ Authorization: Bearer <doctor token>
 | GET / POST | `/doctors/me/time-off` | `availability:manage` | Response reports `clashingAppointments` |
 | DELETE | `/doctors/me/time-off/:id` | `availability:manage` | |
 | GET | `/doctors/:doctorId/slots?from&to&mode&clinicId` | `doctors:read` | Verified doctors; ≤ 31 days; UTC |
-| POST | `/appointments` | `appointments:create` | `{ patientId, doctorId, startsAt, mode, clinicId?, reason }`; optional `Idempotency-Key` header. Errors: `care_relationship_required`, `slot_not_offered`, `slot_unavailable`, `patient_double_booked`, `idempotency_conflict` |
+| POST | `/appointments` | `appointments:create` | `{ patientId, doctorId, startsAt, mode, clinicId?, reason }`; optional `Idempotency-Key` header. Errors: `care_relationship_required`, `slot_not_offered`, `slot_unavailable`, `patient_double_booked`, `idempotency_conflict`, `doctor_unavailable`, `practice_site_closed` (ADR-0030) |
 | GET | `/appointments?patientId&scope=upcoming|past` | `appointments:read` | Patient side |
 | GET | `/appointments/:id` | `appointments:read` | Reason included for the patient side and the doctor only |
 | POST | `/appointments/:id/cancel` | `appointments:manage` | `{ reasonCode }` |

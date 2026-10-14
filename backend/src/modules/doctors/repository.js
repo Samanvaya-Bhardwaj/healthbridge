@@ -98,6 +98,10 @@ const ACTIVE_CLINICS = (knex) =>
                   AND c.status = 'active' AND c.deleted_at IS NULL), '[]') AS clinics`,
   );
 
+// One eligibility rule for the directory, slots and booking (migration 20261015000000):
+// active, verified profile and an active, undeleted user account.
+const BOOKABLE = 'authz.doctor_is_bookable(doctors.id)';
+
 /** Doctors are professional (not patient-scoped) data: no RLS on these tables. */
 export function createDoctorRepository({ knex }) {
   const db = (trx) => trx ?? knex;
@@ -129,17 +133,20 @@ export function createDoctorRepository({ knex }) {
     findPublic(id) {
       return knex('doctors')
         .select('doctors.*', ACTIVE_CLINICS(knex))
-        .where({ id, profile_status: 'active', verification_status: 'verified' })
-        .whereNull('deleted_at')
+        .where({ id })
+        .whereRaw(BOOKABLE)
         .first();
     },
 
-    /** Directory of verified, active doctors (keyset pagination by name). */
+    /** The shared eligibility rule (authz.doctor_is_bookable): profile, verification, account. */
+    async isBookable(id, trx) {
+      const { rows } = await db(trx).raw('SELECT authz.doctor_is_bookable(?) AS ok', [id]);
+      return rows[0]?.ok === true;
+    },
+
+    /** Directory of bookable doctors (keyset pagination by name). */
     async listDirectory({ q, specialization, clinicId, cursor, limit }) {
-      const query = knex('doctors')
-        .select('doctors.*', ACTIVE_CLINICS(knex))
-        .where({ profile_status: 'active', verification_status: 'verified' })
-        .whereNull('deleted_at');
+      const query = knex('doctors').select('doctors.*', ACTIVE_CLINICS(knex)).whereRaw(BOOKABLE);
       if (specialization) query.whereILike('primary_specialization', specialization);
       if (q) {
         const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -149,13 +156,7 @@ export function createDoctorRepository({ knex }) {
             .orWhereILike('primary_specialization', pattern),
         );
       }
-      if (clinicId) {
-        query.whereExists(
-          knex('clinic_memberships')
-            .whereRaw('clinic_memberships.user_id = doctors.user_id')
-            .where({ clinic_id: clinicId, member_role: 'DOCTOR', status: 'active' }),
-        );
-      }
+      if (clinicId) query.whereRaw('authz.practice_site_open(doctors.id, ?::uuid)', [clinicId]);
       const after = decodeCursor(cursor);
       if (after) query.whereRaw('(professional_name, id) > (?, ?::uuid)', [after.n, after.id]);
       const rows = await query

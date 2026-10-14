@@ -207,7 +207,14 @@ path has not been deployed from this repository.
 - The storage bootstrap refused to run in staging on self-hosted MinIO.
 - An empty `S3_ENDPOINT` was rejected instead of treated as unset.
 
-## 9. Care assistant (M13.1)
+## 9. Practice eligibility (ADR-0030)
+
+- **What happens on a closure:** when a clinic is made inactive, a doctor's membership ends, a doctor is suspended, or an account is disabled, the change records `practice.changed` in its own transaction. The appointments worker then withdraws the affected future bookings: party `system`, a full refund, and the patient notice "Appointment cancelled: please book another time".
+- **Safety net:** the `eligibility-sweep` maintenance job (at the hold-sweep interval) runs the same withdrawal for anything missed, for example a status changed directly in the database.
+- **Check:** `SELECT count(*) FROM appointments a WHERE a.status IN ('pending_payment','confirmed') AND a.starts_at > now() AND (NOT authz.doctor_is_bookable(a.doctor_id) OR NOT authz.practice_site_open(a.doctor_id, a.clinic_id));` should be 0 shortly after a change.
+- **Reopening:** making a clinic active again does not restore withdrawn bookings. Patients book again.
+
+## 10. Care assistant (M13.1)
 
 - **Metrics:** API and worker `/metrics` now include:
   - `healthbridge_agent_runs_total{intent,outcome}`;

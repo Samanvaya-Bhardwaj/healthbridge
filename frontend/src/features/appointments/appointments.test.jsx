@@ -11,6 +11,7 @@ import {
   fakeApi,
   json,
   makeUser,
+  problem,
   sessionPayload,
   setCookie,
 } from '../../../tests/fakeApi.js';
@@ -122,6 +123,47 @@ describe('booking', () => {
       reason: 'Follow-up on blood sugar',
     });
   }, 15_000); // a five-step flow with typing; slow on loaded CI machines
+
+  it('a time taken meanwhile: explains, refreshes the free times and clears the choice', async () => {
+    const [first, second] = [inTwoDays(10), inTwoDays(10, 15)].map((startsAt) => ({
+      startsAt,
+      endsAt: startsAt,
+      mode: 'online',
+      clinicId: null,
+      feePaise: 0,
+    }));
+    signedIn(makeUser(['PATIENT']), {
+      [`GET /api/v1/doctors/${DOCTOR}`]: () =>
+        json(200, {
+          data: { id: DOCTOR, professionalName: 'Dr. Meera Iyer', primarySpecialization: 'GP' },
+        }),
+      'POST /api/v1/appointments': () =>
+        problem(409, 'slot_unavailable', 'This slot was just taken. Please choose another time.'),
+    });
+    let slotFetches = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (url, init) => {
+      if (!String(url).startsWith(`/api/v1/doctors/${DOCTOR}/slots`))
+        return originalFetch(url, init);
+      slotFetches += 1;
+      return Promise.resolve(json(200, { data: slotFetches === 1 ? [first, second] : [second] }));
+    };
+
+    renderAt(`/app/appointments/book?doctorId=${DOCTOR}&patientId=${PATIENT}`);
+    const ue = userEvent.setup();
+    const times = await screen.findAllByRole('button', { pressed: false, name: /[0-9]/ });
+    expect(times).toHaveLength(2);
+    await ue.click(times[0]);
+    await ue.type(screen.getByLabelText('Reason for visit'), 'Follow-up on blood sugar');
+    await ue.click(screen.getByRole('button', { name: 'Book appointment' }));
+
+    expect(await screen.findByText(/This slot was just taken/)).toBeInTheDocument();
+    await waitFor(() => expect(slotFetches).toBe(2));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { pressed: false, name: /[0-9]/ })).toHaveLength(1),
+    );
+    expect(screen.getByText('Choose a time to continue.')).toBeInTheDocument();
+  }, 15_000);
 });
 
 describe('patient appointments', () => {

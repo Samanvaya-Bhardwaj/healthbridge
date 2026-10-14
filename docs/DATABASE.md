@@ -502,3 +502,17 @@ The `timeline` purpose has read-only policies on `appointments`, `medical_docume
 - **Guard trigger:** the ID, user, patient, creation time and expiry are immutable, and an ended session stays ended.
 - **Indexes:** `(user_id, created_at DESC)` and `(expires_at)` for the sweep.
 - **AI runs:** recorded in the existing `ai.ai_runs` (workflow `care_assistant`; `input_hash` is the backend's keyed HMAC of the message and `input_digest_key_id` its key, never the text or a plain SHA-256). `hb_ai` gains no privileges.
+
+## Practice eligibility (ADR-0030)
+
+One rule decides whether a doctor can be found, offered and booked.
+
+| Object | Purpose |
+|---|---|
+| `authz.doctor_is_bookable(doctor)` | Active, verified, undeleted profile, and an active, undeleted user account |
+| `authz.practice_site_open(doctor, clinic)` | No clinic (online practice), or an active clinic where the doctor's DOCTOR membership is active |
+| `appointments_eligibility_guard` (BEFORE INSERT on `appointments`) | Re-checks both rules and reads the doctor, user, clinic and membership rows `FOR SHARE`, so a concurrent closure, suspension or disable is serialised with the booking. Raises `check_violation` with constraint `appointments_doctor_bookable` or `appointments_practice_site_open`. |
+| `appointments_open_future_idx` | Open future bookings per doctor, for the withdrawal of ineligible ones |
+| `notification_deliveries.template` | Adds `appointment_withdrawn` |
+
+The directory, public profile and availability rules (and so slots) filter with these functions. Open future bookings that stop being eligible are cancelled by the `scheduler` system purpose, with party `system` and reason `clinic_closed` or `doctor_unavailable`.

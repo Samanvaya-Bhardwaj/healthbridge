@@ -9,6 +9,7 @@ import { isUuid, newId } from '../../core/db/ids.js';
 import { checkPasswordPolicy } from '../identity/domain/passwordPolicy.js';
 import { REVOKE_REASONS } from '../identity/domain/sessionPolicy.js';
 import { toUserView } from '../identity/repositories/userRepository.js';
+import { recordPracticeChange } from '../scheduling/practiceEvents.js';
 
 const ADMIN = 'administration';
 
@@ -75,6 +76,10 @@ export function createAdminUserService({ knex, users, roles, sessions, audit, ha
         status === 'disabled'
           ? await sessions.revokeAllForUser(userId, REVOKE_REASONS.ACCOUNT_DISABLED, {}, trx)
           : 0;
+      // A disabled doctor account makes that doctor's future bookings ineligible.
+      if (status === 'disabled') {
+        await recordPracticeChange(trx, { userId, cause: 'account_disabled' }, req);
+      }
       await audit.record(
         {
           category: ADMIN,

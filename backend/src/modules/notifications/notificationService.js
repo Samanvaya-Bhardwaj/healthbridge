@@ -14,7 +14,9 @@ export function templateForEvent(eventType, payload = {}) {
       return payload.status === 'pending_payment' ? 'payment_required' : 'appointment_booked';
     case 'appointment.cancelled':
       // A reschedule cancels the old booking; the new booking's event says "rescheduled".
-      return payload.reason === 'rescheduled' ? null : 'appointment_cancelled';
+      if (payload.reason === 'rescheduled') return null;
+      // Step 4: withdrawn by the system because the doctor or clinic stopped being eligible.
+      return payload.party === 'system' ? 'appointment_withdrawn' : 'appointment_cancelled';
     case 'appointment.expired':
       return 'appointment_expired';
     case 'payment.captured':

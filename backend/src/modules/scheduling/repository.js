@@ -71,9 +71,13 @@ export function toAppointmentView(row, extra = {}) {
 export function createAvailabilityRepository({ knex }) {
   const db = (trx) => trx ?? knex;
   return {
+    /** Active rules at an open practice site (authz.practice_site_open: shared rule). */
     activeRules(doctorId, trx) {
       return db(trx)('availability_rules')
         .where({ doctor_id: doctorId, status: 'active' })
+        .whereRaw(
+          'authz.practice_site_open(availability_rules.doctor_id, availability_rules.clinic_id)',
+        )
         .orderBy(['weekday', 'start_time']);
     },
     findRule(id, trx) {
@@ -156,6 +160,32 @@ export function createAppointmentRepository() {
       return rows[0]?.status ?? null;
     },
     /** Pending-payment appointments whose hold elapsed, locked for this worker (system). */
+    /**
+     * Future, still-open bookings that fail the shared eligibility rule, locked. The reason
+     * says why: the doctor (profile, verification, account) or the practice site (clinic
+     * closed, or the doctor no longer practises there).
+     */
+    async lockIneligibleFuture(trx, { doctorId = null, clinicId = null, limit = 200 } = {}) {
+      assertScopedTransaction(trx, 'scheduler');
+      const { rows } = await trx.raw(
+        `SELECT a.*,
+                CASE WHEN NOT authz.doctor_is_bookable(a.doctor_id) THEN 'doctor_unavailable'
+                     WHEN c.status IS DISTINCT FROM 'active' OR c.deleted_at IS NOT NULL
+                       THEN 'clinic_closed'
+                     ELSE 'doctor_unavailable' END AS withdraw_reason
+           FROM appointments a LEFT JOIN clinics c ON c.id = a.clinic_id
+          WHERE a.status IN ('pending_payment', 'confirmed') AND a.starts_at > now()
+            AND (?::uuid IS NULL OR a.doctor_id = ?::uuid)
+            AND (?::uuid IS NULL OR a.clinic_id = ?::uuid)
+            AND (NOT authz.doctor_is_bookable(a.doctor_id)
+                 OR NOT authz.practice_site_open(a.doctor_id, a.clinic_id))
+          ORDER BY a.starts_at
+          LIMIT ?
+          FOR UPDATE OF a`,
+        [doctorId, doctorId, clinicId, clinicId, limit],
+      );
+      return rows;
+    },
     async claimExpiredHolds(trx, limit) {
       assertScopedTransaction(trx);
       return trx('appointments')

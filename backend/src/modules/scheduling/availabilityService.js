@@ -187,9 +187,8 @@ export function createAvailabilityService({
 
   /** Bookable slots for a verified doctor (any authenticated user with doctors:read). */
   async function slots(principal, doctorId, { from, to, mode, clinicId }) {
-    if (!isUuid(doctorId)) throw new NotFoundError();
+    if (!isUuid(doctorId) || !(await doctors.isBookable(doctorId))) throw new NotFoundError();
     const doctor = await doctors.findById(doctorId);
-    if (!isBookableDoctor(doctor)) throw new NotFoundError();
     const span = DateTime.fromISO(to).diff(DateTime.fromISO(from), 'days').days;
     if (span < 0 || span > MAX_SLOT_QUERY_DAYS) {
       throw new BadRequestError(

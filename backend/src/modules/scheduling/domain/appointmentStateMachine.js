@@ -5,7 +5,8 @@ import { ConflictError, ForbiddenError } from '../../../core/http/errors.js';
  *
  *   book ──fee 0──► CONFIRMED            book ──fee > 0──► PENDING_PAYMENT ──confirm_payment──► CONFIRMED
  *   PENDING_PAYMENT ──expire (hold elapsed)──► EXPIRED
- *   PENDING_PAYMENT | CONFIRMED ──cancel──► CANCELLED
+ *   PENDING_PAYMENT | CONFIRMED ──cancel──► CANCELLED (also by the system: a future booking
+ *     whose doctor or practice site stopped being eligible)
  *   CONFIRMED ──check_in (in clinic)──► CHECKED_IN
  *   CONFIRMED | CHECKED_IN ──complete──► COMPLETED (visit without a recorded consultation)
  *   IN_CONSULTATION ──finish_consultation (doctor records the outcome)──► COMPLETED
@@ -32,7 +33,8 @@ export const CONSULTATION_LATE_MINUTES = 60;
 const RULES = {
   cancel: {
     from: ['pending_payment', 'confirmed'],
-    parties: ['patient', 'doctor', 'clinic'],
+    // 'system': a future booking whose doctor or practice site stopped being eligible.
+    parties: ['patient', 'doctor', 'clinic', 'system'],
     to: 'cancelled',
     // Patients cannot cancel once the appointment has started (it is a no-show by then).
     when: (a, now, party) => party !== 'patient' || now < a.starts_at,

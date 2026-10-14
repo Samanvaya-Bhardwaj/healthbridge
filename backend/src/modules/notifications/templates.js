@@ -80,6 +80,18 @@ const TEMPLATES = {
     text: `Hello ${v.recipientName},\n\n${whose(v)} appointment has been cancelled.\n\n${details(v)}`,
     sms: `HealthBridge: ${whoseInline(v)} appointment with ${v.doctorName} on ${when(v)} was cancelled. Ref ${v.reference}.`,
   }),
+  appointment_withdrawn: (v) => ({
+    subject: `Appointment cancelled: please book another time`,
+    text:
+      `Hello ${v.recipientName},
+
+${whose(v)} appointment has been cancelled because the doctor ` +
+      `is no longer available at this time or place. Any payment is refunded in full. You can ` +
+      `book another time or another doctor in the app.
+
+${details(v)}`,
+    sms: `HealthBridge: ${whoseInline(v)} appointment with ${v.doctorName} on ${when(v)} was cancelled: the doctor is no longer available. Any payment is refunded in full. Ref ${v.reference}.`,
+  }),
   appointment_rescheduled: (v) => ({
     subject: `Appointment rescheduled`,
     text: `Hello ${v.recipientName},\n\n${whose(v)} appointment has been moved to a new time.\n\n${details(v)}`,
