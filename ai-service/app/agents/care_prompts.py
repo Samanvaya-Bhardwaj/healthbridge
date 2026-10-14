@@ -5,7 +5,9 @@ what the person wants to do and their non-diagnostic preferences. It never write
 text that reaches the person, never chooses tools and never sees patient records.
 """
 
-CARE_PROMPT_VERSION = "care-assistant/2026-10-09"
+import re
+
+CARE_PROMPT_VERSION = "care-assistant/2026-10-14"
 
 INTENTS = [
     "find_doctor",
@@ -62,8 +64,19 @@ def intent_schema(specialties: list[str]) -> dict:
     }
 
 
+# Any opening or closing delimiter tag in the untrusted text, in any case or spacing.
+# Stripped until none is left, so removing one cannot splice another together.
+_DELIMITER = re.compile(r"<\s*/?\s*message\b[^>]*>", re.I)
+
+
+def _strip_delimiters(text: str) -> str:
+    while (cleaned := _DELIMITER.sub("", text)) != text:
+        text = cleaned
+    return text
+
+
 def message_block(text: str, specialties: list[str]) -> str:
     return (
         f"Allowed specialties: {', '.join(specialties)}\n\n"
-        f"<message>\n{text.replace('</message>', '')}\n</message>"
+        f"<message>\n{_strip_delimiters(text)}\n</message>"
     )
