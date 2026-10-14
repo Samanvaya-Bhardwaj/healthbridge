@@ -93,6 +93,8 @@ Every demo account uses the password shown by `npm start` (`DEMO_USER_PASSWORD` 
 | Platform admin | `platform.admin@demo.healthbridge.local` | **Doctor Verification**, **Clinics**, **Users**, **Audit Log**, **Operations**. No access to medical records, by design. |
 | Support | `support@demo.healthbridge.local` | Account lookup only |
 
+**A larger synthetic directory** (M13.2) is seeded too, with the same password: 10 cities, 20 clinics (one closed, to show that its times disappear), about 120 doctors and 40 patients with dependents, care teams and upcoming visits. Doctor accounts look like `dr.imran.joshi.001@demo.healthbridge.local`, and patient accounts like `patient.aditi.31@demo.healthbridge.local`. All of it is synthetic, generated from a fixed seed (`backend/scripts/lib/syntheticDirectory.js`). Try the **Assistant** with, for example, "a dermatologist in Pune who speaks Marathi, online".
+
 **Live video:**
 
 1. Start with `npm start -- --video`.

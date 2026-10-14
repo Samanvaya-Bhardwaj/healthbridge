@@ -129,7 +129,7 @@ export function createAppointmentService({
 
     const start = DateTime.fromISO(startsAt);
     // Sequential: a transaction is a single connection (pg rejects concurrent queries).
-    const rules = await availability.activeRules(doctor.id, trx);
+    const rules = await availability.openRules(doctor.id, trx);
     const exceptions = await availability.timeOff(
       doctor.id,
       { from: start.minus({ days: 1 }).toJSDate(), to: start.plus({ days: 1 }).toJSDate() },

@@ -200,7 +200,7 @@ export function createAvailabilityService({
       const rangeStart = DateTime.fromISO(from).minus({ days: 1 }).toJSDate();
       const rangeEnd = DateTime.fromISO(to).plus({ days: 2 }).toJSDate();
       // Sequential: a transaction is a single connection (pg rejects concurrent queries).
-      const rules = await availability.activeRules(doctor.id, trx);
+      const rules = await availability.openRules(doctor.id, trx);
       const exceptions = await availability.timeOff(
         doctor.id,
         { from: rangeStart, to: rangeEnd },

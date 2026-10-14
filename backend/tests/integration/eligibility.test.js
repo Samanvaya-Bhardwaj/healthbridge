@@ -183,6 +183,12 @@ describe('one eligibility rule for the directory, slots and booking', () => {
     expect(
       expectOk(await slotsRes(p.patient, p.doctor, { mode: 'online' })).length,
     ).toBeGreaterThan(0);
+    // The doctor still sees (and can archive) the rules at the closed clinic, marked.
+    const rules = expectOk(await api(h, p.doctor).get('/doctors/me/availability'));
+    const inClinic = rules.filter((r) => r.mode === 'in_clinic');
+    expect(inClinic).toHaveLength(7);
+    expect(inClinic.every((r) => r.bookable === false)).toBe(true);
+    expect(rules.filter((r) => r.mode === 'online').every((r) => r.bookable === true)).toBe(true);
     const refused = await book(p.patient, {
       patientId: p.patient.patient.id,
       doctorId: p.doctor.doctor.id,

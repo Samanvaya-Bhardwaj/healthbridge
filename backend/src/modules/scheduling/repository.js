@@ -20,6 +20,8 @@ export function toRuleView(row) {
     validUntil: row.valid_until ? toIsoDate(row.valid_until) : null,
     feePaise: row.fee_paise,
     status: row.status,
+    // ADR-0030: false when the clinic closed or the doctor no longer practises there.
+    bookable: row.site_open ?? true,
   };
 }
 
@@ -71,8 +73,23 @@ export function toAppointmentView(row, extra = {}) {
 export function createAvailabilityRepository({ knex }) {
   const db = (trx) => trx ?? knex;
   return {
-    /** Active rules at an open practice site (authz.practice_site_open: shared rule). */
+    /**
+     * All of a doctor's active rules: their own schedule management and overlap checks.
+     * `site_open` says whether each one is bookable now (ADR-0030).
+     */
     activeRules(doctorId, trx) {
+      return db(trx)('availability_rules')
+        .where({ doctor_id: doctorId, status: 'active' })
+        .select(
+          'availability_rules.*',
+          db(trx).raw(
+            'authz.practice_site_open(availability_rules.doctor_id, availability_rules.clinic_id) AS site_open',
+          ),
+        )
+        .orderBy(['weekday', 'start_time']);
+    },
+    /** Active rules at an open practice site: the only ones that produce slots and bookings. */
+    openRules(doctorId, trx) {
       return db(trx)('availability_rules')
         .where({ doctor_id: doctorId, status: 'active' })
         .whereRaw(

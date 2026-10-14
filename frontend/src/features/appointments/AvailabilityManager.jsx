@@ -330,6 +330,12 @@ function WeeklyHours({ rules, clinics, upcoming, onChanged }) {
                               {r.validUntil ? ` until ${formatDateOnly(r.validUntil)}` : ''}
                               {booked > 0 && ` · ${booked} booked`}
                             </span>
+                            {r.bookable === false && (
+                              <span className="mt-1 block text-xs font-medium text-warning">
+                                Not bookable: the clinic is closed or you no longer practise there.
+                                Patients see no times from it.
+                              </span>
+                            )}
                           </span>
                           <button
                             type="button"

@@ -30,7 +30,7 @@ const NAME_SIMILARITY = 0.7;
  * down, timeout) is thrown, so callers can tell "nobody matches" from "search failed".
  */
 export function createDoctorSearchService({ knex, index = null }) {
-  async function query(c, { areas, careTeamDoctorIds, approximateName, vector }) {
+  async function query(c, { areas, careTeamDoctorIds, approximateName, vector, pool }) {
     // Bindings are collected in the order the fragments appear in the SQL text, so every
     // fragment below is built in reading order: CTE, select list, WHERE, ORDER BY, LIMIT.
     const bindings = [];
@@ -46,6 +46,8 @@ export function createDoctorSearchService({ knex, index = null }) {
     const selectInTeam = `d.id = ANY (${p(careTeamDoctorIds)}::uuid[])`;
 
     const where = ['authz.doctor_is_bookable(d.id)'];
+    // Internal only (not in the public criteria): search within a given set of doctors.
+    if (pool) where.push(`d.id = ANY (${p(pool)}::uuid[])`);
     if (c.specialty) where.push(`${p(c.specialty)} = ANY (d.specialties)`);
     // Areas without a specialty: the kinds of doctor that cover those areas.
     if (!c.specialty && areas.length) {
@@ -133,15 +135,16 @@ export function createDoctorSearchService({ knex, index = null }) {
 
   /**
    * @param {import('zod').input<typeof doctorSearchCriteriaSchema>} input
-   * @param {{ careTeamDoctorIds?: string[] }} [context]
+   * @param {{ careTeamDoctorIds?: string[], pool?: string[] | null }} [context] `pool`:
+   *   internal callers only (evaluation, care-team search); never from request input.
    */
-  async function search(input, { careTeamDoctorIds = [] } = {}) {
+  async function search(input, { careTeamDoctorIds = [], pool = null } = {}) {
     const c = doctorSearchCriteriaSchema.parse(input);
     const areas = c.areas ?? [];
     // The query text is controlled vocabulary only (specialty and area names).
     const queryText = [c.specialty, ...areas.map(practiceAreaLabel)].filter(Boolean).join(', ');
     const vector = index && queryText ? await index.embedQuery(queryText) : null;
-    const options = { areas, careTeamDoctorIds, approximateName: false, vector };
+    const options = { areas, careTeamDoctorIds, approximateName: false, vector, pool };
     let rows = await query(c, options);
     let approximateName = false;
     if (c.name && rows.length === 0) {

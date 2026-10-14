@@ -12,6 +12,7 @@ import { ROLES } from '@healthbridge/shared';
 import { buildPrincipal } from '../src/core/authz/principal.js';
 import { AppError } from '../src/core/http/errors.js';
 import { createScriptRuntime } from './lib/runtime.js';
+import { seedDirectory } from './lib/seedDirectory.js';
 
 const DEMO_DOMAIN = 'demo.healthbridge.local';
 const email = (local) => `${local}@${DEMO_DOMAIN}`;
@@ -326,6 +327,9 @@ try {
     await container.intelligenceService.setAiProcessing(asha, ashaProfile.id, { enabled: true });
     log('asha enabled AI document processing');
   }
+
+  // ── M13.2: a synthetic directory (10 cities, clinics, doctors, patients) ──
+  await seedDirectory({ container, knex, admin, password, principalFor, log });
 
   log('demo seed complete', { password: 'DEMO_USER_PASSWORD from .env' });
 } catch (err) {
