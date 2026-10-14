@@ -31,6 +31,8 @@ export const MAINTENANCE_JOBS = Object.freeze({
   FOLLOW_UP_SWEEP: 'follow-up-sweep',
   // Step 4: safety net for practice.changed (e.g. a status changed outside the app).
   ELIGIBILITY_SWEEP: 'eligibility-sweep',
+  // M13.2: embeddings of changed public doctor profiles, for search ranking.
+  DOCTOR_SEARCH_INDEX: 'doctor-search-index',
 });
 
 /**
@@ -56,6 +58,7 @@ export function createJobProcessors(container, queues) {
     assistantService,
     appointmentService,
     doctorService,
+    doctorSearchIndex,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -146,6 +149,7 @@ export function createJobProcessors(container, queues) {
         [MAINTENANCE_JOBS.TIMELINE_BACKFILL]: maintenanceJob,
         [MAINTENANCE_JOBS.FOLLOW_UP_SWEEP]: maintenanceJob,
         [MAINTENANCE_JOBS.ELIGIBILITY_SWEEP]: maintenanceJob,
+        [MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
@@ -154,6 +158,7 @@ export function createJobProcessors(container, queues) {
         if (job.name === MAINTENANCE_JOBS.ELIGIBILITY_SWEEP) {
           return appointmentService.withdrawIneligible();
         }
+        if (job.name === MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX) return doctorSearchIndex.refresh();
         if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
           return {
             consents: await consentService.expireDue(),
@@ -207,6 +212,13 @@ export async function registerSchedules(queues, workers) {
     { every: workers.holdSweepIntervalMs },
     { name: MAINTENANCE_JOBS.ELIGIBILITY_SWEEP, data: {}, opts: { attempts: 1 } },
   );
+  // Search ranking works without embeddings; the index catches up in the background.
+  await maintenance.upsertJobScheduler(
+    MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX,
+    { every: 300_000 },
+    { name: MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX, data: {}, opts: { attempts: 1 } },
+  );
+  await maintenance.add(MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX, {}, { attempts: 1 });
   await maintenance.upsertJobScheduler(
     MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,
     { every: 60_000 },

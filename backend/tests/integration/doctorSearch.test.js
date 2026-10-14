@@ -253,3 +253,86 @@ describe('GET /doctors/search', () => {
     expect(profile.specialties).toEqual(['General Medicine']);
   });
 });
+
+describe('vector ranking (hybrid)', () => {
+  // A stand-in embedding model with a notion of meaning: words for the same idea share a
+  // direction ("pimples" and "breakouts" sit with "acne"; "hair" and "scalp" together).
+  const CONCEPTS = [/acne|pimple|breakout/i, /hair|scalp|transplant/i, /dermatolog/i];
+  const embed = (text) => {
+    const v = new Array(1024).fill(0);
+    CONCEPTS.forEach((re, i) => {
+      if (re.test(text)) v[i] = 1;
+    });
+    v[1023] = 0.01; // never the zero vector
+    return v;
+  };
+  let down = false;
+  const calls = [];
+  const aiClient = {
+    async embedPublic({ purpose, kind, texts }) {
+      calls.push({ purpose, kind, count: texts.length });
+      if (down) throw Object.assign(new Error('AI service responded 503'), { status: 503 });
+      return { model: 'concept-test', dimensions: 1024, vectors: texts.map(embed) };
+    },
+  };
+  let h2;
+  let viewer;
+  let tongue;
+  let breakouts;
+  let hair;
+  beforeAll(async () => {
+    h2 = await createHarness({ aiClient });
+    const padmin = await createPlatformAdmin(h2, 'vector-admin');
+    viewer = await createPatient(h2, 'vector-pt');
+    tongue = letters();
+    const make = async (label, bio) => {
+      const doctor = await createVerifiedDoctor(h2, padmin, label);
+      expectOk(
+        await api(h2, doctor).patch('/doctors/me', {
+          primarySpecialization: 'Dermatology',
+          languages: [tongue],
+          bio,
+        }),
+      );
+      return doctor;
+    };
+    // Alphabetical order would put "alpha" first.
+    hair = await make('vector-alpha', 'Hair transplant and scalp care.');
+    breakouts = await make('vector-zeta', 'Treats pimples and breakouts in teenagers.');
+  });
+  afterAll(async () => {
+    await h2.close();
+  });
+  const find = async (query) => {
+    const res = await api(h2, viewer).get(`/doctors/search?${new URLSearchParams(query)}`);
+    return { ids: expectOk(res).map((d) => d.id), ranking: res.body.meta.ranking };
+  };
+
+  it('ranks by meaning when the index has embeddings, and only re-embeds what changed', async () => {
+    const before = await find({ specialty: 'Dermatology', areas: 'acne', language: tongue });
+    expect(before.ranking).toBe('hybrid'); // the query embeds even before profiles do
+    expect(before.ids).toEqual([hair.doctor.id, breakouts.doctor.id]); // no profile vectors yet
+
+    const first = await h2.container.doctorSearchIndex.refresh({ limit: 5000 });
+    expect(first.embedded).toBeGreaterThanOrEqual(2);
+    const after = await find({ specialty: 'Dermatology', areas: 'acne', language: tongue });
+    expect(after.ids).toEqual([breakouts.doctor.id, hair.doctor.id]);
+
+    expect((await h2.container.doctorSearchIndex.refresh({ limit: 5000 })).embedded).toBe(0);
+    expectOk(await api(h2, hair).patch('/doctors/me', { bio: 'Hair loss clinic.' }));
+    expect((await h2.container.doctorSearchIndex.refresh({ limit: 5000 })).embedded).toBe(1);
+    // Profiles are documents; the search query is built from vocabulary, not patient words.
+    expect(calls.some((c) => c.purpose === 'doctor_profile' && c.kind === 'document')).toBe(true);
+    expect(
+      calls.filter((c) => c.purpose === 'doctor_search_query').every((c) => c.count === 1),
+    ).toBe(true);
+  });
+
+  it('falls back to text ranking when embeddings are unavailable, never failing the search', async () => {
+    down = true;
+    const res = await find({ specialty: 'Dermatology', areas: 'eczema', language: tongue });
+    down = false;
+    expect(res.ranking).toBe('lexical');
+    expect(res.ids.sort()).toEqual([breakouts.doctor.id, hair.doctor.id].sort());
+  });
+});

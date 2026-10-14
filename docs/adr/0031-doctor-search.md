@@ -1,7 +1,6 @@
 # ADR-0031: Doctor search (M13.2)
 
-- **Status:** Accepted. Metadata and full-text search are implemented; vector ranking
-  is added on top, in the same milestone.
+- **Status:** Accepted (implemented, including vector ranking)
 - **Date:** 2026-10-16
 - **Builds on:**
   - ADR-0029: agentic care assistant;
@@ -57,6 +56,23 @@ Nothing distinguished "nobody matches" from "the search failed".
    - "no match" names one concrete way to widen the search;
    - "search unavailable" is a distinct fallback.
 4. **`GET /doctors/search`** exposes the same criteria and reasons to the app.
+5. **Vector ranking (pgvector):** each bookable doctor's public profile text (name,
+   specialisations, areas, bio) is embedded by the AI service's configured provider into
+   `doctor_profile_embeddings`.
+   - **Refresh:** the `doctor-search-index` job re-embeds only profiles whose text changed
+     (SHA-256), every 5 minutes and at worker start.
+   - **Query:** the query is the same controlled vocabulary as the full-text query, never
+     the patient's words, so query vectors are cached.
+   - **Endpoint:** `POST /v1/embeddings` takes a service token only, because its input is
+     never patient data.
+   - **Ranking:** similarity is one more ranking term (weight 1.5). It never decides who
+     is listed.
+   - **Fallback:** when embeddings are unavailable, search ranks by text alone and says
+     so (`ranking: "lexical"`, else `"hybrid"`).
+
+   The default embedding provider is a deterministic feature-hashing model, which captures
+   word overlap, not meaning. Meaning-level ranking needs an approved semantic provider
+   (Voyage), which production refuses without `LLM_EXTERNAL_PROCESSING_APPROVED` (ADR-0008).
 
 ## Consequences
 

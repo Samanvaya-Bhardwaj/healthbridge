@@ -109,7 +109,7 @@ export function doctorRoutes(container) {
   // Structured search with match reasons (eligible doctors only; ADR-0030).
   router.get('/doctors/search', directory, validate({ query: searchQuery }), async (req, res) => {
     const result = await doctorSearchService.search(req.valid.query);
-    res.json({ data: result.doctors, meta: { status: result.status } });
+    res.json({ data: result.doctors, meta: { status: result.status, ranking: result.ranking } });
   });
   router.get(
     '/doctors/:doctorId',

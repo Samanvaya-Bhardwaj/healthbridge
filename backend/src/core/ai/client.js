@@ -111,6 +111,17 @@ export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchIm
      * the next action (a backend tool to run, or a reply) out. The AI service executes
      * nothing and never calls back; the scope names the acting patient only.
      */
+    /**
+     * Embeddings of PUBLIC text for doctor search (M13.2, ADR-0031): profile text, or a
+     * query built from the controlled vocabulary. No patient scope: never patient data.
+     */
+    embedPublic: ({ purpose, kind, texts }, { requestId, timeout = 5_000 } = {}) =>
+      request('/v1/embeddings', {
+        method: 'POST',
+        body: { purpose, kind, texts },
+        requestId,
+        timeout,
+      }),
     agentStep: (input, { requestId, timeout = 20_000 } = {}) =>
       request('/v1/agent/step', {
         method: 'POST',

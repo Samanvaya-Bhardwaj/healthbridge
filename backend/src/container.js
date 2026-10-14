@@ -17,6 +17,7 @@ import { createPatientService } from './modules/patients/service.js';
 import { createDoctorRepository } from './modules/doctors/repository.js';
 import { createDoctorService } from './modules/doctors/service.js';
 import { createDoctorSearchService } from './modules/doctors/searchService.js';
+import { createDoctorSearchIndex } from './modules/doctors/searchIndex.js';
 import { createClinicRepository } from './modules/clinics/repository.js';
 import { createClinicService } from './modules/clinics/service.js';
 import { createCareRepository } from './modules/care/repository.js';
@@ -188,7 +189,8 @@ export function createContainer({
   const adminUserService = createAdminUserService({ knex, users, roles, sessions, audit, hasher });
   const patientService = createPatientService({ knex, patients, accessPolicy, audit, logger });
   const doctorService = createDoctorService({ knex, doctors, roles, accessPolicy, audit });
-  const doctorSearchService = createDoctorSearchService({ knex });
+  const doctorSearchIndex = createDoctorSearchIndex({ knex, aiClient, logger });
+  const doctorSearchService = createDoctorSearchService({ knex, index: doctorSearchIndex });
   const clinicService = createClinicService({
     knex,
     clinics,
@@ -397,6 +399,7 @@ export function createContainer({
     patientService,
     doctorService,
     doctorSearchService,
+    doctorSearchIndex,
     clinicService,
     careService,
     availabilityService,

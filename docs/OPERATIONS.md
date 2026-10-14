@@ -214,7 +214,14 @@ path has not been deployed from this repository.
 - **Check:** `SELECT count(*) FROM appointments a WHERE a.status IN ('pending_payment','confirmed') AND a.starts_at > now() AND (NOT authz.doctor_is_bookable(a.doctor_id) OR NOT authz.practice_site_open(a.doctor_id, a.clinic_id));` should be 0 shortly after a change.
 - **Reopening:** making a clinic active again does not restore withdrawn bookings. Patients book again.
 
-## 10. Care assistant (M13.1)
+## 10. Doctor search index (M13.2, ADR-0031)
+
+- **Job:** `doctor-search-index` (every 5 minutes, and once at worker start) embeds public doctor-profile text through the AI service. It re-embeds a doctor only when the profile text changes.
+- **Without it:** search keeps working and ranks by text only. `GET /doctors/search` reports `meta.ranking: "lexical"` instead of `"hybrid"`.
+- **Changing the embedding provider:** vectors from different models are not comparable. Run `DELETE FROM doctor_profile_embeddings;` and let the job rebuild the index. It is small: one row per doctor.
+- **Changing the search vocabulary** (specialty terms or areas of practice) needs a migration, because a test compares `@healthbridge/shared` with `specialty_terms` and `practice_areas`.
+
+## 11. Care assistant (M13.1)
 
 - **Metrics:** API and worker `/metrics` now include:
   - `healthbridge_agent_runs_total{intent,outcome}`;

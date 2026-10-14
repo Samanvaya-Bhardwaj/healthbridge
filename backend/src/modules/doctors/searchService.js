@@ -20,15 +20,17 @@ const NAME_SIMILARITY = 0.7;
  * - **Names:** names containing the text first; only when there are none, close matches
  *   (trigram word similarity), marked approximate so the caller can say so.
  * - **Ranking:** listed areas of practice that match, full-text relevance of the profile
- *   to the specialty and area names (never to patient wording), being in the patient's
- *   care team, then experience. Ties break by name and ID, so the order is stable.
+ *   to the specialty and area names (never to patient wording), vector similarity of the
+ *   profile embedding to the same names (when the index has it; ranking: 'hybrid', else
+ *   'lexical'), being in the patient's care team, then experience. Ties break by name
+ *   and ID, so the order is stable.
  * - **Reasons:** every result says which criteria it meets, from the data matched.
  *
  * Returns `status: 'no_match'` when nothing meets the criteria. A failure (database
  * down, timeout) is thrown, so callers can tell "nobody matches" from "search failed".
  */
-export function createDoctorSearchService({ knex }) {
-  async function query(c, { areas, careTeamDoctorIds, approximateName }) {
+export function createDoctorSearchService({ knex, index = null }) {
+  async function query(c, { areas, careTeamDoctorIds, approximateName, vector }) {
     // Bindings are collected in the order the fragments appear in the SQL text, so every
     // fragment below is built in reading order: CTE, select list, WHERE, ORDER BY, LIMIT.
     const bindings = [];
@@ -82,6 +84,10 @@ export function createDoctorSearchService({ knex }) {
       c.name && approximateName ? `word_similarity(${p(c.name)}, d.professional_name) DESC,` : '';
     const orderAreas = `cardinality(ARRAY(SELECT unnest(d.areas_of_practice)
                                           INTERSECT SELECT unnest(${p(areas)}::text[])))`;
+    // Vector similarity of the public profile to the vocabulary query (when available).
+    const orderVector = vector
+      ? `+ 1.5 * coalesce(1 - (e.embedding OPERATOR(extensions.<=>) ${p(vector)}::extensions.vector), 0)`
+      : '';
     const orderInTeam = `d.id = ANY (${p(careTeamDoctorIds)}::uuid[])`;
     const limit = p(c.limit);
 
@@ -107,10 +113,12 @@ export function createDoctorSearchService({ knex }) {
                           FROM offered o WHERE o.doctor_id = d.id), '{}') AS modes,
               ${selectInTeam} AS in_care_team
          FROM doctors d CROSS JOIN q
+         ${vector ? 'LEFT JOIN doctor_profile_embeddings e ON e.doctor_id = d.id' : ''}
         WHERE ${where.join('\n          AND ')}
         ORDER BY ${orderName}
                  (2.0 * ${orderAreas}
                   + ts_rank_cd(d.search_document, q.tsq, 32)
+                  ${orderVector}
                   + CASE WHEN ${orderInTeam} THEN 0.5 ELSE 0 END
                   + least(coalesce(d.years_of_experience, 0), 30) / 300.0) DESC,
                  d.professional_name, d.id
@@ -129,7 +137,11 @@ export function createDoctorSearchService({ knex }) {
    */
   async function search(input, { careTeamDoctorIds = [] } = {}) {
     const c = doctorSearchCriteriaSchema.parse(input);
-    const options = { areas: c.areas ?? [], careTeamDoctorIds, approximateName: false };
+    const areas = c.areas ?? [];
+    // The query text is controlled vocabulary only (specialty and area names).
+    const queryText = [c.specialty, ...areas.map(practiceAreaLabel)].filter(Boolean).join(', ');
+    const vector = index && queryText ? await index.embedQuery(queryText) : null;
+    const options = { areas, careTeamDoctorIds, approximateName: false, vector };
     let rows = await query(c, options);
     let approximateName = false;
     if (c.name && rows.length === 0) {
@@ -137,7 +149,11 @@ export function createDoctorSearchService({ knex }) {
       rows = await query(c, { ...options, approximateName });
     }
     const doctors = rows.map((row) => toResult(row, c, options.areas, approximateName));
-    return { status: doctors.length ? 'ok' : 'no_match', doctors };
+    return {
+      status: doctors.length ? 'ok' : 'no_match',
+      doctors,
+      ranking: vector ? 'hybrid' : 'lexical',
+    };
   }
 
   return { search };
