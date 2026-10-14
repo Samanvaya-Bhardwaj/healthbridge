@@ -18,9 +18,14 @@ test('patient asks the assistant for a doctor and gets grounded suggestions', as
   await expect(page.locator('p', { hasText: 'What I understood:' })).toContainText(
     'General Medicine',
   );
-  const meera = page.getByRole('listitem').filter({ hasText: 'Dr. Meera Iyer' }).first();
+  // Meera's own card (the innermost list item with her booking link). With the synthetic
+  // directory there are several matching doctors; the care-team doctor comes first.
+  const book = page.getByRole('link', { name: 'Book with Dr. Meera Iyer' });
+  const meera = page.getByRole('listitem').filter({ has: book }).last();
   await expect(meera).toBeVisible();
-  await expect(meera.getByText('In your care team')).toBeVisible();
+  await expect(meera.getByText('In your care team', { exact: true })).toBeVisible();
+  const doctorActions = page.getByRole('link', { name: /^(Book with Dr|View in My Doctors)/ });
+  await expect(doctorActions.first()).toHaveText('Book with Dr. Meera Iyer');
   // Suggestions are never presented as bookings; booking is the existing confirmed flow.
   await expect(page.getByText('Suggested · not booked')).toBeVisible();
   await meera.getByRole('link', { name: 'Book with Dr. Meera Iyer' }).click();
