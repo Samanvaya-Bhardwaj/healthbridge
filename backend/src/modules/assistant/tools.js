@@ -53,6 +53,18 @@ export const TOOL_NAMES = Object.freeze(Object.keys(TOOL_ARGS));
 const errorCode = (err) =>
   err instanceof AppError && /^[a-z_]{1,48}$/.test(err.code ?? '') ? err.code : 'tool_failed';
 
+const MAX_RECOMMENDED = 5;
+
+/** Recommendations in the search result's shape, explanations and next step included. */
+const toFound = ({ status, recommendations }) => ({
+  status,
+  doctors: recommendations.map((r) => ({
+    ...r.doctor,
+    explanations: r.explanations,
+    nextStep: r.nextStep,
+  })),
+});
+
 const doctorFacts = (d) => ({
   id: d.id,
   professionalName: d.professionalName,
@@ -63,6 +75,9 @@ const doctorFacts = (d) => ({
   // M13.2: what the doctor offers and why the search suggested them (backend data only).
   modes: d.modes ?? [],
   reasons: d.reasons ?? [],
+  // M13.3: grounded explanations (continuity, preferences, soonest time) and the next step.
+  explanations: d.explanations ?? [],
+  nextStep: d.nextStep ?? null,
 });
 
 /**
@@ -70,7 +85,15 @@ const doctorFacts = (d) => ({
  * @param {{ principal: object, patientId: string, actingFor: 'self'|'dependent', timeZone: string, req?: object }} turn
  */
 export function createToolContext(
-  { accessPolicy, careService, doctorService, doctorSearchService, availabilityService, logger },
+  {
+    accessPolicy,
+    careService,
+    doctorService,
+    doctorSearchService,
+    recommendationService,
+    availabilityService,
+    logger,
+  },
   { principal, patientId, actingFor, timeZone, req },
 ) {
   const evidence = { doctors: new Map(), slots: new Map(), careTeam: null };
@@ -114,10 +137,20 @@ export function createToolContext(
       const active = [...team.entries()].filter(([, s]) => s === 'active').map(([id]) => id);
       let found;
       try {
-        found = await doctorSearchService.search(
-          { ...criteria, limit: MAX_DOCTORS },
-          { careTeamDoctorIds: active },
-        );
+        // M13.3: recommendations for the session's patient when available (continuity,
+        // profile preferences, soonest free time, with explanations); else plain search.
+        found = recommendationService
+          ? toFound(
+              await recommendationService.recommend(
+                principal,
+                { patientId, criteria, limit: MAX_RECOMMENDED, timeZone },
+                req,
+              ),
+            )
+          : await doctorSearchService.search(
+              { ...criteria, limit: MAX_DOCTORS },
+              { careTeamDoctorIds: active },
+            );
       } catch (err) {
         // Search failed, which is not the same as nobody matching: say so distinctly.
         logger?.warn({ errName: err?.name }, 'assistant doctor search unavailable');
@@ -136,7 +169,7 @@ export function createToolContext(
           languages: d.languages,
           modes: d.modes,
           inCareTeam: team.get(d.id) === 'active',
-          reasons: d.reasons.map((r) => r.code),
+          reasons: (d.explanations ?? d.reasons).map((r) => r.code),
         })),
       };
     },

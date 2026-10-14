@@ -151,8 +151,8 @@ TOOLS = {
         "ok": True,
         "data": {
             "doctors": [
-                {"doctorId": DERM_NEW, "inCareTeam": False},
                 {"doctorId": DERM_IN_TEAM, "inCareTeam": True},
+                {"doctorId": DERM_NEW, "inCareTeam": False},
             ]
             if a.get("specialty") == "Dermatology"
             else []
@@ -367,7 +367,7 @@ def test_follow_up_refines_criteria_and_dependent_wording():
     app, _, _ = app_with()
     with TestClient(app) as client:
         first, _ = run_turn(client, "a dermatologist", TOOLS, acting="dependent")
-        assert "their care team" in first["reply"]["message"]
+        assert "suggest for them" in first["reply"]["message"]
         second, executed = run_turn(client, "tomorrow evening", TOOLS, state=first["state"])
     assert second["state"]["criteria"]["specialty"] == "Dermatology"
     assert second["state"]["criteria"]["timeWindow"] == "evening"
@@ -622,3 +622,27 @@ def test_unknown_areas_from_the_model_are_dropped():
         body, _ = run_turn(client, "skin", TOOLS)
     # bogus is not an area; heart_rhythm does not fit Dermatology.
     assert body["state"]["criteria"]["areas"] == ["acne"]
+
+
+def test_the_backend_order_is_kept_as_given():
+    # M13.3: the backend ranks (continuity, preferences, soonest time); the AI never
+    # reorders, even putting a doctor outside the care team first when the backend does.
+    app, _, _ = app_with()
+    tools = {
+        **TOOLS,
+        "searchDoctors": lambda _a: {
+            "ok": True,
+            "data": {
+                "status": "ok",
+                "doctors": [
+                    {"doctorId": DERM_NEW, "inCareTeam": False},
+                    {"doctorId": DERM_IN_TEAM, "inCareTeam": True},
+                ],
+            },
+        },
+    }
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "a dermatologist please", tools)
+    assert body["state"]["candidateDoctorIds"] == [DERM_NEW, DERM_IN_TEAM]
+    assert [c["doctorId"] for c in body["reply"]["cards"]] == [DERM_NEW, DERM_IN_TEAM]
+    assert "in the order I'd suggest for you" in body["reply"]["message"]

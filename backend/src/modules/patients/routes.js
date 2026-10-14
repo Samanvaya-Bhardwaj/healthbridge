@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   PERMISSIONS,
   createDependentSchema,
+  doctorSearchCriteriaSchema,
   patientProfileSchema,
   patientProfileUpdateSchema,
 } from '@healthbridge/shared';
@@ -10,13 +11,30 @@ import { validate } from '../../core/http/validate.js';
 
 const idParam = (name) => z.object({ [name]: z.string().max(64) });
 
+// M13.3: the shared search criteria as a query string (areas as a comma list), plus the
+// person's time zone for "soonest free time".
+const recommendationQuery = z.preprocess(
+  (q) => ({
+    ...q,
+    ...(typeof q?.areas === 'string' ? { areas: q.areas.split(',').filter(Boolean) } : {}),
+    ...(typeof q?.limit === 'string' ? { limit: Number(q.limit) } : {}),
+  }),
+  doctorSearchCriteriaSchema.omit({ excludeDoctorIds: true, limit: true }).extend({
+    limit: z.number().int().min(1).max(5).default(3),
+    timeZone: z
+      .string()
+      .regex(/^[A-Za-z_]+(?:[/][A-Za-z0-9_+-]+){0,2}$/)
+      .default('Asia/Kolkata'),
+  }),
+);
+
 /**
  * /patients/* and /guardianships/* routes. Route-level checks are gate 1 only; the
  * service enforces relationship and consent through AccessPolicy for every patient.
  * @param {ReturnType<typeof import('../../container.js').createContainer>} container
  */
 export function patientRoutes(container) {
-  const { authenticate, accessPolicy, patientService } = container;
+  const { authenticate, accessPolicy, patientService, recommendationService } = container;
   const router = Router();
   const can = (permission) => [authenticate(), accessPolicy.requirePermission(permission)];
   const noStore = (_req, res, next) => {
@@ -77,6 +95,23 @@ export function patientRoutes(container) {
       res.json({
         data: await patientService.getProfile(req.principal, req.valid.params.patientId, req),
       });
+    },
+  );
+
+  // M13.3: a few recommended doctors with grounded explanations and a next step.
+  router.get(
+    '/patients/:patientId/recommendations',
+    can(PERMISSIONS.PATIENTS_READ),
+    noStore,
+    validate({ params: idParam('patientId'), query: recommendationQuery }),
+    async (req, res) => {
+      const { limit, timeZone, ...criteria } = req.valid.query;
+      const result = await recommendationService.recommend(
+        req.principal,
+        { patientId: req.valid.params.patientId, criteria, limit, timeZone },
+        req,
+      );
+      res.json({ data: result.recommendations, meta: { status: result.status } });
     },
   );
 

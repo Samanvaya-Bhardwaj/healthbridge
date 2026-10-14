@@ -400,10 +400,10 @@ def build_care_assistant(llm: LLMProvider):
             team = _uuid_list(active, 20)
             return {"state": current.model_copy(update={"careTeamDoctorIds": team})}
         if result.name == "searchDoctors":
+            # M13.3: the backend ranks (care team, past visits, preferences, soonest time);
+            # the order is kept as given.
             rows = [d for d in data.get("doctors", []) if isinstance(d, dict)]
-            ordered = [d.get("doctorId") for d in rows if d.get("inCareTeam")] + [
-                d.get("doctorId") for d in rows if not d.get("inCareTeam")
-            ]
+            ordered = [d.get("doctorId") for d in rows]
             return {
                 "state": current.model_copy(
                     update={"candidateDoctorIds": _uuid_list(ordered, 5), "slotStarts": []}
@@ -520,7 +520,12 @@ def build_care_assistant(llm: LLMProvider):
                 f"Here {'is' if one else 'are'} "
                 f"{_plural(len(candidates), 'verified doctor', 'verified doctors')}"
                 + (f" {summary}." if summary else ".")
-                + ("" if one else f" Doctors already in {theirs} care team are listed first.")
+                + (
+                    ""
+                    if one
+                    else f" They're in the order I'd suggest for "
+                    f"{'them' if ctx.actingFor == 'dependent' else 'you'}; each card says why."
+                )
             )
             cards = [Card(type="doctor", doctorId=d) for d in candidates]
             if "findAvailableSlots" in used and current.selectedDoctorId:

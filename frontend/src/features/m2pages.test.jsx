@@ -112,6 +112,78 @@ describe('my doctors', () => {
   });
 });
 
+describe('recommended doctors (M13.3)', () => {
+  it('filters by what matters, explains each suggestion and offers the right next step', async () => {
+    const recommendation = (id, name, nextStep, explanations) => ({
+      doctor: {
+        id,
+        professionalName: name,
+        primarySpecialization: 'Dermatology',
+        yearsOfExperience: 12,
+        languages: ['Marathi'],
+        clinics: [],
+        modes: ['online'],
+      },
+      careStatus: nextStep.type === 'book' ? 'active' : 'none',
+      explanations,
+      nextStep,
+    });
+    const calls = signedIn(makeUser(['PATIENT']), {
+      'GET /api/v1/patients/me': () => json(200, { data: { id: 'p1', fullName: 'Asha Rao' } }),
+      'GET /api/v1/care-relationships': () => json(200, { data: [] }),
+      'GET /api/v1/doctors?limit=20': () => json(200, { data: [], meta: {} }),
+      'POST /api/v1/care-relationships': () => json(201, { data: { id: 'r9', status: 'pending' } }),
+    });
+    const queries = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (url, init) => {
+      if (!String(url).startsWith('/api/v1/patients/p1/recommendations')) {
+        return originalFetch(url, init);
+      }
+      queries.push(new URL(String(url), 'http://x').searchParams);
+      return Promise.resolve(
+        json(200, {
+          data: [
+            recommendation('d1', 'Dr. Known', { type: 'book', mode: 'online' }, [
+              { code: 'seen_before', value: '2026-10-01T05:00:00Z' },
+              { code: 'matches_specialty', value: 'Dermatology' },
+            ]),
+            recommendation('d2', 'Dr. Nearby', { type: 'request_care' }, [
+              { code: 'matches_specialty', value: 'Dermatology' },
+              { code: 'near_you', value: 'Pune' },
+              { code: 'speaks_your_language', value: 'Marathi' },
+            ]),
+          ],
+          meta: { status: 'ok' },
+        }),
+      );
+    };
+    renderAt('/app/doctors');
+    const ue = userEvent.setup();
+    expect(await screen.findByRole('heading', { name: 'Recommended for you' })).toBeInTheDocument();
+    await ue.selectOptions(screen.getByLabelText('Speciality'), 'Dermatology');
+    await ue.type(screen.getByLabelText('City'), 'Pune');
+    await ue.selectOptions(screen.getByLabelText('Consultation'), 'online');
+    await ue.click(screen.getByRole('button', { name: 'Show recommendations' }));
+    await waitFor(() => expect(queries.at(-1)?.get('specialty')).toBe('Dermatology'));
+    expect(queries.at(-1).get('city')).toBe('Pune');
+    expect(queries.at(-1).get('mode')).toBe('online');
+
+    expect(await screen.findByText(/Why suggested: You saw them on/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Why suggested: Dermatology · Near you in Pune · Speaks Marathi'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Book with Dr. Known' })).toHaveAttribute(
+      'href',
+      '/app/appointments/book?doctorId=d1&patientId=p1&mode=online',
+    );
+    await ue.click(screen.getByRole('button', { name: 'Request care' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.key === 'POST /api/v1/care-relationships')).toBe(true),
+    );
+  }, 15_000);
+});
+
 describe('doctor workspace', () => {
   it('shows verification status and lets an applicant submit', async () => {
     const calls = signedIn(makeUser(['PATIENT']), {

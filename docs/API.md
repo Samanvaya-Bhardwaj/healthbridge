@@ -146,6 +146,7 @@ All patient-data endpoints go through AccessPolicy:
 | GET | `/doctors?q=&specialization=&clinicId=` | `doctors:read` | Directory: verified and active only |
 | GET | `/doctors/search?specialty=&areas=&city=&language=&mode=&name=&limit=` | `doctors:read` | M13.2 (ADR-0031): bookable doctors matching every criterion, ranked, each with `reasons`; `meta.status` is `ok` or `no_match`. `areas` is a comma list of area codes. |
 | GET | `/doctors/:id` | `doctors:read` | Public profile (404 unless verified and active) |
+| GET | `/patients/:id/recommendations?specialty=&areas=&city=&language=&mode=&limit=&timeZone=` | `patients:read`, patient side only | M13.3 (ADR-0032): up to 5 recommended doctors, each with `explanations` (facts with a code and value) and a `nextStep` (`book`, `await_acceptance` or `request_care`). `meta.status` is `ok` or `no_match`. |
 | GET | `/admin/doctor-verifications?status=` | `admin:doctors` | Queue (pending and under review by default) |
 | GET | `/admin/doctor-verifications/:id` | `admin:doctors` | Case and profile (read is audited) |
 | POST | `/admin/doctor-verifications/:id/start-review` | `admin:doctors` | pending → under_review |

@@ -16,6 +16,9 @@ export const patientsApi = {
   dependents: () => data(apiRequest('/patients/me/dependents')),
   createDependent: (body) => data(apiRequest('/patients/me/dependents', { method: 'POST', body })),
   endGuardianship: (id) => data(apiRequest(`/guardianships/${id}/end`, { method: 'POST' })),
+  /** M13.3: recommended doctors, with explanations and the next step. */
+  recommendations: (patientId, criteria = {}) =>
+    data(apiRequest(`/patients/${patientId}/recommendations${qs(criteria)}`)),
 };
 
 export const doctorsApi = {

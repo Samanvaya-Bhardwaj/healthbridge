@@ -15,6 +15,7 @@ import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { CalendarDays, ChevronDown, HelpCircle, Search, Stethoscope, UserPlus } from 'lucide-react';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
+import { Recommendations } from './Recommendations.jsx';
 import { AvailabilitySummary, DoctorCredentials } from './DoctorInfo.jsx';
 import { useDoctorProfile, useDoctorSlots } from './doctorInfo.js';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
@@ -242,9 +243,11 @@ function DoctorSearch({ patientId, teamStatusByDoctor, onRequested }) {
     queryKey: ['doctors', 'directory', submitted],
     queryFn: async () => (await doctorsApi.directory({ q: submitted || undefined })).data,
   });
+  const queryClient = useQueryClient();
   const request = useSafeMutation({
     mutationFn: (doctor) => careApi.request({ patientId, doctorId: doctor.id }),
     onSuccess: (_rel, doctor) => {
+      queryClient.invalidateQueries({ queryKey: ['recommendations'] });
       setMessage({
         tone: 'success',
         text: `Request sent to ${doctor.professionalName}. Once they accept, you can book; you’ll get a notification.`,
@@ -261,6 +264,12 @@ function DoctorSearch({ patientId, teamStatusByDoctor, onRequested }) {
         title="Find a verified doctor"
         description="Every doctor listed has had their medical registration checked by HealthBridge. Search by name or speciality."
       />
+      <Recommendations
+        patientId={patientId}
+        requesting={request.isPending}
+        onRequest={(doctor) => request.mutate(doctor)}
+      />
+      <h3 className="mt-6 text-[1.0625rem] font-semibold text-text">Search by name</h3>
       <form
         role="search"
         className="mt-4 flex gap-2"

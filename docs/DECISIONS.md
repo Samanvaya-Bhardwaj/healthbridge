@@ -37,5 +37,6 @@ old one.
 | [0029](adr/0029-agentic-ai-orchestration.md) | Agentic care assistant: backend-owned turn loop over a bounded LangGraph planner; allow-listed backend tools on existing services; structured 24 h state, never transcripts; approval before any write (M13.4) | Accepted |
 | [0030](adr/0030-one-eligibility-rule.md) | One eligibility rule (doctor account, profile, verification; open practice site) in PostgreSQL for the directory, slots and booking; a booking guard under row locks; ineligible future bookings withdrawn by the system with a full refund | Accepted |
 | [0031](adr/0031-doctor-search.md) | Doctor search: shared specialty terms and areas of practice (database copies checked against them); one SQL search with hard filters (eligibility, specialty, city, language, mode, name), a deterministic ranking and reasons; no-match told apart from search unavailable | Accepted |
+| [0032](adr/0032-recommendations.md) | Recommendations: search order lifted by care team, past visits (date only), profile city and language (lift, never filter) and soonest free time; fact-based explanations and a next step; patient side only; served by the existing read-only assistant tool | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).

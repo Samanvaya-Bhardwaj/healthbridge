@@ -18,6 +18,7 @@ import { createDoctorRepository } from './modules/doctors/repository.js';
 import { createDoctorService } from './modules/doctors/service.js';
 import { createDoctorSearchService } from './modules/doctors/searchService.js';
 import { createDoctorSearchIndex } from './modules/doctors/searchIndex.js';
+import { createRecommendationService } from './modules/patients/recommendationService.js';
 import { createClinicRepository } from './modules/clinics/repository.js';
 import { createClinicService } from './modules/clinics/service.js';
 import { createCareRepository } from './modules/care/repository.js';
@@ -229,6 +230,14 @@ export function createContainer({
     audit,
     logger,
   });
+  // M13.3: recommendations for the patient side (search + continuity + availability).
+  const recommendationService = createRecommendationService({
+    doctorSearchService,
+    patientService,
+    careService,
+    appointmentService,
+    availabilityService,
+  });
   const settlement = createPaymentSettlement({
     knex,
     payments,
@@ -291,6 +300,7 @@ export function createContainer({
     careService,
     doctorService,
     doctorSearchService,
+    recommendationService,
     availabilityService,
     logger,
     inputDigester,
@@ -400,6 +410,7 @@ export function createContainer({
     doctorService,
     doctorSearchService,
     doctorSearchIndex,
+    recommendationService,
     clinicService,
     careService,
     availabilityService,

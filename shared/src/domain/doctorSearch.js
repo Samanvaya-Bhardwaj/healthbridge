@@ -169,6 +169,36 @@ export function canonicalSpecialties(...texts) {
   );
 }
 
+/** Language names a profile preference may use, by ISO 639-1 code. */
+const LOCALE_LANGUAGES = Object.freeze({
+  en: 'English',
+  hi: 'Hindi',
+  mr: 'Marathi',
+  ta: 'Tamil',
+  te: 'Telugu',
+  kn: 'Kannada',
+  ml: 'Malayalam',
+  bn: 'Bengali',
+  gu: 'Gujarati',
+  ur: 'Urdu',
+  pa: 'Punjabi',
+  or: 'Odia',
+  as: 'Assamese',
+});
+
+/**
+ * A patient's free-text language preference ("hi-IN", "Marathi", "en") as a language
+ * name doctors list, or null when it is not recognisable. Never guesses.
+ */
+export function languageForPreference(preference) {
+  const value = String(preference ?? '').trim();
+  if (!value) return null;
+  const code = value.toLowerCase().match(/^([a-z]{2})(?:[-_][a-z]{2})?$/)?.[1];
+  if (code) return LOCALE_LANGUAGES[code] ?? null;
+  const name = Object.values(LOCALE_LANGUAGES).find((l) => l.toLowerCase() === value.toLowerCase());
+  return name ?? null;
+}
+
 export const CONSULTATION_MODES = Object.freeze(['online', 'in_clinic']);
 
 const place = (max) =>

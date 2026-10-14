@@ -26,6 +26,7 @@ import { PageHeader } from '../../components/ui/Typography.jsx';
 import { PatientSelect } from '../records/PatientSelect.jsx';
 import { usePatientChoice } from '../records/usePatientChoice.js';
 import { MODE_LABELS, formatFee } from '../appointments/format.js';
+import { whySuggested } from '../care/recommendationText.js';
 
 const QUICK_ACTIONS = [
   [Stethoscope, 'Find a doctor', 'I would like to find a doctor'],
@@ -75,22 +76,9 @@ function Understood({ understood }) {
   );
 }
 
-/** Why the search suggested a doctor, from the backend's reasons only. */
-const REASON_TEXT = {
-  specialty: (r) => r.value,
-  area: (r) => `Lists ${r.value}`,
-  city: (r) => `Practises in ${r.value}`,
-  language: (r) => `Speaks ${r.value}`,
-  mode: (r) => (r.value === 'online' ? 'Online consultations' : 'In-clinic visits'),
-  name: (r) => (r.approximate ? 'Closest name match' : null),
-};
-
 function DoctorCard({ card, patientId, actingFor }) {
   const d = card.doctor;
-  const why = (d.reasons ?? [])
-    .map((r) => REASON_TEXT[r.code]?.(r))
-    .filter(Boolean)
-    .join(' · ');
+  const why = whySuggested(d);
   const detail = [
     d.primarySpecialization,
     d.yearsOfExperience ? `${d.yearsOfExperience} yrs experience` : null,
