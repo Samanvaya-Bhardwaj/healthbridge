@@ -12,7 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 export function useSafeMutation(options, queryClient) {
   const mutation = useMutation(options, queryClient);
   const inFlight = useRef(false);
-  const { mutate: rawMutate } = mutation;
+  const { mutate: rawMutate, reset: rawReset } = mutation;
   const mutate = useCallback(
     (variables, callbacks) => {
       if (inFlight.current) return;
@@ -27,5 +27,11 @@ export function useSafeMutation(options, queryClient) {
     },
     [rawMutate],
   );
-  return { ...mutation, mutate };
+  // A reset detaches the call in flight, whose onSettled then never runs here: release
+  // the guard too, or every later mutate() would be silently ignored.
+  const reset = useCallback(() => {
+    inFlight.current = false;
+    rawReset();
+  }, [rawReset]);
+  return { ...mutation, mutate, reset };
 }
