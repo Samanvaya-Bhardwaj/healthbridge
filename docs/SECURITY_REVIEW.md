@@ -183,3 +183,58 @@ privacy, security and compliance review described there.
 5. There is no WAF or bot management in front of Nginx.
 6. The fake scanner, payment, email and LLM providers are development defaults. Each is
    refused in production by configuration checks.
+
+---
+
+# Security review: M13.1 care assistant (independent, post-merge)
+
+- **Milestone:** M13.1 · **Date:** 2026-10-14
+- **Scope:** M13.1 as merged on `main` (`c571bd9..d423050`), including its pre-merge
+  hardening. That covers:
+  - the `agent_sessions` schema and RLS;
+  - the backend turn loop, tools and routes;
+  - the backend ↔ AI-service boundary (scope tokens, the `/v1/agent/step` contract,
+    keyed input digests, `ai.ai_runs`);
+  - the LangGraph step and prompt;
+  - the Assistant page.
+- **Method:** a manual code review against ADR-0029, ADR-0012 and ADR-0008. The two
+  emergency-wording rules were also compared with a seeded differential fuzz of 30,000
+  generated messages.
+
+**Already sound on `main`:**
+
+- **Sessions:** RLS ties sessions to their owner and the patient side, for every read,
+  insert and update. A guardianship that ends hides its sessions at once.
+- **Turns:** AccessPolicy re-checks scope on every turn.
+- **Tools:** an explicit allow-list of read-only tools. Arguments are checked strictly,
+  permissions are checked per tool, and the AI never supplies a patient identifier.
+- **Untrusted AI output:** forged doctor or slot IDs and out-of-contract state are
+  dropped, and cards are built only from backend data.
+- **Digests:** free-text inputs are kept only as backend HMAC digests. There is one
+  subkey per purpose, and the AI service never holds the key. Legacy plain hashes were
+  cleared, and a constraint refuses new unkeyed ones.
+- **Emergency wording:** the backend screens it before any AI call, even in an ended
+  session or past the turn limit.
+- **Frontend:** a late reply for an earlier session or patient is dropped.
+- **Nothing stored or rendered unsafely:** no message text in the database, audit or
+  logs, and no raw HTML rendering.
+
+**Findings fixed in this review:**
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Safety | The two emergency rules disagreed. Python's `re.I` treats İ and ı as i and JavaScript did not, so "I want to kıll myself" got no guidance from the backend. The ASCII-only `\b`/`\w` in JavaScript also differed from Python's Unicode ones. In the fuzz, 3,269 of 30,000 messages disagreed, and in 1,655 the backend missed a match. Neither copy matched dash look-alikes ("self–harm") or "seizures" or "convulsions". | Both copies fold dash look-alikes and match the plurals. The JavaScript pattern uses Python-equivalent word boundaries and case folding. The fuzz now finds 0 disagreements, and the shared fixture pins the new cases. |
+| 2 | Low | The prompt removed only the exact `</message>`. Case and spacing variants, opening tags, or a tag spliced together by the removal passed through. Output is schema-constrained, so the impact was limited. | Every variant is removed, repeatedly until none is left. The prompt version is bumped. |
+| 3 | Low (latent) | `useSafeMutation.reset()` during a call in flight left its double-submit guard set, so every later call was ignored. No current caller does this. | `reset()` clears the guard, and a new hook test covers it. |
+
+**Carried forward:**
+
+- **View-only guardians:** they may use the read-only assistant. When M13.4 adds booking,
+  booking must keep requiring a `manage` guardianship, which the appointment service
+  enforces.
+- **Patient identifier in AI calls:** the AI service receives it in the patient-scope
+  token (ADR-0022), to enforce the scope and label `ai.ai_runs`. It never reaches a
+  prompt.
+- **Wording coverage:** the emergency rule matches fixed English wording only. Forms it
+  does not list, misspellings and other languages are not caught. Widening it is a
+  safety-policy decision.

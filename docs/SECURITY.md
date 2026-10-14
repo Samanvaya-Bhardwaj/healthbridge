@@ -424,7 +424,7 @@ Each layer is tested on its own:
 - **Untrusted output:**
   - the model fills a fixed form and writes no free text that reaches the person;
   - the backend validates the returned state, drops IDs it didn't return, and builds cards from its own data.
-- **Safety:** possible-emergency wording gets fixed 112/108 guidance without a model call. The backend screens every message before any AI-service call, so the guidance still works when the AI service is down, slow or failing. Before matching, both implementations normalise apostrophe look-alikes (curly quotes and similar), Unicode compatibility forms (NFKC) and whitespace; shared test cases keep them identical. The assistant never diagnoses or prescribes.
+- **Safety:** possible-emergency wording gets fixed 112/108 guidance without a model call. The backend screens every message before any AI-service call, so the guidance still works when the AI service is down, slow or failing. Before matching, both implementations normalise apostrophe and dash look-alikes (curly quotes, en and em dashes and similar), Unicode compatibility forms (NFKC) and whitespace. The JavaScript copy also adapts to Python's regex engine: Unicode word boundaries, and the Turkish İ and ı matched as i. Shared test cases and a differential fuzz keep the two copies identical. The rule matches fixed English wording only: forms it does not list, misspellings and other languages are not caught. The assistant never diagnoses or prescribes.
 - **Privacy:**
   - no message text or transcript is stored or logged;
   - the state is structured, 16 KB at most, kept 24 h and deleted by the sweep;
