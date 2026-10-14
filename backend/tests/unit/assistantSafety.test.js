@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ASSISTANT_EMERGENCY_ALTERNATIVES,
   ASSISTANT_EMERGENCY_APOSTROPHES,
+  ASSISTANT_EMERGENCY_DASHES,
   ASSISTANT_EMERGENCY_MESSAGE,
   ASSISTANT_EMERGENCY_WHITESPACE,
   careAssistantStateSchema,
@@ -44,7 +45,7 @@ describe('emergency wording: one rule shared by the backend and the AI service',
     expect(python).toMatch(/re\.I\b/); // case-insensitive in both
   });
 
-  it('normalises text exactly like care_safety.py (apostrophes, NFKC, whitespace)', () => {
+  it('normalises text exactly like care_safety.py (apostrophes, dashes, NFKC, whitespace)', () => {
     // Python string literal → its characters (\uXXXX, \t, \n, \r, \f, \v escapes only).
     const decode = (literal) =>
       JSON.parse(`"${literal.replaceAll(String.raw`\v`, String.raw`\u000b`)}"`);
@@ -55,8 +56,9 @@ describe('emergency wording: one rule shared by the backend and the AI service',
     };
     expect(constant('APOSTROPHES')).toBe(ASSISTANT_EMERGENCY_APOSTROPHES);
     expect(constant('WHITESPACE')).toBe(ASSISTANT_EMERGENCY_WHITESPACE);
+    expect(constant('DASHES')).toBe(ASSISTANT_EMERGENCY_DASHES);
     expect(python).toContain(
-      'unicodedata.normalize("NFKC", text.translate(_APOSTROPHE_MAP))', // same order
+      'unicodedata.normalize("NFKC", text.translate(_CHARACTER_MAP))', // same order
     );
     expect(normalizeForEmergencyScreening('I can’t \n breathe')).toBe("I can't breathe");
   });

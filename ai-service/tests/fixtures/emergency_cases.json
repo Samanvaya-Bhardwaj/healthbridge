@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared emergency-screening cases. Run by ai-service/tests/test_care_assistant.py AND backend/tests/unit/assistantSafety.test.js, so both implementations must agree on every case. Synthetic text only.",
+  "_comment": "Shared emergency-screening cases. Run by ai-service/tests/test_care_assistant.py AND backend/tests/unit/assistantSafety.test.js, so both implementations must agree on every case. The last 'not_emergency' entries pin word boundaries: a phrase joined to a letter (even a non-ASCII one) does not match, in Python or JavaScript. Synthetic text only.",
   "emergency": [
     "I have chest pain",
     "Chest pain!!!",
@@ -34,7 +34,13 @@
     "Self-harm",
     "self harm",
     "I took an overdose",
-    "He was poisoned"
+    "He was poisoned",
+    "self–harm",
+    "Self—harm thoughts",
+    "He has seizures",
+    "she had convulsions",
+    "I want to kıll myself",
+    "I FAİNTED"
   ],
   "not_emergency": [
     "",
@@ -43,6 +49,8 @@
     "I can’t make it on Monday",
     "What a breathtaking view",
     "Book a review of my chest X-ray",
-    "My son’s skin is itchy"
+    "My son’s skin is itchy",
+    "chestpain is not a word",
+    "chest painé"
   ]
 }

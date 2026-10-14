@@ -140,16 +140,26 @@ export const ASSISTANT_EMERGENCY_ALTERNATIVES = Object.freeze([
   "(can'?t|cannot|can not|unable to|difficulty|trouble|struggling to) breath(e|ing)?|",
   'short(ness)? of breath|not breathing|',
   'unconscious|passed out|fainted|collapsed|',
-  'seizure|convulsion|having a fit|',
+  'seizures?|convulsions?|having a fit|',
   'stroke|face (is )?drooping|slurred speech|',
   "(severe|heavy|uncontrolled) bleeding|bleeding (heavily|a lot|won'?t stop)|",
   String.raw`suicid\w*|kill myself|end my life|self[- ]harm|`,
   'overdose|poison(ed|ing)?',
 ]);
+
+// The two regex engines differ, so the JavaScript pattern adapts to behave like Python's:
+// - Python's `\w` and `\b` are Unicode-aware; JavaScript's are ASCII-only, even with the
+//   `u` flag. This class is exactly Python's `\w` (compared over every code point,
+//   Unicode 16), and every alternative starts and ends with a word character, so the
+//   lookarounds behave as Python's `\b(...)\b` does.
+// - Python's `re.I` also matches the Turkish dotted İ and dotless ı to i; JavaScript's
+//   `iu` does not, so they are mapped to i first (one letter for one: boundaries keep).
+const WORD = String.raw`[\p{L}\p{N}_]`;
 const EMERGENCY_PATTERN = new RegExp(
-  String.raw`\b(` + ASSISTANT_EMERGENCY_ALTERNATIVES.join('') + String.raw`)\b`,
-  'i',
+  `(?<!${WORD})(${ASSISTANT_EMERGENCY_ALTERNATIVES.join('').replaceAll(String.raw`\w`, WORD)})(?!${WORD})`,
+  'iu',
 );
+const PYTHON_I_FOLDS = /[\u0130\u0131]/g;
 
 export const ASSISTANT_EMERGENCY_MESSAGE =
   'If this might be an emergency, call 112 or 108 now, or go to the nearest emergency ' +
@@ -158,20 +168,30 @@ export const ASSISTANT_EMERGENCY_MESSAGE =
 /**
  * Matching normalisation, mirrored exactly from care_safety.py (constants and shared test
  * cases are checked by a backend test): apostrophe look-alikes people type (curly quotes,
- * modifier letter, prime, backtick, acute, fullwidth) become "'", then Unicode NFKC folds
- * compatibility forms (fullwidth letters, no-break spaces), then any run of whitespace
- * becomes one space. The patterns themselves are unchanged.
+ * modifier letter, prime, backtick, acute, fullwidth) become "'", dash look-alikes
+ * (hyphens, en and em dashes, minus) become "-", then Unicode NFKC folds compatibility
+ * forms (fullwidth letters, no-break spaces), then any run of whitespace becomes one space.
  */
 export const ASSISTANT_EMERGENCY_APOSTROPHES = '‘’‛ʼʹ′`´＇';
 export const ASSISTANT_EMERGENCY_WHITESPACE = ' \t\n\r\f\v\u0085  ';
+export const ASSISTANT_EMERGENCY_DASHES =
+  '\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe58\ufe63\uff0d';
 const APOSTROPHE_LIKE = new RegExp(`[${ASSISTANT_EMERGENCY_APOSTROPHES}]`, 'g');
+const DASH_LIKE = new RegExp(`[${ASSISTANT_EMERGENCY_DASHES}]`, 'g');
 const SPACES = new RegExp(`[${ASSISTANT_EMERGENCY_WHITESPACE}]+`, 'g');
 
 export function normalizeForEmergencyScreening(text) {
-  return text.replace(APOSTROPHE_LIKE, "'").normalize('NFKC').replace(SPACES, ' ');
+  return text
+    .replace(APOSTROPHE_LIKE, "'")
+    .replace(DASH_LIKE, '-')
+    .normalize('NFKC')
+    .replace(SPACES, ' ');
 }
 
 /** True when the text may describe an emergency (deterministic; no model involved). */
 export function isPossibleAssistantEmergency(text) {
-  return typeof text === 'string' && EMERGENCY_PATTERN.test(normalizeForEmergencyScreening(text));
+  return (
+    typeof text === 'string' &&
+    EMERGENCY_PATTERN.test(normalizeForEmergencyScreening(text).replace(PYTHON_I_FOLDS, 'i'))
+  );
 }
