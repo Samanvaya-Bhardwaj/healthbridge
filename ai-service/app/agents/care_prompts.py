@@ -24,6 +24,9 @@ DAY_KINDS = ["none", "today", "tomorrow", "weekday", "date"]
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 TIME_WINDOWS = ["morning", "afternoon", "evening"]
 MODES = ["online", "in_clinic"]
+# Step 6: criteria a person can remove, and preferences HealthBridge cannot search by.
+CRITERIA = ["specialty", "areas", "city", "language", "consultationMode", "doctorName"]
+UNSUPPORTED = ["gender", "age", "fees", "ratings", "insurance", "other"]
 
 INTENT_SYSTEM = (
     "You help patients use HealthBridge, a service for booking consultations with their own "
@@ -41,6 +44,15 @@ INTENT_SYSTEM = (
     "6. areas: up to 3 codes from the allowed areas of practice, only when the person's own "
     "words clearly fit an area (for example pimples -> acne). Areas describe what a doctor "
     "lists on their profile; choosing one is not a diagnosis. Otherwise an empty list.\n"
+    "7. specialtyOptions: when the person describes a concern that more than one kind of "
+    "doctor could see and names no kind of doctor, up to 3 kinds from the allowed list; "
+    "then leave specialty null. Otherwise an empty list.\n"
+    "8. remove: criteria the person says they no longer mind (for example 'any kind of "
+    "doctor is fine' -> specialty, 'any city' -> city, 'online or in person, either' -> "
+    "consultationMode). Otherwise an empty list.\n"
+    "9. showOthers: true when the person asks for other doctors than those shown.\n"
+    "10. unsupported: preferences HealthBridge cannot search by that the person states "
+    "(gender, age, fees, ratings, insurance, other). Otherwise an empty list.\n"
     "Answer only with the JSON form."
 )
 
@@ -65,6 +77,22 @@ def intent_schema(specialties: list[str], areas: list[str] | None = None) -> dic
                 "type": "array",
                 "items": {"type": "string", "enum": list(areas or [])},
                 "maxItems": 3,
+            },
+            "specialtyOptions": {
+                "type": "array",
+                "items": {"type": "string", "enum": list(specialties)},
+                "maxItems": 3,
+            },
+            "remove": {
+                "type": "array",
+                "items": {"type": "string", "enum": CRITERIA},
+                "maxItems": 6,
+            },
+            "showOthers": {"type": "boolean"},
+            "unsupported": {
+                "type": "array",
+                "items": {"type": "string", "enum": UNSUPPORTED},
+                "maxItems": 6,
             },
         },
         "required": ["intent", "specialty", "specialtyFromConcern", "dayKind", "timeWindow"],

@@ -11,6 +11,7 @@ import {
   Send,
   Sparkles,
   Stethoscope,
+  HelpCircle,
 } from 'lucide-react';
 import { ASSISTANT_MAX_MESSAGE } from '@healthbridge/shared';
 import { assistantApi } from '../../lib/domainApi.js';
@@ -168,8 +169,9 @@ function Slots({ slots }) {
   );
 }
 
-function AssistantReply({ turn, patientId, actingFor }) {
+function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
   const { reply, understood, degraded } = turn;
+  const choices = reply.cards.filter((c) => c.type === 'choice');
   const doctors = reply.cards.filter((c) => c.type === 'doctor');
   const slots = reply.cards.filter((c) => c.type === 'slot');
   const links = reply.cards.filter((c) => c.type === 'link' && LINKS[c.target]);
@@ -202,11 +204,34 @@ function AssistantReply({ turn, patientId, actingFor }) {
   return (
     <div className="rounded-2xl border border-ai/25 bg-surface-raised p-4">
       <p className="mb-2">
-        <Badge tone="ai" icon={Sparkles}>
-          AI suggestion
-        </Badge>
+        {reply.kind === 'clarify' ? (
+          <Badge tone="ai" icon={HelpCircle}>
+            Question
+          </Badge>
+        ) : (
+          <Badge tone="ai" icon={Sparkles}>
+            AI suggestion
+          </Badge>
+        )}
       </p>
       <p className="text-sm text-text">{reply.message}</p>
+      {choices.length > 0 && (
+        // Step 6: tap an answer, or type your own. Only the latest question can be answered.
+        <div role="group" aria-label="Choose an answer" className="mt-3 flex flex-wrap gap-2">
+          {choices.map((c) => (
+            <Button
+              key={c.value}
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={!latest}
+              onClick={() => onChoose(c.value)}
+            >
+              {c.value}
+            </Button>
+          ))}
+        </div>
+      )}
       <Understood understood={understood} />
       {doctors.length > 0 && (
         <ul className="mt-3 space-y-2">
@@ -398,6 +423,8 @@ export function AssistantPage() {
                       turn={t}
                       patientId={session.data.patientId}
                       actingFor={actingFor}
+                      latest={t.id === turns.at(-1)?.id && !send.isPending}
+                      onChoose={submit}
                     />
                   </li>
                 ),

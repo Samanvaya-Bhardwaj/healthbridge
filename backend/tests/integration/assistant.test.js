@@ -223,6 +223,96 @@ describe('assistant sessions and the turn loop', () => {
     }
   });
 
+  it('step 6: passes only real choices, keeps only exclusions the backend showed, and bounds questions', async () => {
+    const patient = await createPatient(h, 'asst-clarify');
+    const doctor = await createVerifiedDoctor(h, admin, 'asst-clarify-doc');
+    // A made-up language keeps this search to this test's doctor, whatever else exists.
+    const tongue = Array.from({ length: 8 }, () =>
+      String.fromCharCode(97 + Math.floor(Math.random() * 26)),
+    ).join('');
+    expectOk(await api(h, doctor).patch('/doctors/me', { languages: [tongue] }));
+    const s = expectOk(await session(patient), 201);
+
+    // A question with choices: invented values are dropped, real ones pass through.
+    script = (input) =>
+      respond(
+        {
+          ...input.state,
+          intent: 'find_doctor',
+          pendingChoice: { kind: 'specialty', options: ['Paediatrics', 'Neurology'] },
+          clarifyTurns: 1,
+        },
+        {
+          kind: 'clarify',
+          message: 'Which would you like?',
+          cards: [
+            { type: 'choice', value: 'Paediatrics' },
+            { type: 'choice', value: 'Astrology' },
+            { type: 'choice', value: '<script>alert(1)</script>' },
+            { type: 'choice', value: 'Any kind of doctor is fine' },
+          ],
+        },
+      );
+    const asked = expectOk(await say(patient, s, 'my child has headaches'));
+    expect(asked.reply.cards).toEqual([
+      { type: 'choice', value: 'Paediatrics' },
+      { type: 'choice', value: 'Any kind of doctor is fine' },
+    ]);
+
+    // The search runs as the planner asks; a forged exclusion is dropped from the state.
+    const forged = randomUUID();
+    script = (input) => {
+      if (input.message) return toolCall(input.state, 'getPatientCareTeam');
+      if (input.toolResult.name === 'getPatientCareTeam') {
+        return toolCall(input.state, 'searchDoctors', {
+          specialty: 'General Medicine',
+          language: tongue,
+        });
+      }
+      const ids = input.toolResult.data.doctors.map((d) => d.doctorId).slice(0, 5);
+      return respond(
+        { ...input.state, candidateDoctorIds: ids, excludedDoctorIds: [forged] },
+        { kind: 'answer', message: 'Here.', cards: [] },
+      );
+    };
+    const shown = expectOk(await say(patient, s, 'a general physician', asked.session.version));
+    let row = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+    expect(row.state.excludedDoctorIds).toEqual([]);
+    expect(row.state.candidateDoctorIds).toContain(doctor.doctor.id);
+
+    // "Show me others": excluding a doctor the backend showed is kept, and honoured.
+    script = (input) => {
+      if (input.message) return toolCall(input.state, 'getPatientCareTeam');
+      if (input.toolResult.name === 'getPatientCareTeam') {
+        return toolCall(input.state, 'searchDoctors', {
+          specialty: 'General Medicine',
+          language: tongue,
+          excludeDoctorIds: [doctor.doctor.id],
+        });
+      }
+      const ids = input.toolResult.data.doctors.map((d) => d.doctorId);
+      expect(ids).not.toContain(doctor.doctor.id);
+      return respond(
+        {
+          ...input.state,
+          candidateDoctorIds: ids.slice(0, 5),
+          excludedDoctorIds: [doctor.doctor.id],
+        },
+        { kind: 'answer', message: 'Others.', cards: [] },
+      );
+    };
+    const others = expectOk(await say(patient, s, 'show me others', shown.session.version));
+    expect(others.degraded).toBe(false);
+    row = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+    expect(row.state.excludedDoctorIds).toEqual([doctor.doctor.id]);
+
+    // Questions are bounded by the contract: a fourth in a row is out-of-contract state.
+    script = (input) =>
+      respond({ ...input.state, clarifyTurns: 3 }, { kind: 'help', message: 'x', cards: [] });
+    const bounded = expectOk(await say(patient, s, 'hello', others.session.version));
+    expect(bounded.degraded).toBe(true);
+  });
+
   it('serialises turns: a stale version is refused', async () => {
     const patient = await createPatient(h, 'asst-p5');
     const s = expectOk(await session(patient), 201);

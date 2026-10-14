@@ -76,6 +76,10 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 | `specialtyFromConcern` | The specialty was inferred from a described concern (shows "Skin concerns are usually seen by dermatologists."). A flag only. |
 | `careTeamDoctorIds`, `candidateDoctorIds`, `selectedDoctorId`, `slotStarts` | References that backend tools returned |
 | `lastTools` | Tool names used in the last turn |
+| `pendingChoice`, `clarifyTurns` | An open question ("which kind of doctor?") with 2 or 3 options; at most 2 questions in a row, then the assistant searches (ADR-0033) |
+| `removed` | Criteria the person said they do not mind ("any city"); they are not used again until stated again |
+| `excludedDoctorIds` | Doctors not to show again ("show me others"): only IDs the backend showed before, at most 20 |
+| `notices` | Preferences from the latest message that cannot be searched (gender, age, fees, ratings, insurance, other), answered honestly |
 
 Limits:
 

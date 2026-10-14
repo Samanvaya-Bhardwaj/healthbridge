@@ -28,7 +28,8 @@ const TOOL_ARGS = {
   getPatientContext: z.object({}).strict(),
   getPatientCareTeam: z.object({}).strict(),
   // M13.2: the shared, structured search criteria (no free text); none means "any doctor".
-  searchDoctors: doctorSearchCriteriaSchema.omit({ limit: true, excludeDoctorIds: true }),
+  // Step 6: excludeDoctorIds ("show me others") hides doctors already shown.
+  searchDoctors: doctorSearchCriteriaSchema.omit({ limit: true }),
   getDoctorProfile: z.object({ doctorId: uuid }).strict(),
   findAvailableSlots: z
     .object({

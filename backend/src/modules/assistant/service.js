@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ASSISTANT_ANY_DOCTOR_CHOICE,
   ASSISTANT_EMERGENCY_MESSAGE,
   ASSISTANT_SPECIALTIES,
   PRACTICE_AREAS,
@@ -36,11 +37,14 @@ const EMERGENCY_REPLY = Object.freeze({
 
 // The AI step's answer is checked like any untrusted input before it is used.
 const cardSchema = z.object({
-  type: z.enum(['doctor', 'slot', 'link']),
+  type: z.enum(['doctor', 'slot', 'link', 'choice']),
   doctorId: z.uuid().optional(),
   startsAt: z.iso.datetime({ offset: true }).optional(),
   target: z.enum(['my_doctors', 'appointments', 'records', 'prescriptions']).optional(),
+  // Step 6: a tappable answer (an allowed kind of doctor, or "any kind").
+  value: z.string().max(60).optional(),
 });
+const CHOICES = new Set([...ASSISTANT_SPECIALTIES, ASSISTANT_ANY_DOCTOR_CHOICE]);
 const stepSchema = z.object({
   state: z.unknown(),
   action: z.discriminatedUnion('type', [
@@ -201,6 +205,10 @@ export function createAssistantService({
       (id) => evidence.careTeam?.has(id) || previous.careTeamDoctorIds.includes(id),
     );
     next.candidateDoctorIds = next.candidateDoctorIds.filter(known);
+    // Step 6: only doctors the backend showed before can be excluded from later searches.
+    next.excludedDoctorIds = next.excludedDoctorIds.filter(
+      (id) => previous.candidateDoctorIds.includes(id) || previous.excludedDoctorIds.includes(id),
+    );
     if (next.selectedDoctorId && !known(next.selectedDoctorId)) next.selectedDoctorId = null;
     next.slotStarts = next.slotStarts.filter(
       (s) =>
@@ -212,13 +220,16 @@ export function createAssistantService({
 
   /** Cards show backend data only; anything the backend did not return is dropped. */
   async function hydrate(reply, tools, patientId) {
-    const team = reply.cards.some((c) => c.type !== 'link')
+    const team = reply.cards.some((c) => c.type === 'doctor' || c.type === 'slot')
       ? await tools.careTeam().catch(() => new Map())
       : new Map();
     const cards = [];
     for (const card of reply.cards) {
       if (card.type === 'link' && card.target) {
         cards.push({ type: 'link', target: card.target });
+      } else if (card.type === 'choice' && CHOICES.has(card.value)) {
+        // Step 6: answers the person can tap; anything else is dropped.
+        cards.push({ type: 'choice', value: card.value });
       } else if (card.type === 'doctor' && tools.evidence.doctors.has(card.doctorId)) {
         const doctor = tools.evidence.doctors.get(card.doctorId);
         cards.push({ type: 'doctor', doctor, careStatus: team.get(doctor.id) ?? 'none' });

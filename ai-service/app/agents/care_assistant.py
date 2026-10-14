@@ -29,10 +29,12 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agents.care_prompts import (
+    CRITERIA,
     INTENT_SYSTEM,
     INTENTS,
     MODES,
     TIME_WINDOWS,
+    UNSUPPORTED,
     WEEKDAYS,
     intent_schema,
     message_block,
@@ -42,6 +44,18 @@ from app.llm.base import LLMError, LLMMessage, LLMProvider, LLMRequest, ModelTie
 from app.repositories.ai_store import RunTotals
 
 MAX_TOOL_ROUNDS = 3
+# Step 6: at most this many clarifying questions in a row; then search.
+MAX_CLARIFY_TURNS = 2
+ANY_DOCTOR_CHOICE = "Any kind of doctor is fine"
+# Honest answers for preferences HealthBridge cannot search by (fixed wording).
+UNSUPPORTED_TEXT = {
+    "gender": "I can't choose doctors by gender: HealthBridge doesn't record it.",
+    "age": "I can't choose doctors by age.",
+    "fees": "I can't filter by fee yet: each doctor's fee is shown before you book.",
+    "ratings": "HealthBridge doesn't rate doctors.",
+    "insurance": "HealthBridge doesn't record insurance.",
+    "other": "I can't search by that.",
+}
 SEARCHING = ("find_doctor", "book_appointment")
 TOOLS = (
     "getPatientContext",
@@ -99,6 +113,14 @@ class Criteria(BaseModel):
     doctorName: str | None = None
 
 
+class PendingChoice(BaseModel):
+    """An open question: which kind of doctor, when several fit and none was named."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["specialty"] = "specialty"
+    options: list[str] = Field(min_length=2, max_length=3)
+
+
 class CareState(BaseModel):
     model_config = ConfigDict(extra="forbid")
     v: Literal[1] = 1
@@ -112,6 +134,13 @@ class CareState(BaseModel):
     selectedDoctorId: Uuid | None = None
     slotStarts: list[str] = Field(default_factory=list, max_length=6)
     lastTools: list[ToolName] = Field(default_factory=list, max_length=6)
+    # Step 6: doctors not to show again, an open question, how many in a row, and
+    # criteria the person said they do not mind.
+    excludedDoctorIds: list[Uuid] = Field(default_factory=list, max_length=20)
+    pendingChoice: PendingChoice | None = None
+    clarifyTurns: int = Field(default=0, ge=0, le=MAX_CLARIFY_TURNS)
+    removed: list[Literal[*CRITERIA]] = Field(default_factory=list, max_length=6)  # type: ignore[valid-type]
+    notices: list[Literal[*UNSUPPORTED]] = Field(default_factory=list, max_length=6)  # type: ignore[valid-type]
 
 
 class AreaRef(BaseModel):
@@ -145,10 +174,12 @@ class ToolResult(BaseModel):
 
 
 class Card(BaseModel):
-    type: Literal["doctor", "slot", "link"]
+    type: Literal["doctor", "slot", "link", "choice"]
     doctorId: Uuid | None = None
     startsAt: str | None = None
     target: Literal["my_doctors", "appointments", "records", "prescriptions"] | None = None
+    # Step 6: an answer the person can tap (sent back as their next message).
+    value: str | None = None
 
 
 class Reply(BaseModel):
@@ -169,6 +200,7 @@ class GraphState(TypedDict, total=False):
     tool_failed: bool
     tool_error: str | None
     search_status: str | None
+    unsupported: list[str]
     action: dict[str, Any]
     reply: Reply | None
     error_kind: str | None
@@ -346,9 +378,25 @@ def build_care_assistant(llm: LLMProvider):
             city=(_clean(raw.get("city"), _CITY) or "").title() or None,
             doctorName=_TITLE.sub("", name) if name else None,
         )
-        # New details refine the previous ones; a different doctor search starts afresh.
-        merged = current.criteria.model_copy(
-            update={k: v for k, v in found.model_dump().items() if v is not None and k != "areas"}
+        # Step 6: what the person no longer minds goes first ("any city").
+        raw_remove = raw.get("remove") if isinstance(raw.get("remove"), list) else []
+        removing = [c for c in dict.fromkeys(raw_remove) if c in CRITERIA]
+        defaults = Criteria()
+        base = current.criteria.model_copy(update={c: getattr(defaults, c) for c in removing})
+        # A different kind of search starts afresh: a named doctor replaces the kind of
+        # doctor (and its areas), and a new kind of doctor replaces a named one.
+        if found.doctorName and not found.specialty:
+            base = base.model_copy(update={"specialty": None, "areas": []})
+        if found.specialty and found.specialty != base.specialty and not found.doctorName:
+            base = base.model_copy(update={"doctorName": None})
+        # New details refine the previous ones. A criterion removed in this message stays
+        # removed even if the message also mentions it ("online or in person is fine").
+        merged = base.model_copy(
+            update={
+                k: v
+                for k, v in found.model_dump().items()
+                if v is not None and k != "areas" and k not in removing
+            }
         )
         # Areas: new ones replace the old; only known areas that fit the specialty stay.
         known = {a.code: a for a in ctx.areas}
@@ -356,27 +404,81 @@ def build_care_assistant(llm: LLMProvider):
         picked = [a for a in raw_areas if isinstance(a, str) and a in known]
         areas = [
             a
-            for a in dict.fromkeys(picked or current.criteria.areas)
+            for a in dict.fromkeys(picked or base.areas)
             if a in known and (merged.specialty is None or merged.specialty in known[a].specialties)
         ][:3]
         merged = merged.model_copy(update={"areas": areas})
-        search_changed = any(
-            getattr(merged, k) != getattr(current.criteria, k)
-            for k in ("specialty", "areas", "doctorName", "language", "city", "consultationMode")
+        stated = {
+            k for k, v in found.model_dump().items() if v not in (None, []) and k not in removing
+        }
+        if picked:
+            stated.add("areas")
+        removed = [c for c in dict.fromkeys([*current.removed, *removing]) if c not in stated]
+
+        # Step 6: a concern several kinds of doctor could see, none named: ask (bounded).
+        raw_options = raw.get("specialtyOptions")
+        options = [
+            o
+            for o in dict.fromkeys(
+                str(x) for x in (raw_options if isinstance(raw_options, list) else [])
+            )
+            if o in set(ctx.specialties)
+        ][:3]
+        pending = None
+        if (
+            merged.specialty is None
+            and len(options) >= 2
+            and "specialty" not in removing
+            and current.clarifyTurns < MAX_CLARIFY_TURNS
+        ):
+            pending = PendingChoice(options=options)
+
+        # Step 6: "not this doctor, show me others" hides the doctors already shown.
+        show_others = raw.get("showOthers") is True
+        excluded = list(current.excludedDoctorIds)
+        if show_others and current.candidateDoctorIds:
+            excluded = list(dict.fromkeys([*excluded, *current.candidateDoctorIds]))[-20:]
+        raw_unsupported = raw.get("unsupported") if isinstance(raw.get("unsupported"), list) else []
+        notices = [u for u in dict.fromkeys(raw_unsupported) if u in UNSUPPORTED]
+
+        search_changed = (
+            any(
+                getattr(merged, k) != getattr(current.criteria, k)
+                for k in (
+                    "specialty",
+                    "areas",
+                    "doctorName",
+                    "language",
+                    "city",
+                    "consultationMode",
+                )
+            )
+            or show_others
         )
         day_changed = any(
             getattr(merged, k) != getattr(current.criteria, k) for k in ("date", "timeWindow")
         )
         intent = raw["intent"]
-        refinement = bool(picked) or any(
-            v is not None for k, v in found.model_dump().items() if k != "areas"
-        )
+        refinement = bool(stated or removing or show_others or options or notices)
         if intent in ("unsupported", "greeting") and refinement and current.intent in SEARCHING:
-            # "tomorrow evening" on its own refines the search already under way.
+            # "tomorrow evening" or "any city" on its own refines the search under way.
             intent = current.intent
-        update: dict[str, Any] = {"intent": intent, "criteria": merged}
+        if intent in ("unsupported", "greeting") and (options or notices):
+            # A described concern (or a preference) is a request for a doctor.
+            intent = "find_doctor"
+        update: dict[str, Any] = {
+            "intent": intent,
+            "criteria": merged,
+            "pendingChoice": pending,
+            "clarifyTurns": current.clarifyTurns + 1 if pending else 0,
+            "removed": removed,
+            "excludedDoctorIds": excluded,
+            "notices": notices,
+        }
         if specialty is not None:
             update["specialtyFromConcern"] = bool(raw.get("specialtyFromConcern"))
+        elif "specialty" in removing:
+            update["specialtyFromConcern"] = False
         if search_changed:
             update.update(candidateDoctorIds=[], selectedDoctorId=None, slotStarts=[])
         elif day_changed:
@@ -436,15 +538,27 @@ def build_care_assistant(llm: LLMProvider):
             return {"action": {"type": "tool", "tool": name, "args": args}, "reply": None}
 
         def respond(kind: str, message: str, cards: list[Card] | None = None) -> GraphState:
+            # Step 6: preferences that cannot be searched are answered honestly, up front.
+            honest = " ".join(UNSUPPORTED_TEXT[n] for n in current.notices)
             return {
                 "action": {"type": "respond"},
-                "reply": Reply(kind=kind, message=message, cards=cards or []),
+                "reply": Reply(kind=kind, message=f"{honest} {message}".strip(), cards=cards or []),
                 "state": current.model_copy(update={"lastTools": used[-6:]}),
             }
 
         intent = current.intent
+        if current.pendingChoice is not None and not used:
+            # Step 6: one question, with the kinds of doctor that fit, or any kind.
+            cards = [Card(type="choice", value=o) for o in current.pendingChoice.options]
+            cards.append(Card(type="choice", value=ANY_DOCTOR_CHOICE))
+            return respond(
+                "clarify",
+                "Different kinds of doctor see that. Which would you like? "
+                "You can also choose any kind of doctor.",
+                cards,
+            )
         if intent in SEARCHING:
-            wants_search = bool(
+            narrowed = bool(
                 crit.specialty
                 or crit.areas
                 or crit.doctorName
@@ -452,6 +566,9 @@ def build_care_assistant(llm: LLMProvider):
                 or crit.city
                 or crit.consultationMode
             )
+            # Step 6: with nothing to narrow it, a broad search is still useful (the care
+            # team and soonest times come first); the reply invites more detail.
+            wants_search = True
             if len(used) < MAX_TOOL_ROUNDS and not state.get("tool_failed"):
                 if "getPatientCareTeam" not in used:
                     return tool("getPatientCareTeam", {})
@@ -465,6 +582,7 @@ def build_care_assistant(llm: LLMProvider):
                             "language": crit.language,
                             "mode": crit.consultationMode,
                             "name": crit.doctorName,
+                            "excludeDoctorIds": list(current.excludedDoctorIds),
                         }.items()
                         if v
                     }
@@ -496,15 +614,6 @@ def build_care_assistant(llm: LLMProvider):
                     "I couldn't finish looking that up. You can still find a doctor in My Doctors.",
                     [Card(type="link", target="my_doctors")],
                 )
-            if not wants_search:
-                team = [Card(type="doctor", doctorId=d) for d in current.careTeamDoctorIds[:3]]
-                extra = f" Or choose a doctor already in {theirs} care team." if team else ""
-                return respond(
-                    "clarify",
-                    "What kind of doctor are you looking for? You can describe it in your own "
-                    "words, for example “a skin doctor tomorrow evening”." + extra,
-                    team,
-                )
             parts: list[str] = []
             if current.specialtyFromConcern and crit.specialty in SPECIALTY_PHRASE:
                 parts.append(SPECIALTY_PHRASE[crit.specialty])
@@ -512,7 +621,8 @@ def build_care_assistant(llm: LLMProvider):
             summary = _criteria_summary(crit, ctx)
             if not candidates:
                 # Genuinely nobody matches (the search worked): say what, and how to widen it.
-                found_text = f"I couldn't find a verified doctor {summary}".rstrip() + "."
+                other = "another " if current.excludedDoctorIds else "a "
+                found_text = f"I couldn't find {other}verified doctor {summary}".rstrip() + "."
                 parts.append(f"{found_text} {_relax_hint(crit)}")
                 return respond("answer", " ".join(parts), [Card(type="link", target="my_doctors")])
             one = len(candidates) == 1
@@ -550,6 +660,11 @@ def build_care_assistant(llm: LLMProvider):
                     )
             elif crit.date or crit.timeWindow:
                 parts.append("Tell me which doctor you'd like, and I'll look for free times.")
+            if not narrowed:
+                parts.append(
+                    "Tell me the kind of doctor, what it's about, a city or a language to "
+                    "narrow this down."
+                )
             if intent == "book_appointment":
                 parts.append(
                     "Booking happens on the booking page: choose a time to continue. "

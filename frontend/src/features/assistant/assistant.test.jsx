@@ -193,6 +193,65 @@ describe('HealthBridge Assistant', () => {
     ).toBeInTheDocument();
   });
 
+  it('asks one question with choices; a tap answers it, and the old question closes', async () => {
+    const sent = [];
+    let turn = 0;
+    signedIn({
+      [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: (init) => {
+        sent.push(JSON.parse(init.body).text);
+        turn += 1;
+        return json(200, {
+          data:
+            turn === 1
+              ? {
+                  session: sessionView(2),
+                  reply: {
+                    kind: 'clarify',
+                    message: 'Different kinds of doctor see that. Which would you like?',
+                    source: 'ai_assistant',
+                    cards: [
+                      { type: 'choice', value: 'Paediatrics' },
+                      { type: 'choice', value: 'Neurology' },
+                      { type: 'choice', value: 'Any kind of doctor is fine' },
+                    ],
+                  },
+                  understood: { intent: 'find_doctor', criteria: {} },
+                  degraded: false,
+                }
+              : {
+                  session: sessionView(3),
+                  reply: {
+                    kind: 'answer',
+                    message: 'Here are 2 verified doctors for Paediatrics.',
+                    source: 'ai_assistant',
+                    cards: [doctor(DOCTOR, 'Dr. Meera Iyer', 'active')],
+                  },
+                  understood: { intent: 'find_doctor', criteria: { specialty: 'Paediatrics' } },
+                  degraded: false,
+                },
+        });
+      },
+    });
+    open('/app/assistant');
+    const ue = userEvent.setup();
+    await ue.type(await screen.findByLabelText('Your message'), 'my child gets headaches{Enter}');
+    expect(await screen.findByText('Question')).toBeInTheDocument();
+    const choices = screen.getByRole('group', { name: 'Choose an answer' });
+    expect(
+      within(choices)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Paediatrics', 'Neurology', 'Any kind of doctor is fine']);
+    await ue.click(within(choices).getByRole('button', { name: 'Paediatrics' }));
+    expect(
+      await screen.findByText('Here are 2 verified doctors for Paediatrics.'),
+    ).toBeInTheDocument();
+    expect(sent).toEqual(['my child gets headaches', 'Paediatrics']);
+    // Suggestions are labelled as such; the answered question can no longer be used.
+    expect(screen.getByText('AI suggestion')).toBeInTheDocument();
+    expect(within(choices).getByRole('button', { name: 'Neurology' })).toBeDisabled();
+  });
+
   it('falls back to My Doctors when the assistant cannot start', async () => {
     signedIn({
       'POST /api/v1/assistant/sessions': () => problem(503, 'service_unavailable', 'Down'),

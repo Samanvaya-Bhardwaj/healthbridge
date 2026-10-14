@@ -37,6 +37,29 @@ export const ASSISTANT_TOOLS = Object.freeze([
 
 export const ASSISTANT_MAX_MESSAGE = 500;
 
+/** Search criteria a person can state, change or remove (step 6). */
+export const ASSISTANT_CRITERIA = Object.freeze([
+  'specialty',
+  'areas',
+  'city',
+  'language',
+  'consultationMode',
+  'doctorName',
+]);
+/** Preferences HealthBridge cannot search by; the assistant says so instead of pretending. */
+export const ASSISTANT_UNSUPPORTED = Object.freeze([
+  'gender',
+  'age',
+  'fees',
+  'ratings',
+  'insurance',
+  'other',
+]);
+/** At most this many clarifying questions in a row; then the assistant searches. */
+export const ASSISTANT_MAX_CLARIFY_TURNS = 2;
+/** The choice that answers "which kind of doctor?" with "any kind". */
+export const ASSISTANT_ANY_DOCTOR_CHOICE = 'Any kind of doctor is fine';
+
 const timeZone = z
   .string()
   .min(1)
@@ -112,6 +135,24 @@ export const careAssistantStateSchema = z
       .max(6)
       .default([]),
     lastTools: z.array(z.enum(ASSISTANT_TOOLS)).max(6).default([]),
+    // Step 6 (conversational clarification). Bounded, structured, never text:
+    // - doctors the person asked not to see again ("show me others"): backend IDs only;
+    excludedDoctorIds: z.array(uuid).max(20).default([]),
+    // - an open question: which kind of doctor, when several fit and none was named;
+    pendingChoice: z
+      .object({
+        kind: z.literal('specialty'),
+        options: z.array(z.enum(ASSISTANT_SPECIALTIES)).min(2).max(3),
+      })
+      .strict()
+      .nullable()
+      .default(null),
+    // - how many questions in a row (bounded: after the limit, search with what is known);
+    clarifyTurns: z.number().int().min(0).max(ASSISTANT_MAX_CLARIFY_TURNS).default(0),
+    // - criteria the person said they do not mind ("any city"), so none is inferred again.
+    removed: z.array(z.enum(ASSISTANT_CRITERIA)).max(ASSISTANT_CRITERIA.length).default([]),
+    // - preferences from the latest message that cannot be searched (answered honestly).
+    notices: z.array(z.enum(ASSISTANT_UNSUPPORTED)).max(ASSISTANT_UNSUPPORTED.length).default([]),
   })
   .strict();
 

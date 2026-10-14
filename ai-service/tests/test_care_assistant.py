@@ -29,7 +29,16 @@ SESSION = str(uuid.uuid4())
 DERM_IN_TEAM = str(uuid.uuid4())
 DERM_NEW = str(uuid.uuid4())
 TODAY = date(2026, 10, 9)  # a Friday
-SPECIALTIES = ["General Medicine", "Dermatology", "Paediatrics", "Cardiology"]
+SPECIALTIES = [
+    "General Medicine",
+    "Dermatology",
+    "Paediatrics",
+    "Cardiology",
+    "Neurology",
+    "Gastroenterology",
+    "Orthopaedics",
+    "Psychiatry",
+]
 # A slice of the backend's areas of practice (@healthbridge/shared PRACTICE_AREAS).
 AREAS = [
     {"code": "acne", "label": "Acne", "specialties": ["Dermatology"]},
@@ -350,8 +359,9 @@ def test_values_outside_the_form_are_dropped():
         "city": None,
         "doctorName": None,
     }
-    assert body["reply"]["kind"] == "clarify"
-    assert executed == ["getPatientCareTeam"]
+    # Step 6: nothing usable is left, so the search is broad rather than a question.
+    assert executed == ["getPatientCareTeam", "searchDoctors"]
+    assert body["reply"]["kind"] == "answer"
 
 
 def test_tool_failure_is_safe():

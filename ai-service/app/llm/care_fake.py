@@ -78,6 +78,61 @@ _CONCERN = [
     (r"headache|migraine", "Neurology"),
     (r"fever|cough|\bcold\b|\bflu\b", "General Medicine"),
 ]
+# Step 6: concerns that more than one kind of doctor sees (ask which, if none named).
+_AMBIGUOUS = [
+    (
+        r"\b(child|son|daughter|kid)s?\b.*(headache|migraine)|(headache|migraine).*\b(child|son|daughter|kid)s?\b",
+        ["Paediatrics", "Neurology"],
+    ),
+    (r"stomach|abdominal|tummy", ["Gastroenterology", "General Medicine"]),
+    (r"back pain|neck pain", ["Orthopaedics", "Neurology"]),
+    (r"can'?t sleep|insomnia|sleep problem|trouble sleeping", ["Psychiatry", "Neurology"]),
+]
+# Step 6: "I don't mind ..." wording, per criterion.
+_REMOVE = [
+    (
+        "|".join(
+            [
+                r"any (kind of |type of )?doctor",
+                r"any (kind of )?speciali?t(y|ies)",
+                r"no preference (for|on) (the )?speciali",
+                r"(doesn'?t|does not) matter which (kind of )?doctor",
+            ]
+        ),
+        ["specialty", "areas"],
+    ),
+    (r"anywhere(?! in)|any city|any location|(city|location) (doesn'?t|does not) matter", ["city"]),
+    (r"any language|languages? (doesn'?t|does not) matter", ["language"]),
+    (
+        "|".join(
+            [
+                r"(online or in[- ]?person|in[- ]?person or online|online or (at )?(the )?clinic),?"
+                r" (is |are )?(both |either )?(fine|okay|ok)",
+                r"(don'?t|do not) mind online or",
+                r"either way is fine",
+            ]
+        ),
+        ["consultationMode"],
+    ),
+    (r"any (doctor'?s )?name|(doesn'?t|does not) have to be (dr|doctor)", ["doctorName"]),
+]
+_SHOW_OTHERS = "|".join(
+    [
+        r"other (doctors|options)",
+        r"someone else",
+        r"not (this|that) doctor",
+        r"show me (more|others)",
+        r"different doctor",
+    ]
+)
+_UNSUPPORTED = [
+    (r"\b(female|woman|lady|male|man)\b (doctor|dr|gp|physician|specialist)", "gender"),
+    (r"\b(cheap|cheaper|cheapest|affordable|low[- ]cost|fees?|price)\b", "fees"),
+    (r"\b(top[- ]rated|best[- ]rated|ratings?|reviews?)\b", "ratings"),
+    (r"\binsurance\b", "insurance"),
+    (r"\b(young|younger|older) (doctor|dr)\b", "age"),
+]
+
 _LANGUAGES = [
     "Hindi",
     "English",
@@ -111,7 +166,10 @@ def _intent(text: str, has_specialty: bool) -> str:
         return "view_appointments"
     if re.search(r"\bbook|appointment|consult|\bsee (a|my|the|dr)\b|schedule", t):
         return "book_appointment"
-    if has_specialty or re.search(r"doctor|specialist|\bdr\b|physician", t):
+    # People also ask to talk to, speak to or see someone, without saying doctor.
+    if has_specialty or re.search(
+        r"doctor|specialist|\bdr\b|physician|(talk|speak) to someone|see someone", t
+    ):
         return "find_doctor"
     return "unsupported"
 
@@ -136,11 +194,22 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
         if re.search(pattern, low) and name in allowed:
             specialty = name
             break
+    options: list[str] = []
     if specialty is None:
+        for pattern, names in _AMBIGUOUS:
+            if re.search(pattern, low):
+                options = [n for n in names if n in allowed]
+                break
+    if specialty is None and len(options) < 2:
+        options = []
         for pattern, name in _CONCERN:
             if re.search(pattern, low) and name in allowed:
                 specialty, from_concern = name, True
                 break
+    remove = list(
+        dict.fromkeys(c for pattern, cs in _REMOVE if re.search(pattern, low) for c in cs)
+    )
+    unsupported = [code for pattern, code in _UNSUPPORTED if re.search(pattern, low)]
 
     day_kind, weekday, iso = "none", None, None
     if re.search(r"\btoday\b|\btonight\b", low):
@@ -186,4 +255,8 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
         "city": city,
         "doctorName": name.group(1) if name else None,
         "areas": list(dict.fromkeys(areas))[:3],
+        "specialtyOptions": options,
+        "remove": remove,
+        "showOthers": bool(re.search(_SHOW_OTHERS, low)),
+        "unsupported": list(dict.fromkeys(unsupported)),
     }
