@@ -161,12 +161,19 @@ scanning, the full-stack smoke test and the backup drill.
 See the [operations runbook](docs/OPERATIONS.md) and
 [ADR-0028](docs/adr/0028-deployment-tls-backups-cd.md).
 
-**Single host (staging or a small clinic):** three commands on the server, after creating
+**Before any deployment**, read [docs/DEPLOYMENT_READINESS.md](docs/DEPLOYMENT_READINESS.md):
+it lists the owner decisions that block production (external AI processing, live
+payments, video) and the checklist for every release.
+
+**Single host (staging or a small clinic):** a few commands on the server, after creating
 the environment file:
 
 ```bash
 node infra/deploy/make-env.mjs --env staging --domain your.domain \
   --age-recipient age1… --version v1.0.0 > /etc/healthbridge/healthbridge.env
+# Fill in SMTP (and, for production, the live providers), then check it (names only):
+node infra/deploy/preflight.mjs --env-file /etc/healthbridge/healthbridge.env \
+  --backend-image <registry>/healthbridge-backend:v1.0.0 --ai-image <registry>/healthbridge-ai:v1.0.0
 docker compose -f infra/deploy/compose.prod.yml \
   --env-file /etc/healthbridge/healthbridge.env up -d --wait
 node infra/deploy/smoke.mjs https://your.domain

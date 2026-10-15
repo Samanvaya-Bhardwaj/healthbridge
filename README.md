@@ -83,6 +83,9 @@ and what's included or not: **[RUNNING.md](RUNNING.md)**.
 - **Releases:** a `v*` tag runs the CD pipeline: build and scan the images, push them
   with an SBOM and provenance, deploy to staging with a smoke test and automatic rollback,
   then deploy to production after approval.
+- **Before deploying:** [docs/DEPLOYMENT_READINESS.md](docs/DEPLOYMENT_READINESS.md) lists
+  the owner decisions that block production and the release checklist, including the
+  environment preflight (`infra/deploy/preflight.mjs`).
 - **Details:** see the [operations runbook](docs/OPERATIONS.md) and
   [ADR-0028](docs/adr/0028-deployment-tls-backups-cd.md).
 

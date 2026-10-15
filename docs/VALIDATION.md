@@ -7,7 +7,7 @@
   providers.
 
 This report gathers the evidence that the whole system works as specified before
-deployment readiness (step 12). It is an engineering record, **not** a certification,
+deployment readiness (step 12, [DEPLOYMENT_READINESS.md](DEPLOYMENT_READINESS.md)). It is an engineering record, **not** a certification,
 penetration test or compliance statement (ADR-0008).
 
 ## 1. Quality gates

@@ -254,3 +254,15 @@ path has not been deployed from this repository.
   4. `rows_changed` means entries in that range differ from when they were sealed. `seal_altered` and `seal_missing` mean the seal table itself was edited. `key_unavailable` means a previous `CLINICAL_DATA_KEY` was removed from `CLINICAL_DATA_PREVIOUS_KEYS`; restore it.
   5. Restoring a database from backup restores its seals too. Verify again after the restore.
 - **First deploy of step 9:** the first runs seal the existing history from the epoch in pieces of about 20,000 entries (up to 20 seals per run), so a large log catches up within a few runs.
+
+## 13. Before every release (step 12)
+
+Follow the checklist in [DEPLOYMENT_READINESS.md §2](DEPLOYMENT_READINESS.md):
+
+1. Green gates and CI.
+2. `node infra/deploy/preflight.mjs --env-file … --backend-image … --ai-image …`. It renders the deployment with Compose, validates each service's configuration inside its release image, and checks policy (external AI approval and spend ceiling, HTTPS, no demo data in production, distinct secrets, off-site backups). It prints names only and exits 1 on failure.
+3. A backup, then `migrate status`.
+4. Deploy.
+5. The smoke test, `verify-audit.js`, and quiet alerts.
+
+Production also needs the owner decisions listed in DEPLOYMENT_READINESS.md §1.
