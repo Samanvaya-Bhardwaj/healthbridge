@@ -179,7 +179,8 @@ privacy, security and compliance review described there.
 2. A presigned download URL issued before consent revocation stays valid until it
    expires (at most 300 s). This is documented in SECURITY.md.
 3. Keys live in environment variables, not a KMS or HSM.
-4. The audit log is not hash-chained or stored externally.
+4. The audit log is not stored externally. Since step 9 it is tamper-evident: a keyed
+   hash chain over settled ranges (ADR-0035). The newest 10–15 minutes are not sealed yet.
 5. There is no WAF or bot management in front of Nginx.
 6. The fake scanner, payment, email and LLM providers are development defaults. Each is
    refused in production by configuration checks.
@@ -238,3 +239,41 @@ privacy, security and compliance review described there.
 - **Wording coverage:** the emergency rule matches fixed English wording only. Forms it
   does not list, misspellings and other languages are not caught. Widening it is a
   safety-policy decision.
+
+---
+
+# Security review: step 9 (records, access and audit)
+
+- **Date:** 2026-10-15
+- **Scope:** medical documents, permission-based access to records, clinical notes and
+  prescription history, and the audit trail.
+- **Method:** a code review of the M5, M7 and M9 controls against their claims in
+  SECURITY.md, plus a new suite-wide audit coverage check.
+
+**Checked and holding** (evidence: `backend/tests/integration/`):
+
+| Control | Evidence |
+|---|---|
+| Uploads are quarantined and scanned. Nothing becomes AVAILABLE without a verdict, a verified SHA-256 and a detected type. The browser is never trusted for type, extension, content, size or checksum. | `records.test.js`: upload and validation tests |
+| Every document request needs a permission, a relationship and an active consent in scope. Strangers, clinic admins and platform admins are refused, and RLS refuses the same accesses when the application layer is bypassed. | `records.test.js`: document access and RLS |
+| Revoking consent takes effect on the next request. URLs issued before the revocation live only until their TTL (at most 300 s). | `records.test.js`: revocation |
+| Signed notes and prescriptions are immutable. Corrections are new signed versions, the patient sees only signed notes, and other doctors see prescriptions only with a consent that covers them. | `consultations.test.js`: SOAP notes and prescriptions |
+| Prescription history (signed and superseded) is consent-gated for other doctors, and their reads are audited. A tampered prescription is never rendered. | `consultations.test.js` |
+| Patients see who accessed what, in plain language. | `records.test.js`: patient access log |
+
+**Changed in this step:**
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium | Owner-level database access could rewrite or delete audit entries without trace (residual risk 4). | Keyed hash chain over settled ranges, an integrity check for admins, and a verify command ([ADR-0035](adr/0035-tamper-evident-audit-and-coverage.md)). Tests cover changed, deleted and back-dated entries, an altered seal, a missing key, concurrent sealers, and the append-only and contiguity rules. |
+| 2 | Low | Audit coverage was by convention only. | The harness fails any test file in which a successful mutation left no audit row. The exceptions are listed with reasons and checked against the route table. |
+| 3 | Low | Ending an assistant conversation was not audited, although starting one was (found by #2). | `assistant.session_ended` records the turn count only. |
+
+**Carried forward:**
+
+- The newest 10–15 minutes of the audit log are not sealed yet.
+- Someone holding both owner access and the application key could rebuild the chain.
+  The `audit range sealed` log lines are the cross-check. External, write-once storage of
+  the seals is Phase 2.
+- Own-record reads by patients and guardians are not audited, by design; reads by
+  clinicians are.

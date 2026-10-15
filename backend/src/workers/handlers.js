@@ -33,6 +33,8 @@ export const MAINTENANCE_JOBS = Object.freeze({
   ELIGIBILITY_SWEEP: 'eligibility-sweep',
   // M13.2: embeddings of changed public doctor profiles, for search ranking.
   DOCTOR_SEARCH_INDEX: 'doctor-search-index',
+  // Step 9: seals settled ranges of the audit log into the hash chain (ADR-0035).
+  AUDIT_SEAL: 'audit-seal',
 });
 
 /**
@@ -59,6 +61,7 @@ export function createJobProcessors(container, queues) {
     appointmentService,
     doctorService,
     doctorSearchIndex,
+    auditSealer,
   } = container;
 
   // With the fake provider (development/demo), nothing external sends refund webhooks:
@@ -150,6 +153,7 @@ export function createJobProcessors(container, queues) {
         [MAINTENANCE_JOBS.FOLLOW_UP_SWEEP]: maintenanceJob,
         [MAINTENANCE_JOBS.ELIGIBILITY_SWEEP]: maintenanceJob,
         [MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX]: maintenanceJob,
+        [MAINTENANCE_JOBS.AUDIT_SEAL]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
@@ -159,6 +163,7 @@ export function createJobProcessors(container, queues) {
           return appointmentService.withdrawIneligible();
         }
         if (job.name === MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX) return doctorSearchIndex.refresh();
+        if (job.name === MAINTENANCE_JOBS.AUDIT_SEAL) return auditSealer.sealDue();
         if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
           return {
             consents: await consentService.expireDue(),
@@ -219,6 +224,11 @@ export async function registerSchedules(queues, workers) {
     { name: MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX, data: {}, opts: { attempts: 1 } },
   );
   await maintenance.add(MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX, {}, { attempts: 1 });
+  await maintenance.upsertJobScheduler(
+    MAINTENANCE_JOBS.AUDIT_SEAL,
+    { every: 300_000 },
+    { name: MAINTENANCE_JOBS.AUDIT_SEAL, data: {}, opts: { attempts: 1 } },
+  );
   await maintenance.upsertJobScheduler(
     MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,
     { every: 60_000 },

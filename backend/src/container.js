@@ -4,6 +4,7 @@ import { createAuthenticate } from './core/auth/authenticate.js';
 import { createAccessPolicy } from './core/authz/accessPolicy.js';
 import { createAuditService } from './modules/audit/service.js';
 import { createAuditRepository } from './modules/audit/repository.js';
+import { createAuditSealer, sealKeyring } from './modules/audit/sealing.js';
 import { createUserRepository } from './modules/identity/repositories/userRepository.js';
 import { createRoleRepository } from './modules/identity/repositories/roleRepository.js';
 import { createSessionRepository } from './modules/identity/repositories/sessionRepository.js';
@@ -117,6 +118,12 @@ export function createContainer({
 }) {
   const audit = createAuditService({ knex, logger });
   const auditRepository = createAuditRepository({ knex });
+  // Step 9: tamper-evident audit log (ADR-0035).
+  const auditSealer = createAuditSealer({
+    knex,
+    keyring: sealKeyring(config.clinicalData),
+    logger,
+  });
   const users = createUserRepository({ knex });
   const roles = createRoleRepository({ knex });
   const sessions = createSessionRepository({ knex });
@@ -384,6 +391,7 @@ export function createContainer({
     rateLimits: { ...DEFAULT_RATE_LIMITS, ...rateLimits },
     audit,
     auditRepository,
+    auditSealer,
     repositories: {
       users,
       roles,

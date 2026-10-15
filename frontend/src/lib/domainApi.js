@@ -79,6 +79,8 @@ export const adminApi = {
   revokeSessions: (id) =>
     data(apiRequest(`/admin/users/${id}/sessions/revoke`, { method: 'POST' })),
   auditLogs: (params = {}) => apiRequest(`/admin/audit-logs${qs({ limit: 50, ...params })}`),
+  /** Step 9: recomputes the most recent audit seals (the check itself is audited). */
+  auditIntegrity: () => data(apiRequest('/admin/audit-integrity')),
   operationsSummary: () => data(apiRequest('/admin/operations/summary')),
   deadLetters: (status) => data(apiRequest(`/admin/operations/dead-letters${qs({ status })}`)),
   retryDeadLetter: (id) =>

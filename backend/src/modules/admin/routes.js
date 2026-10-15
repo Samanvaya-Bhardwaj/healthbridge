@@ -61,12 +61,16 @@ const auditQuery = z
   })
   .strict();
 
+/** The most recent seals: hours of activity at the five-minute cadence, days when idle. */
+const AUDIT_INTEGRITY_SEALS = 96;
+
 /**
  * /admin/* routes. Every route requires authentication and an explicit permission.
  * @param {ReturnType<typeof import('../../container.js').createContainer>} container
  */
 export function adminRoutes(container) {
-  const { authenticate, accessPolicy, adminUserService, auditRepository, audit } = container;
+  const { authenticate, accessPolicy, adminUserService, auditRepository, auditSealer, audit } =
+    container;
   const router = Router();
   const can = (permission) => [authenticate(), accessPolicy.requirePermission(permission)];
 
@@ -160,6 +164,25 @@ export function adminRoutes(container) {
       res.json({ data: page.items, meta: { nextCursor: page.nextCursor } });
     },
   );
+
+  // Step 9: recomputes the most recent day of audit seals (the full chain is checked by
+  // `npm run audit:verify`). No audit content is returned, only the outcome.
+  router.get('/admin/audit-integrity', can(PERMISSIONS.AUDIT_READ), async (req, res) => {
+    const result = await auditSealer.verify({ latest: AUDIT_INTEGRITY_SEALS });
+    await audit.record(
+      {
+        category: 'administration',
+        action: 'audit.integrity_checked',
+        outcome: result.status === 'failed' ? 'failure' : 'success',
+        resourceType: 'audit_log',
+        reason: result.failure?.problem ?? null,
+        metadata: { checked: result.checked, seals: result.seals },
+      },
+      { req },
+    );
+    res.set('Cache-Control', 'no-store');
+    res.json({ data: result });
+  });
 
   return router;
 }

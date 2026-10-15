@@ -176,6 +176,49 @@ describe('audit log viewer', () => {
   });
 });
 
+describe('audit log integrity (step 9)', () => {
+  it('checks on request and explains a verified chain and a broken one', async () => {
+    let answer = {
+      status: 'verified',
+      seals: 40,
+      checked: 40,
+      sealedThrough: '2026-10-15T08:00:00Z',
+      unsealedEntries: 3,
+      failure: null,
+    };
+    const calls = signedIn(['PLATFORM_ADMIN'], {
+      'GET /api/v1/admin/audit-logs?limit=50': () =>
+        json(200, { data: [], meta: { nextCursor: null } }),
+      'GET /api/v1/admin/audit-integrity': () => json(200, { data: answer }),
+    });
+    open('/app/admin/audit');
+    const user = userEvent.setup();
+    const button = await screen.findByRole('button', { name: 'Check integrity' });
+    // Not run on page load: every check is recorded and reads many entries.
+    expect(calls.some((c) => c.key.includes('audit-integrity'))).toBe(false);
+    await user.click(button);
+    expect(await screen.findByText(/The 40 most recent seals match the log/)).toBeInTheDocument();
+    expect(screen.getByText(/3 newer entries are not sealed yet/)).toBeInTheDocument();
+
+    answer = {
+      status: 'failed',
+      seals: 40,
+      checked: 12,
+      sealedThrough: null,
+      unsealedEntries: null,
+      failure: {
+        seq: 13,
+        from: '2026-10-15T06:00:00Z',
+        to: '2026-10-15T06:05:00Z',
+        problem: 'rows_changed',
+      },
+    };
+    await user.click(screen.getByRole('button', { name: 'Check integrity' }));
+    expect(await screen.findByText('Seal #13 does not verify')).toBeInTheDocument();
+    expect(screen.getByText(/changed, added or removed after it was sealed/)).toBeInTheDocument();
+  });
+});
+
 describe('operations', () => {
   it('shows queue health and retries a dead-lettered job', async () => {
     let retried = false;

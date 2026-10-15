@@ -325,6 +325,7 @@ Internal (AI service): `POST /v1/followups/summary` (scope purpose `follow_up_su
 | POST | `/auth/email/verify` | public (emailed token) | `{ token }` returns `{ status: 'verified' }`. `400 invalid_token` |
 | POST | `/users/me/email-verification` | `account:read` | Sends a new link: `{ status: 'sent' \| 'already_verified' }` (202) |
 | GET | `/admin/audit-logs` | `audit:read` | Filters are now `patientId` and `resourceType` (plus the M1 filters). `action` must match `^[a-z_.]+$` |
+| GET | `/admin/audit-integrity` | `audit:read` | Step 9: recomputes the 96 most recent audit seals. Returns `{ status: verified \| not_sealed_yet \| failed, seals, checked, fromSeq, sealedThrough, unsealedEntries, failure: { seq, from, to, problem } \| null }`. No audit content. The check is audited (`audit.integrity_checked`). |
 | POST | `/telemetry/client-errors` | public | `{ kind, name, path, release? }`. Strict schema, so messages, stacks and query strings are rejected. `204` |
 
 - **Tokens:** `<uuid>.<43-char base64url secret>`, delivered only inside the emailed link's

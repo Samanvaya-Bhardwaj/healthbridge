@@ -541,3 +541,17 @@ Indexes: GIN on `search_document`, `specialties` and `areas_of_practice`; a trig
 | `sms` | Text messages, where a phone number and an SMS template exist |
 
 Templates map to categories in `@healthbridge/shared` (`NOTIFICATION_TEMPLATE_CATEGORY`). `ALWAYS_SENT_TEMPLATES` (`emergency_guidance`, `follow_up_urgent` and `payment_required`) ignore the preference. A message held back by a preference is a `notification_deliveries` row with `status = skipped` and `skip_reason = preference`.
+
+## Audit seals (step 9, ADR-0035)
+
+`audit.audit_seals` is a keyed hash chain over consecutive ranges of `audit.audit_logs`. It is append-only: the app role has SELECT/INSERT only, and triggers reject UPDATE, DELETE and TRUNCATE.
+
+| Column | Notes |
+|---|---|
+| `seq` | 1, 2, 3… (primary key) |
+| `sealed_from`, `sealed_to` | The range `[from, to)`, in whole milliseconds. The first seal starts at the epoch, and each later one where the previous ended (enforced by a trigger). |
+| `row_count`, `rows_sha256` | Rows in the range, and a SHA-256 over their canonical text in `(occurred_at, id)` order |
+| `chain_hmac` | HMAC-SHA256 over the previous HMAC, `seq`, the bounds, the count and the digest |
+| `key_id` | Clinical data key ID the HMAC key was derived from (HKDF `audit-log-seal`) |
+
+The index `audit_logs_seal_order_idx (occurred_at, id)` serves sealing and verification.

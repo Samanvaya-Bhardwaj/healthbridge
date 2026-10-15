@@ -164,7 +164,7 @@ Restore S3 from versioning or replication.
 | Key | Procedure |
 |---|---|
 | `AUTH_JWT_PRIVATE_KEY` | Generate a new Ed25519 key. Move the old **public** key (SPKI PEM, base64) to `AUTH_JWT_PREVIOUS_PUBLIC_KEYS`, deploy, and remove it after one access-token TTL (10 min). |
-| `CLINICAL_DATA_KEY` | Add a new key with a new `CLINICAL_DATA_KEY_ID`. Keep the old one in `CLINICAL_DATA_PREVIOUS_KEYS` (`keyId:base64`) so existing records still decrypt. New records use the new key. Never delete a previous key while records encrypted with it exist. |
+| `CLINICAL_DATA_KEY` | Add a new key with a new `CLINICAL_DATA_KEY_ID`. Keep the old one in `CLINICAL_DATA_PREVIOUS_KEYS` (`keyId:base64`) so existing records still decrypt, and prescription and audit seals made with it still verify. New records and seals use the new key. Never delete a previous key while records or seals made with it exist. |
 | `AI_INPUT_DIGEST_KEY` | Generate a new key (base64, 32 bytes) with a new `AI_INPUT_DIGEST_KEY_ID` and deploy the API and worker. No previous key is kept: these digests are telemetry, so runs before and after the rotation simply can't be compared. Never give this key to the AI service. **Upgrade note (M13.1):** add it to the production `.env` (compose) or Secrets Manager (`healthbridge/<env>`) before deploying; the API, worker and migrate task refuse to start without it outside development/test. |
 | `PAYMENT_WEBHOOK_SECRET` | Rotate in the provider dashboard and in the secret at the same time. Webhooks are retried by the provider. |
 | Database, Redis and MinIO passwords | Change in the service, then in the secret or env file. Restart the dependants. |
@@ -233,3 +233,18 @@ path has not been deployed from this repository.
   The AI service adds `ai_agent_steps_total`; model spend appears under workflow `care_assistant_intent`.
 - **What to watch:** a rising `healthbridge_agent_failures_total{kind="ai_unavailable"}` means the AI service or the model provider is down. The rest of the platform keeps working, and the assistant answers with a My Doctors fallback.
 - **Retention:** the `records-housekeeping` maintenance job (every minute) deletes expired `agent_sessions` (24 h).
+
+## 12. Audit log integrity (step 9, ADR-0035)
+
+- **Sealing:** the `audit-seal` maintenance job runs every 5 minutes. It seals entries older than 10 minutes into `audit.audit_seals` and logs `audit range sealed` with the seal number, end time, row count and chain value. Keep those log lines (CloudWatch or the compose log driver): they are the copy of the chain outside the database.
+- **Checking:**
+  - Admin → Audit log → **Check integrity** recomputes the latest 96 seals. Each check is audited.
+  - `npm run audit:verify -w backend` (or `docker compose run --rm api node scripts/verify-audit.js`) checks the whole chain. It prints one JSON line and exits 1 on failure. Run it after every restore drill, and before and after any maintenance with owner access.
+- **Metrics:** `healthbridge_audit_seals_written_total` should rise at least hourly. `healthbridge_audit_seal_verification_failures_total{problem}` should stay at 0.
+- **If a check fails:**
+  1. Treat it as a security incident (section 7). Do not "fix" the seal or the rows.
+  2. Take a snapshot or backup of the database as it is now, for investigation.
+  3. The failure names the seal and its time range. Compare that range with the most recent backup taken before it was sealed, and with the `audit range sealed` log lines.
+  4. `rows_changed` means entries in that range differ from when they were sealed. `seal_altered` and `seal_missing` mean the seal table itself was edited. `key_unavailable` means a previous `CLINICAL_DATA_KEY` was removed from `CLINICAL_DATA_PREVIOUS_KEYS`; restore it.
+  5. Restoring a database from backup restores its seals too. Verify again after the restore.
+- **First deploy of step 9:** the first runs seal the existing history from the epoch in pieces of about 20,000 entries (up to 20 seals per run), so a large log catches up within a few runs.

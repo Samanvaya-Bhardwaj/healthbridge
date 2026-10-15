@@ -21,7 +21,8 @@
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest tests/unit",
     "seed:demo": "node --env-file-if-exists=../.env scripts/seed-demo.js",
-    "user:create": "node --env-file-if-exists=../.env scripts/create-user.js"
+    "user:create": "node --env-file-if-exists=../.env scripts/create-user.js",
+    "audit:verify": "node --env-file-if-exists=../.env scripts/verify-audit.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",

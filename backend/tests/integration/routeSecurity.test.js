@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createHarness } from './harness.js';
+import { AUDITED_WHEN_CHANGED, LEDGERS, NOT_AUDITED } from './auditCoverage.js';
 
 let h;
 beforeAll(async () => {
@@ -69,5 +70,18 @@ describe('route inventory (deny by default)', () => {
     const router = apiV1Router({ config: h.config, version: 'test', container: h.container });
     const routes = new Set(collectRoutes(router.stack));
     expect([...PUBLIC].filter((r) => !routes.has(r))).toEqual([]);
+  });
+
+  it('the audit-coverage exceptions only name state-changing routes that exist (step 9)', async () => {
+    const { apiV1Router } = await import('../../src/api/v1/index.js');
+    const { paymentWebhookRouter } = await import('../../src/modules/payments/routes.js');
+    const routes = new Set([
+      ...collectRoutes(
+        apiV1Router({ config: h.config, version: 'test', container: h.container }).stack,
+      ),
+      ...collectRoutes(paymentWebhookRouter(h.container).stack, '/webhooks/payments'),
+    ]);
+    const listed = [...NOT_AUDITED.keys(), ...AUDITED_WHEN_CHANGED.keys(), ...LEDGERS.keys()];
+    expect(listed.filter((r) => !routes.has(r) || r.startsWith('GET '))).toEqual([]);
   });
 });

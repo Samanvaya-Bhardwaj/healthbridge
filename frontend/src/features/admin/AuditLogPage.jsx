@@ -1,7 +1,7 @@
 import { ROLE_LABELS } from '@healthbridge/shared';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../lib/domainApi.js';
 import { authErrorMessage } from '../auth/errorMessages.js';
 import { Card } from '../../components/ui/Card.jsx';
@@ -117,6 +117,72 @@ const FILTER_LABELS = {
 };
 
 const short = (id) => (id ? `${id.slice(0, 8)}…` : '—');
+
+const INTEGRITY_PROBLEMS = {
+  rows_changed: 'entries in this period were changed, added or removed after it was sealed',
+  seal_altered: 'the seal itself was altered',
+  seal_missing: 'a seal is missing from the chain',
+  key_unavailable: 'the key that made this seal is not configured',
+};
+
+/**
+ * Step 9: recomputes the most recent seals of the audit log on request (it reads many
+ * entries, and every check is itself recorded). The full chain is checked from the
+ * command line (npm run audit:verify).
+ */
+function IntegrityCheck() {
+  const check = useQuery({
+    queryKey: ['admin', 'audit-integrity'],
+    queryFn: adminApi.auditIntegrity,
+    enabled: false,
+    retry: false,
+    gcTime: 0,
+  });
+  const r = check.data;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-text">Integrity</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Entries are sealed into a keyed chain once they are ten minutes old. Checking recomputes
+            the most recent seals; any entry changed, added or removed since shows up here.
+          </p>
+        </div>
+        <Button variant="secondary" onClick={() => check.refetch()} disabled={check.isFetching}>
+          {check.isFetching ? 'Checking…' : 'Check integrity'}
+        </Button>
+      </div>
+      {check.isError && (
+        <Alert tone="error" className="mt-4">
+          {authErrorMessage(check.error)}
+        </Alert>
+      )}
+      {r?.status === 'verified' && (
+        <Alert tone="success" className="mt-4" title="Verified">
+          The {r.checked} most recent seals match the log, through{' '}
+          {formatFullDateTime(r.sealedThrough, { seconds: true })}.{' '}
+          {r.unsealedEntries > 0
+            ? `${r.unsealedEntries} newer ${r.unsealedEntries === 1 ? 'entry is' : 'entries are'} not sealed yet.`
+            : 'Every entry is sealed.'}
+        </Alert>
+      )}
+      {r?.status === 'not_sealed_yet' && (
+        <Alert className="mt-4">
+          Nothing is sealed yet. The first seal is written by the worker.
+        </Alert>
+      )}
+      {r?.status === 'failed' && (
+        <Alert tone="error" className="mt-4" title={`Seal #${r.failure.seq} does not verify`}>
+          Between {formatFullDateTime(r.failure.from, { seconds: true })} and{' '}
+          {formatFullDateTime(r.failure.to, { seconds: true })},{' '}
+          {INTEGRITY_PROBLEMS[r.failure.problem] ?? r.failure.problem}. Treat this as a security
+          incident: follow “Audit log integrity” in the operations guide.
+        </Alert>
+      )}
+    </Card>
+  );
+}
 
 function Field({ id, label, value, onChange, type = 'text', placeholder, list }) {
   return (
@@ -310,6 +376,7 @@ export function AuditLogPage() {
         description="Security and access events, newest first. Entries cannot be changed or deleted, and reading this log is itself recorded."
       />
       <PlatformBoundary compact />
+      <IntegrityCheck />
       <Card>
         <form
           className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"

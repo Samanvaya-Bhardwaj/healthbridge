@@ -74,7 +74,7 @@ export function assistantRoutes(container) {
     noStore,
     validate({ params: idParam }),
     async (req, res) => {
-      await assistantService.endSession(req.principal, req.valid.params.id);
+      await assistantService.endSession(req.principal, req.valid.params.id, req);
       res.status(204).end();
     },
   );

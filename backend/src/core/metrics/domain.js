@@ -129,6 +129,13 @@ export const domainMetrics = Object.freeze({
     'queue',
     'outcome',
   ]),
+  // Step 9: tamper-evident audit log (ADR-0035).
+  auditSealsWritten: counter('audit_seals_written_total', 'Audit log ranges sealed'),
+  auditSealFailures: counter(
+    'audit_seal_verification_failures_total',
+    'Audit seal verifications that found a mismatch',
+    ['problem'],
+  ),
   notificationLatency: histogram(
     'notification_provider_duration_seconds',
     'Notification provider latency',

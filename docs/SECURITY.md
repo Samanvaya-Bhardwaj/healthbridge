@@ -54,6 +54,19 @@ Public registration only ever creates PATIENT accounts.
 - Successful sensitive actions are audited inside the business transaction.
 - Metadata is sanitised: secret-like keys are redacted and sizes are bounded. Free text
   is not recorded.
+- **Tamper evidence (step 9, ADR-0035):**
+  - Settled ranges (older than 10 minutes) are sealed every 5 minutes into
+    `audit.audit_seals`: a keyed HMAC chain over row counts and SHA-256 digests.
+  - Changing, deleting or back-dating an entry, or editing or removing a seal, fails
+    verification. Check with Admin → Audit log → Check integrity (the latest 96 seals) or
+    `npm run audit:verify -w backend` (the whole chain).
+  - The key is derived from `CLINICAL_DATA_KEY`, so it is never in the database.
+  - Not covered: the newest 10–15 minutes; an attacker with both owner access and the
+    key; truncation of the newest seals together with their rows. Compare the latest seal
+    with the `audit range sealed` log lines, which hold a copy of the chain.
+- **Coverage (step 9):** the integration suite fails if any successful state-changing
+  request leaves no audit row with its request ID. Exceptions are listed with reasons in
+  `backend/tests/integration/auditCoverage.js`.
 
 ## Logging hygiene
 
@@ -89,7 +102,8 @@ Public registration only ever creates PATIENT accounts.
 - Email verification and password reset: delivered in M11 (see below).
 - Breached-password checks (k-anonymity).
 - Lock-event alerting.
-- Audit hash chaining and external immutable storage: Phase 2.
+- Audit hash chaining: delivered in step 9 (ADR-0035). External, write-once storage of
+  the seals: Phase 2.
 - Redis cache for per-request principal loading, if load requires it.
 - Account lockout can be abused to block a known account temporarily (bounded at 15
   minutes).

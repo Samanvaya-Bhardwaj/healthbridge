@@ -183,11 +183,25 @@ export function createAssistantService({
     });
   }
 
-  async function endSession(principal, sessionId) {
+  /** The person closes the conversation; its structured state stops being usable. */
+  async function endSession(principal, sessionId, req) {
     if (!isUuid(sessionId)) throw new NotFoundError();
     await withActor(knex, principal.userId, async (trx) => {
-      if (!(await repository.find(trx, sessionId))) throw new NotFoundError();
-      await repository.end(trx, sessionId);
+      const row = await repository.find(trx, sessionId); // RLS: own sessions only
+      if (!row) throw new NotFoundError();
+      if ((await repository.end(trx, sessionId)) === 0) return; // already ended: no change
+      await audit.record(
+        {
+          category: 'data_access',
+          action: 'assistant.session_ended',
+          outcome: 'success',
+          resourceType: 'agent_session',
+          resourceId: sessionId,
+          patientId: row.patient_id,
+          metadata: { turns: row.turn_count },
+        },
+        { req, trx },
+      );
     });
   }
 

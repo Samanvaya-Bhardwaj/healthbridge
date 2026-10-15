@@ -384,6 +384,12 @@ describe('assistant sessions and the turn loop', () => {
       .delete(`/api/v1/assistant/sessions/${s.id}`)
       .set(authHeader(patient.session));
     expect(del.status).toBe(204);
+    // Step 9: closing the conversation is audited like starting it (no content recorded).
+    const ended = await h
+      .ownerKnex('audit.audit_logs')
+      .where({ action: 'assistant.session_ended', resource_id: s.id });
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toMatchObject({ patient_id: patient.patient.id, metadata: { turns: 0 } });
     expect((await say(patient, s, 'hello')).body.code).toBe('assistant_session_ended');
     // A possible emergency still gets the fixed guidance in an ended conversation.
     const late = expectOk(await say(patient, s, 'I can’t breathe'));

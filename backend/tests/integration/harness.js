@@ -1,8 +1,9 @@
 // Shared setup for integration tests against real PostgreSQL and Redis.
 // Prerequisites: data services running and migrations applied (see docs/DEVELOPMENT.md).
 
-import { existsSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { EOL } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import request from 'supertest';
 import knexFactory from 'knex';
@@ -19,6 +20,7 @@ import { createFakeScanner } from '../../src/modules/documents/scanning/document
 import { createApp } from '../../src/app.js';
 import { REFRESH_COOKIE } from '../../src/core/auth/cookies.js';
 import { FAST_HASH_PARAMS, TEST_ORIGIN, captureLogs, testSigningKey } from '../helpers.js';
+import { trackMutations, unauditedMutations } from './auditCoverage.js';
 
 const envFile = fileURLToPath(new URL('../../../.env', import.meta.url));
 if (existsSync(envFile)) process.loadEnvFile(envFile);
@@ -105,7 +107,11 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
     aiClient,
     ...(now ? { now } : {}),
   });
-  const app = createApp({ config, logger, container, redis, healthChecks: [], version: 'test' });
+  // Step 9: every successful mutation must be audited (checked in close()).
+  const mutations = trackMutations(
+    createApp({ config, logger, container, redis, healthChecks: [], version: 'test' }),
+  );
+  const app = mutations.tracked;
 
   // Cleanup needs the owner role: the application role cannot delete patient-scoped
   // rows (no RLS DELETE policy), by design. Audit rows are append-only and remain.
@@ -113,6 +119,7 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
   const ownerKnex = knexFactory(migrationConfig(process.env));
 
   async function close() {
+    const unaudited = await unauditedMutations(ownerKnex, mutations.seen);
     const testUsers = ownerKnex('users')
       .select('id')
       .where('email', 'like', `%@${TEST_EMAIL_DOMAIN}`);
@@ -253,6 +260,18 @@ export async function createHarness({ rateLimits = {}, env = {}, queues, now, ai
       await trx('users').whereIn('id', testUsers.clone()).del();
     });
     await Promise.allSettled([knex.destroy(), ownerKnex.destroy(), redis.quit()]);
+    if (unaudited.length > 0) {
+      if (process.env.AUDIT_COVERAGE_REPORT) {
+        appendFileSync(
+          process.env.AUDIT_COVERAGE_REPORT,
+          unaudited.map((r) => `${r}${EOL}`).join(''),
+        );
+      } else {
+        throw new Error(
+          `Successful requests left no audit row (audit them, or list the route in auditCoverage.js with a reason): ${unaudited.join(', ')}`,
+        );
+      }
+    }
   }
 
   return {

@@ -40,5 +40,6 @@ old one.
 | [0032](adr/0032-recommendations.md) | Recommendations: search order lifted by care team, past visits (date only), profile city and language (lift, never filter) and soonest free time; fact-based explanations and a next step; patient side only; served by the existing read-only assistant tool | Accepted |
 | [0033](adr/0033-conversational-clarification.md) | Conversational clarification: the model reports options, removals, "show others" and unsupported preferences; the code decides; explicit structured state (open question, bounded to 2, removed criteria, backend-only exclusions, notices); choices as data; same read-only tools | Accepted |
 | [0034](adr/0034-booking-from-the-assistant.md) | Booking from the assistant: exact-time hand-off to the booking page; the patient reviews and confirms there; one booking path (idempotent, eligibility-guarded, paid); no approval table and no write tool | Accepted |
+| [0035](adr/0035-tamper-evident-audit-and-coverage.md) | Tamper-evident audit log: a keyed hash chain over consecutive settled ranges (HMAC key derived from the clinical data key), verified on demand and by command; audit coverage enforced for every successful mutation in the integration suite, with reasoned exceptions | Accepted |
 
 Template: Context → Decision → Consequences (→ Alternatives considered).
