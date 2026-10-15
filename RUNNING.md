@@ -95,6 +95,14 @@ Every demo account uses the password shown by `npm start` (`DEMO_USER_PASSWORD` 
 
 **A larger synthetic directory** (M13.2) is seeded too, with the same password: 10 cities, 20 clinics (one closed, to show that its times disappear), about 120 doctors and 40 patients with dependents, care teams and upcoming visits. Doctor accounts look like `dr.imran.joshi.001@demo.healthbridge.local`, and patient accounts like `patient.aditi.31@demo.healthbridge.local`. All of it is synthetic, generated from a fixed seed (`backend/scripts/lib/syntheticDirectory.js`). Try the **Assistant** with, for example, "a dermatologist in Pune who speaks Marathi, online".
 
+**Clinical history** (step 11) is seeded for the main demo patients through the real services, as if it happened over the last ten weeks:
+
+- **Asha** has three past online visits with Dr. Meera about blood sugar. Each has a signed SOAP note and a signed prescription, and one prescription has a correction with its reason. Two check-ins are answered and closed, and one is still to come.
+- **Kamala** (Asha's dependent) had a blood-pressure review that asked for an in-clinic visit. That visit is booked and paid with the test provider.
+- **Lab reports:** synthetic PDFs (blood count, HbA1c, lipids) are scanned. With Asha's opt-in, the AI reads hers, so Dr. Meera has lab values to verify.
+
+Try **Prescriptions**, **Timeline** and **Follow-ups** as Asha, or ask the **Assistant** "What medicines do I need to take?". As Dr. Meera, open **Patient Records** → Asha.
+
 **Live video:**
 
 1. Start with `npm start -- --video`.
@@ -111,7 +119,7 @@ tokens and IDs. It reads the port and demo password from your `.env`.
 
 **Using Claude instead of the offline fake model:**
 
-1. In `.env`, set `LLM_PROVIDER=claude` and `ANTHROPIC_API_KEY=…`.
+1. In `.env`, set `LLM_PROVIDER=claude`, `ANTHROPIC_API_KEY=…` and a daily spend ceiling, `LLM_DAILY_BUDGET_USD=5` (required with an external model; see ADR-0036).
 2. Run `npm start -- --no-build`.
 
 Still synthetic data only.

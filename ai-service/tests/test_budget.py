@@ -76,6 +76,31 @@ async def test_other_replicas_count_after_a_refresh_and_a_new_day_starts_over() 
     assert ledger.reads[-1] == today + timedelta(days=1)
 
 
+async def test_a_database_problem_keeps_a_recent_total_and_otherwise_refuses() -> None:
+    """Step 11: the spend read hit a dead connection after a database restart; that must
+    neither crash the call nor switch the ceiling off."""
+    clock, ledger = Clock(), Ledger()
+    ledger.by_day[utc_day_start(clock.at)] = 2.0
+    guard = guard_with(10.0, ledger, clock)
+    await guard.check("w", "claude")  # a good reading
+
+    async def broken(_since):
+        raise ConnectionError("terminating connection due to administrator command")
+
+    guard._read_spent = broken
+    clock.advance(31)
+    await guard.check("w", "claude")  # the last total (2.00) is recent enough
+    clock.advance(600)
+    with pytest.raises(LLMError) as raised:
+        await guard.check("w", "claude")  # too old to trust: refused like an outage
+    assert raised.value.kind is LLMErrorKind.UNAVAILABLE
+
+    fresh = guard_with(10.0, Ledger(), Clock())
+    fresh._read_spent = broken
+    with pytest.raises(LLMError):
+        await fresh.check("w", "claude")  # never read: no total to rely on
+
+
 async def test_the_provider_is_not_called_once_the_ceiling_is_reached() -> None:
     clock, ledger = Clock(), Ledger()
     ledger.by_day[utc_day_start(clock.at)] = 10.0

@@ -42,6 +42,9 @@ A review of the AI features found three gaps:
     one number: the AI role's RLS cannot see other patients' runs. It is refreshed at
     most every 30 s, and the replica's own spend since then is added locally.
   - It is a soft ceiling: calls already in flight finish.
+  - If the total cannot be read (a database problem), the last total from the past 10
+    minutes stands in. Without one, the call is refused as `unavailable`, so the ceiling
+    never silently stops applying.
 - **When the ceiling is reached:** every workflow already treats an LLM error as "AI
   unavailable".
   - The assistant answers with its fallback (My Doctors, page links); its emergency

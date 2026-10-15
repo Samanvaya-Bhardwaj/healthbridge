@@ -60,7 +60,9 @@ npm start          # secrets, build, every service, demo data; prints URLs and s
 - **Options:** `npm start -- --video` (live video), `--scanner` (ClamAV),
   `--observability` (Grafana).
 - **Everyday commands:** `npm stop`, `npm run logs`, `npm run reset`.
-- **Verify everything:** `npm ci && npm run check`.
+- **Verify everything:** `npm ci && npm run check`. The latest evidence (gates, reviews,
+  concurrency, accessibility, evaluations, monitoring, recovery) is in
+  [docs/VALIDATION.md](docs/VALIDATION.md).
 
 **Taking over the project?** Start with the handover guide:
 **[docs/PROJECT_WORKFLOW.md](docs/PROJECT_WORKFLOW.md)**. It covers the end-to-end workflow
@@ -92,9 +94,9 @@ healthbridge/
 ├── backend/       Express API, migrations, scripts, tests
 ├── ai-service/    FastAPI AI service (uv, pytest, ruff)
 ├── shared/        @healthbridge/shared
-├── e2e/           Playwright browser journeys (patient, recovery, admin, security, video)
+├── e2e/           Playwright journeys (patient, records, assistant, recovery, admin, security, accessibility, video)
 ├── infra/         nginx/, postgres/init/, observability/, deploy/ (prod Compose, ECS, backup)
-├── docs/          ARCHITECTURE, SECURITY(+_REVIEW), API, DATABASE, OPERATIONS, DECISIONS (+ adr/)
+├── docs/          ARCHITECTURE, SECURITY(+_REVIEW), VALIDATION, API, DATABASE, OPERATIONS, DECISIONS (+ adr/)
 ├── scripts/       start.mjs (npm start), check.mjs (npm run check), generate-env, backup-drill
 ├── .github/       CI and CD workflows, Dependabot
 ├── RUNNING.md     the complete run/use/verify/deploy guide

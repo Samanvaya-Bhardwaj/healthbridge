@@ -438,6 +438,114 @@
         }
       ],
       "id": 14
+    },
+    {
+      "type": "stat",
+      "title": "AI spend today (USD, ADR-0036)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(ai_llm_spend_today_usd)"
+        }
+      ],
+      "id": 15
+    },
+    {
+      "type": "stat",
+      "title": "LLM calls refused by the daily budget (24h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 44,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(ai_llm_budget_exhausted_total[24h]))"
+        }
+      ],
+      "id": 16
+    },
+    {
+      "type": "stat",
+      "title": "Audit seals written (24h, ADR-0035)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 44,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(healthbridge_audit_seals_written_total[24h]))"
+        }
+      ],
+      "id": 17
+    },
+    {
+      "type": "stat",
+      "title": "Audit seal verification failures (24h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 44,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(healthbridge_audit_seal_verification_failures_total[24h]))"
+        }
+      ],
+      "id": 18
     }
   ],
   "description": "Service health, background jobs, payments, access denials and AI usage. Metadata only."

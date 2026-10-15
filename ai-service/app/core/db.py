@@ -54,6 +54,9 @@ class Database:
             max_size=settings.db_pool_max,
             open=False,
             kwargs={"autocommit": True},
+            # A pooled connection is checked before use, so a database restart costs a
+            # reconnect instead of failing the next request.
+            check=AsyncConnectionPool.check_connection,
         )
 
     async def open(self) -> None:

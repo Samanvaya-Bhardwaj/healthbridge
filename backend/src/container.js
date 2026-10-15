@@ -225,6 +225,7 @@ export function createContainer({
     clinics,
     accessPolicy,
     audit,
+    ...(now ? { now } : {}),
   });
   const appointmentService = createAppointmentService({
     knex,
@@ -236,6 +237,7 @@ export function createContainer({
     accessPolicy,
     audit,
     logger,
+    ...(now ? { now } : {}),
   });
   // M13.3: recommendations for the patient side (search + continuity + availability).
   const recommendationService = createRecommendationService({

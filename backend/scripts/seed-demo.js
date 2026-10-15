@@ -13,6 +13,7 @@ import { buildPrincipal } from '../src/core/authz/principal.js';
 import { AppError } from '../src/core/http/errors.js';
 import { createScriptRuntime } from './lib/runtime.js';
 import { seedDirectory } from './lib/seedDirectory.js';
+import { seedHistory } from './lib/seedHistory.js';
 
 const DEMO_DOMAIN = 'demo.healthbridge.local';
 const email = (local) => `${local}@${DEMO_DOMAIN}`;
@@ -74,7 +75,7 @@ const DOCTOR_PROFILES = {
 };
 
 const runtime = createScriptRuntime('seed-demo');
-const { config, container, knex } = runtime;
+const { config, container, knex, makeContainer } = runtime;
 const log = (msg, extra = {}) => console.log(JSON.stringify({ msg, ...extra }));
 
 /** Runs a step; "already done" conflicts make the seed idempotent. */
@@ -328,6 +329,18 @@ try {
     log('asha enabled AI document processing');
   }
 
+  // ── Step 11: clinical history (past visits, notes, prescriptions, check-ins, lab reports) ──
+  await seedHistory({
+    makeContainer,
+    live: container,
+    knex,
+    principalFor,
+    ids,
+    ashaProfile,
+    clinic,
+    log,
+  });
+
   // ── M13.2: a synthetic directory (10 cities, clinics, doctors, patients) ──
   await seedDirectory({ container, knex, admin, password, principalFor, log });
 
@@ -339,6 +352,7 @@ try {
       msg: 'demo seed failed',
       error: err.message,
       details: err.extensions,
+      ...(process.env.SEED_DEBUG ? { stack: err.stack } : {}),
     }),
   );
   process.exitCode = 1;

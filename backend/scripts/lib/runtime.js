@@ -13,8 +13,11 @@ export function createScriptRuntime(name) {
     script: name,
   });
   const knex = createKnex(config.db, `healthbridge-${name}`);
-  const container = createContainer({ config, logger, knex, mailer: createNoopMailer({ logger }) });
-  return { config, logger, knex, container, close: () => knex.destroy() };
+  const mailer = createNoopMailer({ logger });
+  const container = createContainer({ config, logger, knex, mailer });
+  /** A second container on another clock (synthetic history happens "back then"). */
+  const makeContainer = (now) => createContainer({ config, logger, knex, mailer, now });
+  return { config, logger, knex, container, makeContainer, close: () => knex.destroy() };
 }
 
 /** Parses `--key value` / `--key=value` arguments. */

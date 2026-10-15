@@ -6,12 +6,19 @@ last refresh are added locally, so the ceiling holds between refreshes as well. 
 soft ceiling: calls already in flight when it is reached still finish.
 """
 
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
+from app.core.logging import log_event
 from app.core.metrics import LLM_BUDGET_EXHAUSTED, LLM_SPEND_TODAY
 from app.llm.base import LLMError, LLMErrorKind
+
+logger = logging.getLogger("healthbridge.ai.budget")
+
+# How long the last known total may stand in when the database cannot be read.
+MAX_STALE_SECONDS = 600.0
 
 
 def utc_day_start(at: datetime) -> datetime:
@@ -38,7 +45,7 @@ class SpendGuard:
         self._local = 0.0  # this replica's spend since then
         self._refreshed_at: float | None = None
 
-    async def _refresh(self) -> None:
+    async def _refresh(self, provider: str) -> None:
         day = utc_day_start(self._now())
         stale = (
             self._refreshed_at is None
@@ -47,7 +54,30 @@ class SpendGuard:
         )
         if not stale:
             return
-        self._recorded = float(await self._read_spent(day))
+        try:
+            recorded = float(await self._read_spent(day))
+        except Exception as exc:
+            # A brief database problem keeps the last total (plus this replica's own
+            # spend); with no recent total the call is refused like an outage, so the
+            # ceiling never silently stops applying.
+            usable = (
+                self._refreshed_at is not None
+                and day == self._day
+                and self._clock() - self._refreshed_at < MAX_STALE_SECONDS
+            )
+            log_event(
+                logger,
+                logging.WARNING,
+                "spend total unavailable",
+                errorType=type(exc).__name__,
+                usingLastTotal=usable,
+            )
+            if usable:
+                return
+            raise LLMError(
+                LLMErrorKind.UNAVAILABLE, "spend total unavailable", provider=provider
+            ) from exc
+        self._recorded = recorded
         self._local = 0.0
         self._day = day
         self._refreshed_at = self._clock()
@@ -58,7 +88,7 @@ class SpendGuard:
 
     async def check(self, workflow: str, provider: str) -> None:
         """Raises `budget_exhausted` once today's spend has reached the ceiling."""
-        await self._refresh()
+        await self._refresh(provider)
         LLM_SPEND_TODAY.set(self.spent_usd)
         if self.spent_usd >= self.limit_usd:
             LLM_BUDGET_EXHAUSTED.labels(workflow).inc()

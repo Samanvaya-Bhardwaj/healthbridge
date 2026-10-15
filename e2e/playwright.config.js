@@ -30,7 +30,19 @@ export default defineConfig({
     ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === '1',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, grepInvert: /@video/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      grepInvert: /@video/,
+      testIgnore: /accessibility\.spec\.js/,
+    },
+    // Step 11: the axe scans load dozens of pages; they run after the journeys (projects
+    // run in order with one worker) and clear the local rate-limit counters first.
+    {
+      name: 'accessibility',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /accessibility\.spec\.js/,
+    },
     // Live video: Chromium's synthetic camera/microphone, no permission prompts.
     {
       name: 'video',
