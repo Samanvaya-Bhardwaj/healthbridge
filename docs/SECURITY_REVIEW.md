@@ -277,3 +277,45 @@ privacy, security and compliance review described there.
   the seals is Phase 2.
 - Own-record reads by patients and guardians are not audited, by design; reads by
   clinicians are.
+
+---
+
+# Security and safety review: step 10 (AI features)
+
+- **Date:** 2026-10-15
+- **Scope:**
+  - the care assistant;
+  - document intelligence;
+  - the doctor brief and record questions (RAG);
+  - follow-up summaries;
+  - the AI service's limits.
+- **Method:** a code review against ADR-0004, ADR-0008, ADR-0012, ADR-0022, ADR-0024 and
+  ADR-0029, backed by the tests named below.
+
+**Checked and holding:**
+
+| Control | Evidence |
+|---|---|
+| **Grounded answers:** brief and record-question sentences must cite retrieved, authorised sources. Uncited or number-inconsistent sentences are dropped. No evidence gives the exact fallback "Insufficient information. Please consult the doctor." without a model call. | `ai-service/tests/test_assist.py`; `backend/tests/integration/assist.test.js` |
+| **Grounded cards:** assistant cards are built from backend tool results only. IDs the backend did not return are dropped, and the model writes no free text that reaches the person. | `backend/tests/integration/assistant.test.js`; `ai-service/tests/test_care_assistant.py` |
+| **Retrieval is scoped:** RAG reads only consented documents and verified facts for a treating doctor with the patient's AI opt-in. Hybrid retrieval is patient- and document-scoped at the database (RLS on the AI role). | `assist.test.js`; `ai-service/tests/test_db_rls.py` |
+| **Emergency safeguards:** the backend screens every assistant message before any AI call. The shared rule is identical in both services (shared cases plus a differential fuzz), and the guidance works with the AI service down. Follow-up red flags escalate to urgent for the doctor. | `backend/tests/unit/assistantSafety.test.js`; `followups.test.js` |
+| **AI suggestions stay separate from decisions:** extracted lab values join the record only when a consented treating doctor verifies them, with values copied server-side from the proposal. Briefs are labelled AI with feedback. The assistant has no write tool; booking, rescheduling and cancelling are confirmed on their pages. Outcomes and prescriptions are the doctor's alone. | `intelligence.test.js`; `consultations.test.js`; `assistant.test.js`; frontend `assistant.test.jsx` |
+| **Limits:** per-user AI rate budgets (assistant 120/h, briefs and questions 60/h); 500-character messages; 3 tool rounds; 40 turns; 16 KB of state kept 24 h; model timeouts and `max_tokens`. | `assistant.test.js`; route configuration |
+| **External processing:** refused in production unless `LLM_EXTERNAL_PROCESSING_APPROVED=true` (ADR-0008); the fake provider is refused in production. | `ai-service/tests/test_config.py` |
+
+**Changed in this step** ([ADR-0036](adr/0036-ai-safeguards-budget-and-record-answers.md)):
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium | No platform-wide bound on model spend once an external provider is enabled. | `LLM_DAILY_BUDGET_USD`, mandatory with an external provider and enforced across replicas before each call. Unpriced models refuse to start. Every feature falls back at the ceiling. There is a metric and an alert. |
+| 2 | Medium (reliability) | A passing outage, timeout or rate limit during document extraction stored a `failed` extraction that was then reused, so the document was never analysed. | Retryable failures store nothing and answer 503. The job retries, and dead letters are retryable. |
+| 3 | Low (completeness) | "My appointments" and "my medicines" only linked to pages. | The backend shows the session patient's upcoming appointments and recent signed medicines after the AI step, labelled "From your records". Nothing is sent to the AI or stored, and the audit records a count only. |
+
+**Carried forward:**
+
+- The ceiling uses list-price estimates (`PRICING_AS_OF`). Calls already in flight when
+  it is reached still complete.
+- Answering patients' free-text record questions in the assistant would send clinical
+  text to a model. It stays a separate decision under ADR-0008.
+- The emergency rule matches fixed English wording only (unchanged from M13.1).

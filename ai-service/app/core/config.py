@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.llm.pricing import PRICES
+
 AppEnv = Literal["development", "test", "staging", "production"]
 LLMProviderName = Literal["claude", "fake"]
 EmbeddingProviderName = Literal["hashing", "voyage"]
@@ -44,6 +46,9 @@ class Settings(BaseSettings):
     llm_max_retries: int = Field(default=2, ge=0, le=5)
     llm_refusal_fallback: bool = True
     llm_external_processing_approved: bool = False
+    # Step 10 (ADR-0036): ceiling on estimated model spend per UTC day across all replicas,
+    # in US dollars. Required with an external provider; the fake provider costs nothing.
+    llm_daily_budget_usd: float | None = Field(default=None, gt=0, le=100_000)
 
     # Embeddings (ADR-0022): hashing = deterministic, offline (dev/test/demo).
     embedding_provider: EmbeddingProviderName = "hashing"
@@ -67,6 +72,18 @@ class Settings(BaseSettings):
             self.anthropic_api_key and self.anthropic_api_key.get_secret_value()
         ):
             raise ValueError("ANTHROPIC_API_KEY is required when LLM_PROVIDER=claude")
+
+        if self.llm_is_external:
+            if self.llm_daily_budget_usd is None:
+                raise ValueError(
+                    "LLM_DAILY_BUDGET_USD is required with an external LLM provider (ADR-0036)"
+                )
+            unpriced = [m for m in (self.llm_model_default, self.llm_model_fast) if m not in PRICES]
+            if unpriced:
+                raise ValueError(
+                    f"No price for {', '.join(unpriced)}: the daily budget cannot be enforced. "
+                    "Add the model to app/llm/pricing.py."
+                )
 
         if self.embedding_provider == "voyage" and not (
             self.voyage_api_key and self.voyage_api_key.get_secret_value()

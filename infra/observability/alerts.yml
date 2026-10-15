@@ -55,3 +55,24 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: 'LLM provider errors; AI features fall back to the safe message'
+      # Step 10 (ADR-0036): the daily ceiling on model spend was reached.
+      - alert: LlmDailyBudgetReached
+        expr: increase(ai_llm_budget_exhausted_total[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: 'Daily model budget reached; AI features fall back until 00:00 UTC'
+
+  - name: healthbridge-audit
+    rules:
+      # Step 9 (ADR-0035): the audit log no longer matches its seals.
+      - alert: AuditSealVerificationFailed
+        expr: increase(healthbridge_audit_seal_verification_failures_total[1h]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: 'Audit log integrity check failed; treat as a security incident (OPERATIONS.md §12)'
+      - alert: AuditSealingStalled
+        expr: sum(increase(healthbridge_audit_seals_written_total[3h])) == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: 'No audit seal written for 3 hours; check the worker maintenance queue'

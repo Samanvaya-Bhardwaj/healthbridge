@@ -2,12 +2,13 @@
 
 from app.core.config import Settings
 from app.llm.base import LLMProvider
+from app.llm.budget import SpendGuard
 from app.llm.fake_handlers import DEFAULT_HANDLERS
 from app.llm.instrumented import InstrumentedLLMProvider
 from app.llm.providers.fake import FakeLLMProvider
 
 
-def build_llm_provider(settings: Settings) -> LLMProvider:
+def build_llm_provider(settings: Settings, guard: SpendGuard | None = None) -> LLMProvider:
     if settings.llm_provider == "claude":
         # Imported lazily so the SDK is only loaded when this provider is selected.
         from app.llm.providers.claude import ClaudeProvider
@@ -25,4 +26,4 @@ def build_llm_provider(settings: Settings) -> LLMProvider:
     else:
         # Deterministic, rule-based stand-ins for the document/RAG workflows.
         inner = FakeLLMProvider(dict(DEFAULT_HANDLERS))
-    return InstrumentedLLMProvider(inner)
+    return InstrumentedLLMProvider(inner, guard)

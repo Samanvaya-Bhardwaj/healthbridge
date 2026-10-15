@@ -75,9 +75,16 @@ class LLMErrorKind(StrEnum):
     AUTHENTICATION = "authentication"
     BAD_REQUEST = "bad_request"
     INVALID_OUTPUT = "invalid_output"
+    # Step 10: the daily spend ceiling was reached (ADR-0036); it passes with the next day.
+    BUDGET_EXHAUSTED = "budget_exhausted"
 
 
-_RETRYABLE = {LLMErrorKind.RATE_LIMITED, LLMErrorKind.TIMEOUT, LLMErrorKind.UNAVAILABLE}
+_RETRYABLE = {
+    LLMErrorKind.RATE_LIMITED,
+    LLMErrorKind.TIMEOUT,
+    LLMErrorKind.UNAVAILABLE,
+    LLMErrorKind.BUDGET_EXHAUSTED,
+}
 
 
 class LLMError(Exception):

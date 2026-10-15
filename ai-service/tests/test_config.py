@@ -22,7 +22,12 @@ def test_claude_requires_an_api_key() -> None:
 
 def test_production_blocks_external_llm_without_explicit_approval() -> None:
     with pytest.raises(ValidationError, match="LLM_EXTERNAL_PROCESSING_APPROVED"):
-        make_settings(app_env="production", llm_provider="claude", anthropic_api_key="sk-test")
+        make_settings(
+            app_env="production",
+            llm_provider="claude",
+            anthropic_api_key="sk-test",
+            llm_daily_budget_usd=20,
+        )
 
 
 def test_production_allows_external_llm_after_approval() -> None:
@@ -31,8 +36,29 @@ def test_production_allows_external_llm_after_approval() -> None:
         llm_provider="claude",
         anthropic_api_key="sk-test",
         llm_external_processing_approved=True,
+        llm_daily_budget_usd=20,
     )
     assert settings.llm_is_external
+
+
+def test_an_external_llm_needs_a_daily_budget() -> None:
+    """Step 10 (ADR-0036): in every environment, not only production."""
+    with pytest.raises(ValidationError, match="LLM_DAILY_BUDGET_USD"):
+        make_settings(llm_provider="claude", anthropic_api_key="sk-test")
+    with pytest.raises(ValidationError, match="greater than 0"):
+        make_settings(llm_provider="claude", anthropic_api_key="sk-test", llm_daily_budget_usd=0)
+    # The fake provider costs nothing and needs none.
+    assert make_settings().llm_daily_budget_usd is None
+
+
+def test_the_budget_needs_priced_models() -> None:
+    with pytest.raises(ValidationError, match="No price for claude-unknown-9"):
+        make_settings(
+            llm_provider="claude",
+            anthropic_api_key="sk-test",
+            llm_daily_budget_usd=5,
+            llm_model_fast="claude-unknown-9",
+        )
 
 
 def test_production_rejects_fake_provider() -> None:
@@ -41,7 +67,9 @@ def test_production_rejects_fake_provider() -> None:
 
 
 def test_secrets_are_not_exposed_in_repr() -> None:
-    settings = make_settings(llm_provider="claude", anthropic_api_key="sk-very-secret")
+    settings = make_settings(
+        llm_provider="claude", anthropic_api_key="sk-very-secret", llm_daily_budget_usd=5
+    )
     assert "sk-very-secret" not in repr(settings)
     assert "t" * 48 not in repr(settings)
 

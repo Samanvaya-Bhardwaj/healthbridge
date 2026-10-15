@@ -297,22 +297,6 @@ export function createContainer({
   // Keyed digests of free-text AI inputs for AI run records (backend-only key).
   const inputDigester = createInputDigester(config.aiInputDigest);
   const assistService = createAssistService({ knex, aiClient, accessPolicy, audit, inputDigester });
-  // M13.1: the care assistant orchestrates existing read services; the AI only plans.
-  const assistantService = createAssistantService({
-    knex,
-    aiClient,
-    accessPolicy,
-    audit,
-    repository: createAssistantRepository(),
-    careService,
-    doctorService,
-    doctorSearchService,
-    recommendationService,
-    availabilityService,
-    logger,
-    inputDigester,
-    ...(now ? { now } : {}),
-  });
   const envelope = createEnvelope(config.clinicalData);
   const consultationService = createConsultationService({
     knex,
@@ -340,6 +324,25 @@ export function createContainer({
     audit,
     storage: documentStorage,
     logger,
+    ...(now ? { now } : {}),
+  });
+  // M13.1: the care assistant orchestrates existing read services; the AI only plans.
+  const assistantService = createAssistantService({
+    knex,
+    aiClient,
+    accessPolicy,
+    audit,
+    repository: createAssistantRepository(),
+    careService,
+    doctorService,
+    doctorSearchService,
+    recommendationService,
+    availabilityService,
+    // Step 10: facts from the record, shown by the backend (never sent to the AI).
+    appointmentService,
+    prescriptionService,
+    logger,
+    inputDigester,
     ...(now ? { now } : {}),
   });
   const intelligenceService = createIntelligenceService({

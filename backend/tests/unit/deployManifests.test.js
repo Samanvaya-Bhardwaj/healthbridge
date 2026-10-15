@@ -24,6 +24,7 @@ const ENV = {
   CLINICAL_DATA_KEY_ID: 'k1',
   LLM_PROVIDER: 'fake',
   LLM_EXTERNAL_PROCESSING_APPROVED: 'false',
+  LLM_DAILY_BUDGET_USD: '20',
 };
 
 describe('ECS task definitions (M12)', () => {

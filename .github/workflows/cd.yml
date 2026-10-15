@@ -199,6 +199,8 @@ jobs:
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'fake' }}
           # ADR-0008: stays false until the privacy/security/compliance review is done.
           LLM_EXTERNAL_PROCESSING_APPROVED: ${{ vars.LLM_EXTERNAL_PROCESSING_APPROVED || 'false' }}
+          # ADR-0036: daily ceiling on estimated model spend (USD).
+          LLM_DAILY_BUDGET_USD: ${{ vars.LLM_DAILY_BUDGET_USD || '20' }}
         run: |
           set -euo pipefail
           node infra/deploy/ecs/render.mjs rendered

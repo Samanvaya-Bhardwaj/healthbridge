@@ -181,6 +181,90 @@ describe('HealthBridge Assistant', () => {
     expect(screen.getByRole('link', { name: 'Open My Doctors' })).toBeInTheDocument();
   });
 
+  it('shows facts from the record apart from AI suggestions (step 10)', async () => {
+    let n = 0;
+    signedIn({
+      [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: () => {
+        n += 1;
+        const cards =
+          n === 1
+            ? [
+                {
+                  type: 'appointment',
+                  source: 'record',
+                  appointmentId: '0192b6f0-0000-7000-8000-0000000000c1',
+                  reference: '000000C1',
+                  doctorName: 'Dr. Meera Iyer',
+                  startsAt: '2026-10-20T05:00:00Z',
+                  mode: 'online',
+                  status: 'confirmed',
+                },
+                { type: 'link', target: 'appointments' },
+              ]
+            : [
+                {
+                  type: 'medication',
+                  source: 'record',
+                  prescriptionId: '0192b6f0-0000-7000-8000-0000000000e1',
+                  reference: 'RX-1',
+                  doctorName: 'Dr. Meera Iyer',
+                  signedAt: '2026-10-10T05:00:00Z',
+                  items: [
+                    {
+                      drugName: 'Cetirizine',
+                      strength: '10 mg',
+                      form: 'tablet',
+                      dose: '1 tablet',
+                      frequency: 'once daily',
+                      route: 'oral',
+                      duration: '5 days',
+                      instructions: 'At night',
+                    },
+                  ],
+                },
+                { type: 'link', target: 'prescriptions' },
+              ];
+        return json(200, {
+          data: {
+            session: sessionView(n + 1),
+            reply: {
+              kind: 'not_yet',
+              message:
+                n === 1
+                  ? "I can't change appointments here yet. Open the appointment from the Appointments page to reschedule or cancel it."
+                  : 'Signed prescriptions, with how to take each medicine, are on the Prescriptions page.',
+              cards,
+            },
+            understood: { intent: n === 1 ? 'reschedule' : 'view_medications', criteria: {} },
+            degraded: false,
+          },
+        });
+      },
+    });
+    open('/app/assistant');
+    const box = await screen.findByLabelText('Your message');
+    await userEvent.type(box, 'I need to reschedule{Enter}');
+    const upcoming = await screen.findByRole('region', { name: 'Upcoming appointments' });
+    expect(within(upcoming).getByText('From your records')).toBeInTheDocument();
+    expect(within(upcoming).getByText('Dr. Meera Iyer')).toBeInTheDocument();
+    expect(within(upcoming).getByRole('link', { name: 'Open appointment' })).toHaveAttribute(
+      'href',
+      '/app/appointments/0192b6f0-0000-7000-8000-0000000000c1',
+    );
+
+    await userEvent.type(box, 'what medicines do I take{Enter}');
+    const medicines = await screen.findByRole('region', {
+      name: 'Medicines on your recent prescriptions',
+    });
+    expect(within(medicines).getByText(/Cetirizine 10 mg \(tablet\)/)).toBeInTheDocument();
+    expect(
+      within(medicines).getByText(/1 tablet, once daily, oral, for 5 days/),
+    ).toBeInTheDocument();
+    expect(within(medicines).getByText(/Ask your doctor before changing/)).toBeInTheDocument();
+    // The AI's own words stay labelled as such.
+    expect(screen.getAllByText('AI suggestion').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('offers a fresh conversation when the session has ended', async () => {
     signedIn({
       [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: () =>

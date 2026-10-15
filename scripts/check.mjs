@@ -23,9 +23,11 @@ if (!existsSync(join(root, 'node_modules'))) {
   console.error('Run `npm ci` first (installs the test tooling).');
   process.exit(1);
 }
-const env = existsSync(join(root, '.env'))
-  ? parseEnv(readFileSync(join(root, '.env'), 'utf8'))
-  : {};
+// Like Docker Compose, the shell overrides .env (e.g. POSTGRES_DB=<scratch db> npm run check).
+const env = {
+  ...(existsSync(join(root, '.env')) ? parseEnv(readFileSync(join(root, '.env'), 'utf8')) : {}),
+  ...process.env,
+};
 
 const results = [];
 function gate(name, cmd, args, { cwd = root, extraEnv = {} } = {}) {

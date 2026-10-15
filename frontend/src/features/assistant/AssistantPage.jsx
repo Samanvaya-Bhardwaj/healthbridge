@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CalendarDays,
   CalendarPlus,
+  ClipboardCheck,
   FileText,
   Pill,
   RotateCcw,
@@ -17,7 +18,7 @@ import { ASSISTANT_MAX_MESSAGE } from '@healthbridge/shared';
 import { assistantApi } from '../../lib/domainApi.js';
 import { authErrorMessage, isConnectionProblem } from '../auth/errorMessages.js';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Badge } from '../../components/ui/Badge.jsx';
+import { Badge, StatusBadge } from '../../components/ui/Badge.jsx';
 import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { Card } from '../../components/ui/Card.jsx';
 import { TextAreaField } from '../../components/ui/Fields.jsx';
@@ -26,7 +27,7 @@ import { LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { PatientSelect } from '../records/PatientSelect.jsx';
 import { usePatientChoice } from '../records/usePatientChoice.js';
-import { MODE_LABELS, formatFee } from '../appointments/format.js';
+import { MODE_LABELS, formatDateTime, formatFee, formatFullDate } from '../appointments/format.js';
 import { whySuggested } from '../care/recommendationText.js';
 
 const QUICK_ACTIONS = [
@@ -169,12 +170,94 @@ function Slots({ slots }) {
   );
 }
 
+/** Step 10: facts the backend read from the record; labelled apart from AI suggestions. */
+function FromRecords({ children, label }) {
+  return (
+    <section aria-label={label} className="mt-3 rounded-xl border border-border bg-surface p-3">
+      <p className="mb-2">
+        <Badge tone="neutral" icon={ClipboardCheck}>
+          From your records
+        </Badge>
+      </p>
+      {children}
+    </section>
+  );
+}
+
+function AppointmentCards({ cards }) {
+  return (
+    <FromRecords label="Upcoming appointments">
+      <ul className="space-y-2">
+        {cards.map((a) => (
+          <li
+            key={a.appointmentId}
+            className="flex flex-wrap items-center justify-between gap-2 text-sm text-text"
+          >
+            <span>
+              <span className="font-medium">{a.doctorName ?? 'Your doctor'}</span>
+              {' · '}
+              {formatDateTime(a.startsAt)}
+              {' · '}
+              {MODE_LABELS[a.mode] ?? a.mode} <StatusBadge status={a.status} />
+            </span>
+            <ButtonLink
+              as={Link}
+              to={`/app/appointments/${a.appointmentId}`}
+              size="sm"
+              variant="secondary"
+            >
+              Open appointment
+            </ButtonLink>
+          </li>
+        ))}
+      </ul>
+    </FromRecords>
+  );
+}
+
+function MedicationCards({ cards }) {
+  return (
+    <FromRecords label="Medicines on your recent prescriptions">
+      {cards.map((p) => (
+        <div key={p.prescriptionId} className="mt-2 first:mt-0">
+          <p className="text-xs text-text-muted">
+            Signed by {p.doctorName ?? 'your doctor'} on {formatFullDate(p.signedAt)}
+          </p>
+          <ol className="mt-1 space-y-1 text-sm text-text">
+            {p.items.map((i, n) => (
+              <li key={n} className="flex gap-2">
+                <Pill aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-text-subtle" />
+                <span>
+                  <span className="font-medium">
+                    {i.drugName}
+                    {i.strength && ` ${i.strength}`}
+                    {i.form && ` (${i.form})`}
+                  </span>{' '}
+                  — {i.dose}, {i.frequency}, {i.route}, for {i.duration}
+                  {i.instructions && (
+                    <span className="block text-text-muted">{i.instructions}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+      <p className="mt-2 text-xs text-text-muted">
+        Exactly as your doctor signed it. Ask your doctor before changing or stopping a medicine.
+      </p>
+    </FromRecords>
+  );
+}
+
 function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
   const { reply, understood, degraded } = turn;
   const choices = reply.cards.filter((c) => c.type === 'choice');
   const doctors = reply.cards.filter((c) => c.type === 'doctor');
   const slots = reply.cards.filter((c) => c.type === 'slot');
   const links = reply.cards.filter((c) => c.type === 'link' && LINKS[c.target]);
+  const appointments = reply.cards.filter((c) => c.type === 'appointment');
+  const medications = reply.cards.filter((c) => c.type === 'medication');
   const linkButtons = links.length > 0 && (
     <div className="mt-3 flex flex-wrap gap-2">
       {links.map((c) => (
@@ -245,6 +328,8 @@ function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
           <Slots slots={slots} />
         </div>
       )}
+      {appointments.length > 0 && <AppointmentCards cards={appointments} />}
+      {medications.length > 0 && <MedicationCards cards={medications} />}
       {linkButtons}
     </div>
   );

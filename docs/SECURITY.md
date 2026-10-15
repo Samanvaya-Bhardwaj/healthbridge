@@ -434,7 +434,7 @@ Each layer is tested on its own:
   - the patient is fixed at session creation (self or a guarded dependent);
   - AccessPolicy re-checks it on every turn;
   - tool arguments can't name a patient (strict schemas), and model-produced IDs are ignored.
-- **Tools:** an explicit allow-list wrapping the existing domain services, so AccessPolicy, consent and RLS apply unchanged. M13.1 tools are read-only; writes (M13.4) will require explicit approval and idempotency keys.
+- **Tools:** an explicit allow-list of five read-only tools wrapping the existing domain services, so AccessPolicy, consent and RLS apply unchanged. There is no write tool: booking, rescheduling and cancelling happen on their pages, each with an explicit confirmation (ADR-0034).
 - **Untrusted output:**
   - the model fills a fixed form and writes no free text that reaches the person;
   - the backend validates the returned state, drops IDs it didn't return, and builds cards from its own data.
@@ -445,4 +445,6 @@ Each layer is tested on its own:
   - AI runs keep only a keyed HMAC of the message, under the dedicated backend-only `AI_INPUT_DIGEST_KEY`, which is never sent to the AI service (the same applies to record questions and follow-up summaries; see ADR-0012);
   - audit rows record the intent, tool names and counts.
 - **Abuse limits:** 120 requests per hour per user, 3 tool rounds and 1 model call per message, and 40 turns per session.
+- **Answers from the record (step 10, ADR-0036):** upcoming appointments and the medicines of recent signed prescriptions are read by the backend after the AI step, through the pages' services and checks, for the session patient only. They are never sent to the AI service, stored with the session or audited beyond a card count, and the page labels them "From your records".
+- **Spend ceiling (step 10, ADR-0036):** with an external provider, `LLM_DAILY_BUDGET_USD` is mandatory and enforced across replicas before each model call. At the ceiling every AI feature falls back as if the model were down. The total comes from a SECURITY DEFINER function that returns one number, so the AI role's patient-scoped RLS is unchanged.
 - **Tests:** prompt injection, tool-argument manipulation, forged IDs, unknown and write tools, cross-user RLS, RLS against unrelated patients, guardian revocation (API and database), emergencies with the AI service down, the keyed message digest, roles that must be refused, and log checks.

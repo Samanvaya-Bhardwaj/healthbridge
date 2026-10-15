@@ -77,6 +77,27 @@ def test_scope_isolates_patients(conn) -> None:
         insert_run(conn, a)  # writing another patient's artifact under B's scope
 
 
+def test_the_daily_spend_total_spans_patients_but_reveals_only_a_number(conn) -> None:
+    """Step 10 (ADR-0036): the ceiling needs every patient's spend; RLS still hides runs."""
+    a, b = str(uuid.uuid4()), str(uuid.uuid4())
+    with conn.transaction(force_rollback=True):
+        since = conn.execute("SELECT now() - interval '1 second'").fetchone()[0]
+        for patient, cost in ((a, "0.250000"), (b, "0.500000")):
+            scoped(conn, patient)
+            conn.execute(
+                """INSERT INTO ai.ai_runs (id, workflow, patient_id, status, estimated_cost_usd)
+                   VALUES (%s, 'test', %s, 'ok', %s)""",
+                (str(uuid.uuid4()), patient, cost),
+            )
+        scoped(conn, b)
+        total = conn.execute("SELECT ai.spend_since(%s)", (since,)).fetchone()[0]
+        assert float(total) >= 0.75  # both patients' runs, though B's scope is set
+        hidden = conn.execute(
+            "SELECT count(*) FROM ai.ai_runs WHERE patient_id = %s", (a,)
+        ).fetchone()[0]
+        assert hidden == 0
+
+
 def test_ai_history_cannot_be_deleted_or_rewritten(conn) -> None:
     a = str(uuid.uuid4())
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():

@@ -87,6 +87,7 @@ const values = {
   VIDEO_PROVIDER: 'mock',
   LLM_PROVIDER: 'fake',
   LLM_EXTERNAL_PROCESSING_APPROVED: 'false',
+  LLM_DAILY_BUDGET_USD: '20',
 
   BULL_BOARD_PASSWORD: secret(18),
   BACKUP_AGE_RECIPIENT: args['age-recipient'],

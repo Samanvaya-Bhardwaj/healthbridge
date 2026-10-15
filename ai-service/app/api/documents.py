@@ -17,6 +17,7 @@ from app.core.logging import log_event, request_id_ctx
 from app.core.scope import ScopeDep
 from app.core.security import require_service_token
 from app.documents.grounding import chunk_text
+from app.llm.base import LLMError
 from app.repositories import ai_store
 
 logger = logging.getLogger("healthbridge.ai.documents")
@@ -83,16 +84,33 @@ async def analyze(body: AnalyzeRequest, scope: ScopeDep, request: Request) -> di
     run_id = ai_store.new_id()
     started = datetime.now(UTC)
     agent, totals = build_document_agent(llm)
-    state = await agent.ainvoke(
-        {
-            "run_id": run_id,
-            "request_id": request_id_ctx.get(),
-            "content": content,
-            "content_type": body.contentType,
-            "declared_type": body.documentType,
-        },
-        config={"configurable": {"thread_id": run_id}},
-    )
+    try:
+        state = await agent.ainvoke(
+            {
+                "run_id": run_id,
+                "request_id": request_id_ctx.get(),
+                "content": content,
+                "content_type": body.contentType,
+                "declared_type": body.documentType,
+            },
+            config={"configurable": {"thread_id": run_id}},
+        )
+    except LLMError as exc:
+        # Retryable only (the agent stores every other failure). Nothing is recorded, so
+        # the backend's job retry, or a dead-letter retry, analyses the document afresh.
+        log_event(
+            logger,
+            logging.WARNING,
+            "document analysis deferred",
+            runId=run_id,
+            errorKind=exc.kind.value,
+        )
+        raise ProblemError(
+            503,
+            "ai_unavailable",
+            "AI temporarily unavailable",
+            "Document analysis is deferred; retry later.",
+        ) from exc
 
     status = state["status"]
     run_status = (

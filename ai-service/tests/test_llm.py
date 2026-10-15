@@ -91,7 +91,9 @@ def test_factory_builds_instrumented_fake_provider() -> None:
 
 
 def test_factory_builds_claude_provider_from_config() -> None:
-    provider = build_llm_provider(make_settings(llm_provider="claude", anthropic_api_key="sk-x"))
+    provider = build_llm_provider(
+        make_settings(llm_provider="claude", anthropic_api_key="sk-x", llm_daily_budget_usd=5)
+    )
     assert isinstance(provider, InstrumentedLLMProvider)
     assert isinstance(provider.inner, ClaudeProvider)
     assert provider.resolve_model(ModelTier.DEFAULT) == "claude-opus-5-5"

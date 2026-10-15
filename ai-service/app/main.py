@@ -20,6 +20,7 @@ from app.core.logging import configure_logging, log_event, request_id_ctx
 from app.core.metrics import HTTP_DURATION
 from app.embeddings import EmbeddingProvider, HashingEmbeddingProvider, VoyageEmbeddingProvider
 from app.llm.base import LLMProvider
+from app.llm.budget import SpendGuard
 from app.llm.factory import build_llm_provider
 
 logger = logging.getLogger("healthbridge.ai")
@@ -42,7 +43,12 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = database or Database(settings)
         await db.open()
-        llm = llm_provider or build_llm_provider(settings)
+        guard = (
+            SpendGuard(settings.llm_daily_budget_usd, db.spend_since)
+            if settings.llm_daily_budget_usd
+            else None
+        )
+        llm = llm_provider or build_llm_provider(settings, guard)
         embedder = embedding_provider or (
             VoyageEmbeddingProvider(
                 api_key=settings.voyage_api_key.get_secret_value(),
@@ -61,6 +67,7 @@ def create_app(
             "ai service started",
             appEnv=settings.app_env,
             llmProvider=llm.name,
+            llmDailyBudgetUsd=settings.llm_daily_budget_usd,
         )
         try:
             yield

@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const env = parseEnv(readFileSync(join(root, '.env'), 'utf8'));
+// Like Docker Compose, the shell overrides .env.
+const env = { ...parseEnv(readFileSync(join(root, '.env'), 'utf8')), ...process.env };
 const keys = mkdtempSync(join(tmpdir(), 'hb-drill-'));
 const volume = `hb-drill-${Date.now()}`;
 const docker = (args, opts = {}) =>

@@ -11,13 +11,15 @@ import logging
 from app.core.logging import log_event, request_id_ctx
 from app.core.metrics import LLM_CALLS, LLM_COST, LLM_LATENCY, LLM_TOKENS
 from app.llm.base import LLMError, LLMProvider, LLMRequest, LLMResponse, ModelTier, StopReason
+from app.llm.budget import SpendGuard
 
 logger = logging.getLogger("healthbridge.ai.llm")
 
 
 class InstrumentedLLMProvider(LLMProvider):
-    def __init__(self, inner: LLMProvider) -> None:
+    def __init__(self, inner: LLMProvider, guard: SpendGuard | None = None) -> None:
         self._inner = inner
+        self._guard = guard
         self.name = inner.name
 
     @property
@@ -42,6 +44,8 @@ class InstrumentedLLMProvider(LLMProvider):
             "structuredOutput": request.json_schema is not None,
         }
         try:
+            if self._guard is not None:
+                await self._guard.check(request.workflow, self._inner.name)
             response = await self._inner.generate(request)
         except LLMError as exc:
             LLM_CALLS.labels(
@@ -60,6 +64,8 @@ class InstrumentedLLMProvider(LLMProvider):
             )
             raise
 
+        if self._guard is not None:
+            self._guard.record(response.estimated_cost_usd)
         status = "refused" if response.stop_reason is StopReason.REFUSAL else "ok"
         LLM_CALLS.labels(request.workflow, self._inner.name, response.model, status).inc()
         LLM_LATENCY.labels(request.workflow, self._inner.name).observe(response.latency_ms / 1000)

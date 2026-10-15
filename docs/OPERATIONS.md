@@ -233,6 +233,12 @@ path has not been deployed from this repository.
   The AI service adds `ai_agent_steps_total`; model spend appears under workflow `care_assistant_intent`.
 - **What to watch:** a rising `healthbridge_agent_failures_total{kind="ai_unavailable"}` means the AI service or the model provider is down. The rest of the platform keeps working, and the assistant answers with a My Doctors fallback.
 - **Retention:** the `records-housekeeping` maintenance job (every minute) deletes expired `agent_sessions` (24 h).
+- **Daily model budget (step 10, ADR-0036):**
+  - `LLM_DAILY_BUDGET_USD` (default 20) caps estimated spend per UTC day across all AI-service replicas. It is required with an external provider, and the AI service refuses to start without it.
+  - Watch `ai_llm_spend_today_usd` and `ai_llm_budget_exhausted_total{workflow}`; the `LlmDailyBudgetReached` alert fires when calls are refused.
+  - While refused, the assistant, briefs and record questions show their "unavailable" fallbacks, and emergency guidance is unaffected.
+  - Raising the ceiling takes effect after an AI-service restart. Otherwise service resumes at 00:00 UTC.
+- **Deferred document analysis:** during an AI outage, or with the budget reached, analysis answers 503 and nothing is stored. The `document.available` job retries with backoff (`JOB_MAX_ATTEMPTS`, `JOB_BACKOFF_MS`). After a long outage, retry the dead-lettered jobs from Admin → Operations.
 
 ## 12. Audit log integrity (step 9, ADR-0035)
 

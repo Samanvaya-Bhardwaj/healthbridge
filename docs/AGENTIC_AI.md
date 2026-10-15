@@ -12,7 +12,8 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 | **M13.2** Doctor search | Shared specialty terms and areas of practice; one SQL search with eligibility, specialty, city, language, mode and name filters; deterministic ranking with reasons; no-match told apart from search unavailable (ADR-0031). Vector ranking added on top. | Done |
 | **M13.3** Recommendations | Search order lifted by care team, past visits, profile city and language, and soonest free time; fact-based explanations and next steps; patient side only; served by the existing read-only `searchDoctors` tool and the My Doctors page (ADR-0032) | Done |
 | **M13.4** Appointment orchestration | Slot cards and recommendations hand the exact time to the booking page; the patient reviews and confirms there (one idempotent, eligibility-guarded, paid booking path; no write tool) (ADR-0034) | Done |
-| M13.5 | Reschedule and cancel: on the appointment page, each with an explicit confirmation; the assistant links there | Done (through the app) |
+| M13.5 | Reschedule and cancel: on the appointment page, each with an explicit confirmation; the assistant shows the upcoming appointments and links to each | Done (through the app) |
+| Step 10 | Answers from the record (upcoming appointments, medicines on recent signed prescriptions), shown by the backend and never sent to the AI; daily spend ceiling; deferred document analysis on passing failures (ADR-0036) | Done |
 | M13.6–M13.7 | Calendar adapter, medication schedule and reminders | Later |
 
 ## Where the code is
@@ -115,31 +116,42 @@ Rejected calls never throw. They come back as error codes:
 | Role | Access |
 |---|---|
 | A patient | For themselves |
-| A guardian | For a dependent they guard; `view` and `manage` scopes can read. M13.4's booking will require `manage`. |
+| A guardian | For a dependent they guard; `view` and `manage` scopes can use the assistant. Booking for a dependent (on the booking page) requires `manage`. |
 | Doctors, clinic admins, platform admins, support | Refused: no `assistant:use` |
 
-## Approval flow (M13.4)
+## Booking (M13.4, ADR-0034)
 
-Booking will create a pending action, with no write yet. The confirmation summary shows:
+There is no approval table and no booking tool. Slot cards and recommendations link to the
+booking page with the doctor, the patient, the consultation type and the exact time
+(`startsAt`). The patient reviews and confirms there, and the existing idempotent,
+eligibility-guarded, paid booking flow applies unchanged. A view-only guardian can use
+the assistant, but booking for a dependent still needs a `manage` guardianship, which
+the appointment service enforces.
 
-- the doctor;
-- the date and time;
-- the mode;
-- the fee;
-- the clinic and its address.
+## Answers from the record (step 10, ADR-0036)
 
-After explicit approval, the backend books through `appointmentService.book` with a key derived from the action, so a retried or replayed approval returns the same appointment. The existing hold, payment, webhook and outbox notification flow then applies unchanged.
+| Intent | What the reply carries | Read through |
+|---|---|---|
+| `view_appointments`, `reschedule`, `cancel` | Up to 3 upcoming appointments: doctor, time, mode, status, and a link to each appointment page (where reschedule and cancel ask for confirmation) | `appointmentService.listForPatient` |
+| `view_medications` | The medicines of up to 2 signed prescriptions from the last 90 days, each line exactly as signed, with "ask your doctor before changing or stopping a medicine" | `prescriptionService.listForPatient` |
 
-## RAG integration (later phases)
+- The AI only classifies the intent. The backend reads the facts **after** the AI step, as
+  the session's user and for the session's patient, with the pages' permission,
+  relationship and RLS checks.
+- Nothing about appointments or medicines is sent to the AI service, stored in the
+  session, or written to the audit log (it records the card count only).
+- Cards are typed `appointment` and `medication` with `source: 'record'`. The page
+  shows them under "From your records", apart from the reply's "AI suggestion" badge.
+- A degraded turn (AI unavailable) carries no record cards. Its fallback links still
+  work.
 
-Record and medication questions will call the existing patient-scoped RAG and structured prescription data (ADR-0024, ADR-0025). That reuse keeps:
+## Record questions (RAG)
 
-- consent checks;
-- citations;
-- grounding;
-- the exact fallback, "Insufficient information. Please consult the doctor."
-
-There will be no second vector store and no duplicate indexing. Until then, those intents point to the existing pages.
+Free-text questions about documents and results are answered by the patient-scoped RAG
+(ADR-0024) for consented treating doctors, with citations and the exact fallback
+"Insufficient information. Please consult the doctor." In the assistant, `ask_records`
+points to Health Records. Answering patients' free-text record questions in the assistant
+would send clinical text to the model; that stays a separate decision under ADR-0008.
 
 ## Failure states
 
@@ -153,6 +165,7 @@ There will be no second vector store and no duplicate indexing. Until then, thos
 | Session ended, expired or too long | "Start a new conversation" | `409 assistant_session_ended` / `assistant_turn_limit` |
 | Guardianship revoked | Refused | AccessPolicy on the next turn |
 | Assistant can't start | "Find a doctor in My Doctors" | The rest of the app works normally |
+| Daily model budget reached (ADR-0036) | The same fallback as "LLM down" | The AI service refuses the call before the model (`budget_exhausted`). The alert `LlmDailyBudgetReached` fires; service resumes at 00:00 UTC. |
 
 ## Tests
 
@@ -166,6 +179,9 @@ There will be no second vector store and no duplicate indexing. Until then, thos
 | Frontend | `frontend/src/features/assistant/assistant.test.jsx` | AI versus confirmed labelling, booking links to the existing flow, emergency and degraded replies, ended-session recovery, start-failure fallback, switching between self and a dependent (fresh session and version, nothing leaks, late replies dropped) |
 | E2E | `e2e/tests/assistant.spec.js` | The real stack with the fake model: ask, grounded suggestions, existing booking page, emergency guidance |
 | Route security | `backend/tests/integration/routeSecurity.test.js` | The new routes deny anonymous access (automatic) |
+| Answers from the record (step 10) | `backend/tests/integration/assistantRecords.test.js` | Upcoming appointments and recent signed medicines shown for the session patient only; nothing of them sent to the AI or audited; none on a degraded turn |
+| Spend ceiling (step 10) | `ai-service/tests/test_budget.py`, `test_config.py`, `test_db_rls.py` | Refused at the ceiling without calling the model; other replicas counted after a refresh; a new UTC day starts over; required with an external provider and priced models; the total spans patients but reveals only a number |
+| Deferred analysis (step 10) | `ai-service/tests/test_documents.py` | An outage, timeout, rate limit or ceiling stores nothing and answers 503; the retry succeeds |
 
 ## Running it
 

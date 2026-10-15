@@ -90,6 +90,10 @@
           "value": "${LLM_EXTERNAL_PROCESSING_APPROVED}"
         },
         {
+          "name": "LLM_DAILY_BUDGET_USD",
+          "value": "${LLM_DAILY_BUDGET_USD}"
+        },
+        {
           "name": "EMBEDDING_PROVIDER",
           "value": "hashing"
         }

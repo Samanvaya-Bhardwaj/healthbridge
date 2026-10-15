@@ -5,6 +5,7 @@ import os
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, Protocol
 
 from psycopg.conninfo import make_conninfo
@@ -18,6 +19,7 @@ class DatabaseLike(Protocol):
     async def close(self) -> None: ...
     async def ping(self) -> None: ...
     def patient_scope(self, patient_id: str) -> Any: ...
+    async def spend_since(self, since: datetime) -> float: ...
 
 
 def ssl_params(settings: Settings) -> dict[str, str]:
@@ -64,6 +66,13 @@ class Database:
     async def ping(self) -> None:
         async with self._pool.connection(timeout=2) as conn:
             await conn.execute("select 1")
+
+    async def spend_since(self, since: datetime) -> float:
+        """Estimated model spend of every run since `since` (ADR-0036): one total only."""
+        async with self._pool.connection(timeout=2) as conn:
+            cur = await conn.execute("SELECT ai.spend_since(%s)", (since,))
+            row = await cur.fetchone()
+        return float(row[0]) if row else 0.0
 
     @asynccontextmanager
     async def patient_scope(self, patient_id: str) -> AsyncIterator[Any]:

@@ -196,19 +196,45 @@ class TestAnalyzeEndpoint:
             assert call.messages[0].content.startswith("<document>")
             assert "untrusted data" in (call.system or "")
 
-    def test_refusal_or_failure_yields_failed_extraction_without_chunks(self) -> None:
+    def test_a_model_failure_yields_failed_extraction_without_chunks(self) -> None:
         from app.llm.base import LLMError, LLMErrorKind
 
         def boom(_request):
-            raise LLMError(LLMErrorKind.UNAVAILABLE, "down", provider="fake")
+            raise LLMError(LLMErrorKind.INVALID_OUTPUT, "bad output", provider="fake")
 
         app, db, _ = app_with({"document_extraction": boom})
-        # FakeLLMProvider calls handlers directly: wrap to raise through generate().
         with TestClient(app) as client:
             data = analyze(client, make_pdf(SYNTHETIC_CBC)).json()
         assert data["status"] == "failed"
         assert data["fields"] == []
         assert not any("INSERT INTO ai.document_chunks" in s for _, s, _ in db.statements)
+
+    @pytest.mark.parametrize("kind", ["unavailable", "timeout", "rate_limited", "budget_exhausted"])
+    def test_a_passing_failure_is_deferred_not_stored(self, kind: str) -> None:
+        """Step 10: an outage, a rate limit or the daily ceiling is not a verdict on the
+        document. Nothing is stored, the backend's job retries, and the retry succeeds."""
+        from app.llm.base import LLMError, LLMErrorKind
+
+        state = {"down": True}
+
+        def flaky(request):
+            if state["down"]:
+                raise LLMError(LLMErrorKind(kind), "passing", provider="fake")
+            return DEFAULT_HANDLERS["document_extraction"](request)
+
+        app, db, _ = app_with({"document_extraction": flaky})
+        with TestClient(app) as client:
+            first = analyze(client, make_pdf(SYNTHETIC_CBC))
+            assert first.status_code == 503
+            assert first.json()["code"] == "ai_unavailable"
+            assert db.extractions == []
+            assert not any("INSERT INTO ai.ai_runs" in s for _, s, _ in db.statements)
+
+            state["down"] = False
+            second = analyze(client, make_pdf(SYNTHETIC_CBC))
+        assert second.status_code == 200
+        assert second.json()["status"] != "failed"
+        assert len(db.extractions) == 1
 
 
 GOLDEN = [

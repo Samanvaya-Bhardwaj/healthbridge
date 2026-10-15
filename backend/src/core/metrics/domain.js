@@ -130,9 +130,9 @@ export const domainMetrics = Object.freeze({
     'outcome',
   ]),
   // Step 9: tamper-evident audit log (ADR-0035).
-  auditSealsWritten: counter('audit_seals_written_total', 'Audit log ranges sealed'),
+  auditSealsWritten: counter('healthbridge_audit_seals_written_total', 'Audit log ranges sealed'),
   auditSealFailures: counter(
-    'audit_seal_verification_failures_total',
+    'healthbridge_audit_seal_verification_failures_total',
     'Audit seal verifications that found a mismatch',
     ['problem'],
   ),

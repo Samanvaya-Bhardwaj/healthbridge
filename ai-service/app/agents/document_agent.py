@@ -191,6 +191,10 @@ def build_document_agent(llm: LLMProvider):
                 state, "document_extraction", EXTRACT_SYSTEM, EXTRACT_SCHEMA, ModelTier.DEFAULT
             )
         except LLMError as exc:
+            # Step 10: an outage, a rate limit or the daily ceiling passes. It is not a
+            # verdict on the document, so it is not stored; the caller retries later.
+            if exc.retryable:
+                raise
             return {"raw": {}, "status": "failed", "error_kind": exc.kind.value}
         if res.stop_reason is StopReason.REFUSAL:
             return {"raw": {}, "status": "failed", "error_kind": "refused"}

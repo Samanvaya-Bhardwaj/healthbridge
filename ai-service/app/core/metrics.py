@@ -4,7 +4,7 @@ Labels are workflow names, providers, model ids and outcome enums: never identif
 prompts, outputs or anything patient-related.
 """
 
-from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
 REGISTRY = CollectorRegistry(auto_describe=True)
@@ -42,6 +42,18 @@ LLM_COST = Counter(
     registry=REGISTRY,
 )
 
+LLM_BUDGET_EXHAUSTED = Counter(
+    "ai_llm_budget_exhausted_total",
+    "LLM calls refused because the daily spend ceiling was reached",
+    ["workflow"],
+    registry=REGISTRY,
+)
+LLM_SPEND_TODAY = Gauge(
+    "ai_llm_spend_today_usd",
+    "Estimated model spend so far in the current UTC day (as seen by this replica)",
+    registry=REGISTRY,
+)
+
 AGENT_STEPS = Counter(
     "ai_agent_steps_total",
     "Care assistant steps by next action (tool name or respond) and outcome",
@@ -53,9 +65,11 @@ __all__ = [
     "AGENT_STEPS",
     "CONTENT_TYPE_LATEST",
     "HTTP_DURATION",
+    "LLM_BUDGET_EXHAUSTED",
     "LLM_CALLS",
     "LLM_COST",
     "LLM_LATENCY",
+    "LLM_SPEND_TODAY",
     "LLM_TOKENS",
     "REGISTRY",
     "generate_latest",

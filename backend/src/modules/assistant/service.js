@@ -36,6 +36,12 @@ const EMERGENCY_REPLY = Object.freeze({
 });
 
 // The AI step's answer is checked like any untrusted input before it is used.
+/** Step 10: intents answered with facts from the person's own record. */
+const APPOINTMENT_INTENTS = new Set(['view_appointments', 'reschedule', 'cancel']);
+const MAX_RECORD_CARDS = 3;
+const MAX_PRESCRIPTION_CARDS = 2;
+const RECENT_PRESCRIPTION_DAYS = 90;
+
 const cardSchema = z.object({
   type: z.enum(['doctor', 'slot', 'link', 'choice']),
   doctorId: z.uuid().optional(),
@@ -84,6 +90,8 @@ export function createAssistantService({
   doctorSearchService,
   recommendationService,
   availabilityService,
+  appointmentService,
+  prescriptionService,
   logger,
   inputDigester,
   now = () => new Date(),
@@ -230,6 +238,65 @@ export function createAssistantService({
         (next.selectedDoctorId === previous.selectedDoctorId && previous.slotStarts.includes(s)),
     );
     return next;
+  }
+
+  /**
+   * Step 10: facts from the person's own record, for intents that ask about them. The
+   * backend reads them after the AI has chosen the intent, through the same services and
+   * access checks as the pages; they are never sent to the AI or stored with the session.
+   */
+  async function recordCards(intent, principal, patientId, req) {
+    try {
+      if (APPOINTMENT_INTENTS.has(intent) && appointmentService) {
+        const upcoming = await appointmentService.listForPatient(
+          principal,
+          { patientId, scope: 'upcoming' },
+          req,
+        );
+        return upcoming.slice(0, MAX_RECORD_CARDS).map((a) => ({
+          type: 'appointment',
+          source: 'record',
+          appointmentId: a.id,
+          reference: a.reference,
+          doctorName: a.doctor?.professionalName ?? null,
+          startsAt: a.startsAt,
+          mode: a.mode,
+          status: a.status,
+        }));
+      }
+      if (intent === 'view_medications' && prescriptionService) {
+        const since = now().getTime() - RECENT_PRESCRIPTION_DAYS * 86_400_000;
+        const signed = await prescriptionService.listForPatient(principal, patientId, req);
+        return signed
+          .filter((p) => p.status === 'signed' && new Date(p.signedAt).getTime() >= since)
+          .slice(0, MAX_PRESCRIPTION_CARDS)
+          .map((p) => ({
+            type: 'medication',
+            source: 'record',
+            prescriptionId: p.id,
+            reference: p.reference,
+            doctorName: p.doctorName ?? null,
+            signedAt: p.signedAt,
+            items: p.items.map((i) => ({
+              drugName: i.drugName,
+              strength: i.strength,
+              form: i.form,
+              dose: i.dose,
+              frequency: i.frequency,
+              route: i.route,
+              duration: i.duration,
+              instructions: i.instructions,
+            })),
+          }));
+      }
+    } catch (err) {
+      // The page link still answers; the reason is logged without content.
+      logger?.warn(
+        { errName: err?.name, code: err?.code, intent },
+        'assistant record cards skipped',
+      );
+    }
+    return [];
   }
 
   /** Cards show backend data only; anything the backend did not return is dropped. */
@@ -427,6 +494,9 @@ export function createAssistantService({
       failure = 'invalid_ai_response';
     }
     const hydrated = await hydrate(failure ? FALLBACK_REPLY : reply, tools, row.patient_id);
+    if (!failure) {
+      hydrated.cards.push(...(await recordCards(next.intent, principal, row.patient_id, req)));
+    }
 
     const saved = await withActor(knex, principal.userId, async (trx) => {
       const advanced = await repository.advance(trx, row.id, version, {
