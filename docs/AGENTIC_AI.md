@@ -11,8 +11,9 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 | **M13.1** Foundation | Sessions, the bounded graph, read-only tools, safety check, Assistant page | Done |
 | **M13.2** Doctor search | Shared specialty terms and areas of practice; one SQL search with eligibility, specialty, city, language, mode and name filters; deterministic ranking with reasons; no-match told apart from search unavailable (ADR-0031). Vector ranking added on top. | Done |
 | **M13.3** Recommendations | Search order lifted by care team, past visits, profile city and language, and soonest free time; fact-based explanations and next steps; patient side only; served by the existing read-only `searchDoctors` tool and the My Doctors page (ADR-0032) | Done |
-| M13.4 Appointment orchestration | Pending approval → explicit confirmation → `appointmentService.book` (idempotent), existing payment and notifications | Planned |
-| M13.5–M13.7 | Reschedule and cancel, calendar adapter, medication schedule and reminders | Later |
+| **M13.4** Appointment orchestration | Slot cards and recommendations hand the exact time to the booking page; the patient reviews and confirms there (one idempotent, eligibility-guarded, paid booking path; no write tool) (ADR-0034) | Done |
+| M13.5 | Reschedule and cancel: on the appointment page, each with an explicit confirmation; the assistant links there | Done (through the app) |
+| M13.6–M13.7 | Calendar adapter, medication schedule and reminders | Later |
 
 ## Where the code is
 

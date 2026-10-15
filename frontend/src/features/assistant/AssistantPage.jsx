@@ -145,7 +145,7 @@ function Slots({ slots }) {
                 as={Link}
                 size="sm"
                 variant="secondary"
-                to={`/app/appointments/book?doctorId=${s.doctorId}&patientId=${s.patientId}&mode=${s.mode}`}
+                to={`/app/appointments/book?doctorId=${s.doctorId}&patientId=${s.patientId}&mode=${s.mode}&startsAt=${encodeURIComponent(s.startsAt)}`}
                 aria-label={`${time(s.startsAt)}, ${MODE_LABELS[s.mode] ?? ''}, continue to booking`}
               >
                 {time(s.startsAt)}

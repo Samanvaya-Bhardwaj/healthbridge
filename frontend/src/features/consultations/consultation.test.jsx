@@ -165,6 +165,48 @@ describe('consultation room', () => {
     await waitFor(() => expect(calls.some((c) => c.key === `POST ${BASE}/note/sign`)).toBe(true));
   });
 
+  it('patient sees why HealthBridge withdrew a booking, and that it is refunded', async () => {
+    const cancelled = { ...appointment, status: 'cancelled' };
+    signedIn(['PATIENT'], {
+      [`GET ${BASE}`]: () =>
+        json(200, {
+          data: {
+            party: 'patient',
+            appointment: cancelled,
+            consultation: null,
+            waitingRoom: { ...waitingRoom, open: false },
+            notes: [],
+            prescriptions: [],
+          },
+        }),
+      [`GET ${BASE}/status`]: () =>
+        json(200, {
+          data: {
+            party: 'patient',
+            consultation: null,
+            waitingRoom: { ...waitingRoom, open: false },
+          },
+        }),
+      [`GET /api/v1/appointments/${APPT}`]: () =>
+        json(200, {
+          data: {
+            ...cancelled,
+            feePaise: 50_000,
+            paymentStatus: 'paid',
+            cancelledAt: '2026-10-04T09:00:00Z',
+            cancelledByParty: 'system',
+            cancelReason: 'clinic_closed',
+          },
+        }),
+    });
+    open();
+    expect(
+      await screen.findByText(/HealthBridge cancelled it because the clinic has closed/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Your payment is being refunded in full/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Book another time' })).toBeInTheDocument();
+  });
+
   it('patient sees fixed emergency guidance after outcome C', async () => {
     const ended = { id: 'c1', status: 'ended', mode: 'online', video: true };
     signedIn(['PATIENT'], {

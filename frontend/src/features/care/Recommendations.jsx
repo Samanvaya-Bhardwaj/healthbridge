@@ -127,7 +127,7 @@ export function Recommendations({ patientId, onRequest, requesting }) {
                   variant="secondary"
                   to={`/app/appointments/book?doctorId=${r.doctor.id}&patientId=${patientId}${
                     r.nextStep.mode ? `&mode=${r.nextStep.mode}` : ''
-                  }`}
+                  }${r.nextStep.startsAt ? `&startsAt=${encodeURIComponent(r.nextStep.startsAt)}` : ''}`}
                 >
                   Book with {r.doctor.professionalName}
                 </ButtonLink>

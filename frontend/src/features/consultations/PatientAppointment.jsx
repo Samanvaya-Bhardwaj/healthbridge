@@ -206,10 +206,21 @@ function NowPanel({ a, view, status, appointmentId }) {
           <p>
             {a.cancelledByParty === 'patient'
               ? 'You cancelled it'
-              : a.cancelledByParty
-                ? 'It was cancelled by the doctor or clinic'
-                : 'It was cancelled'}
+              : a.cancelledByParty === 'system'
+                ? // ADR-0030: withdrawn because the doctor or clinic stopped being eligible.
+                  `HealthBridge cancelled it because ${
+                    a.cancelReason === 'clinic_closed'
+                      ? 'the clinic has closed'
+                      : 'the doctor is no longer available at this time or place'
+                  }`
+                : a.cancelledByParty
+                  ? 'It was cancelled by the doctor or clinic'
+                  : 'It was cancelled'}
             {a.cancelledAt ? ` on ${formatDateTime(a.cancelledAt)}` : ''}.
+            {a.cancelledByParty === 'system' &&
+              a.paymentStatus !== 'refunded' &&
+              a.feePaise > 0 &&
+              ' Your payment is being refunded in full.'}
             {a.paymentStatus === 'refunded' && ' Your payment has been refunded.'}
             {a.paymentStatus === 'partially_refunded' && ' Part of your payment was refunded.'}
           </p>
@@ -574,6 +585,7 @@ export function PatientAppointment({ view, status, appointmentId, notice }) {
     holdExpiresAt: d.holdExpiresAt,
     cancelledAt: d.cancelledAt,
     cancelledByParty: d.cancelledByParty,
+    cancelReason: d.cancelReason,
     doctorSpecialization: d.doctor?.primarySpecialization,
   };
   const c = view.consultation;

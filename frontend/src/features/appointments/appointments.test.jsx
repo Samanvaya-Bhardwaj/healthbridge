@@ -104,7 +104,7 @@ describe('booking', () => {
     expect(screen.getByRole('radio', { name: /Online/ })).toBeChecked();
     expect(screen.getByRole('radiogroup', { name: 'Date' })).toBeInTheDocument();
     const ue = userEvent.setup();
-    const times = await screen.findAllByRole('button', { pressed: false, name: /\d/ });
+    const times = await screen.findAllByRole('button', { pressed: false, name: /[0-9]/ });
     await ue.click(times.find((b) => /9:15|09:15/.test(b.textContent)) ?? times[1]);
     const bookButton = screen.getByRole('button', { name: 'Book appointment' });
     expect(bookButton).toBeDisabled(); // reason required
@@ -164,6 +164,54 @@ describe('booking', () => {
     );
     expect(screen.getByText('Choose a time to continue.')).toBeInTheDocument();
   }, 15_000);
+});
+
+describe('booking a time chosen elsewhere (step 7)', () => {
+  const slotsOf = (hours) =>
+    hours.map((h) => ({
+      startsAt: inTwoDays(h),
+      endsAt: inTwoDays(h),
+      mode: 'online',
+      clinicId: null,
+      feePaise: 0,
+    }));
+  const setup = () => {
+    signedIn(makeUser(['PATIENT']), {
+      [`GET /api/v1/doctors/${DOCTOR}`]: () =>
+        json(200, {
+          data: { id: DOCTOR, professionalName: 'Dr. Meera Iyer', primarySpecialization: 'GP' },
+        }),
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (url, init) =>
+      String(url).startsWith(`/api/v1/doctors/${DOCTOR}/slots`)
+        ? Promise.resolve(json(200, { data: slotsOf([9, 11]) }))
+        : originalFetch(url, init);
+  };
+
+  it('arrives with the chosen time selected; the patient still reviews and confirms', async () => {
+    setup();
+    const wanted = encodeURIComponent(inTwoDays(11));
+    renderAt(
+      `/app/appointments/book?doctorId=${DOCTOR}&patientId=${PATIENT}&mode=online&startsAt=${wanted}`,
+    );
+    const pressed = await screen.findAllByRole('button', { pressed: true, name: /[0-9]/ });
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0].textContent).toMatch(/11/);
+    // Nothing is booked yet: the confirm step still needs the reason and a click.
+    expect(screen.getByRole('button', { name: 'Book appointment' })).toBeDisabled();
+    expect(screen.queryByText(/no longer free/)).not.toBeInTheDocument();
+  });
+
+  it('says so when the chosen time has gone, and selects nothing', async () => {
+    setup();
+    const gone = encodeURIComponent(inTwoDays(15));
+    renderAt(
+      `/app/appointments/book?doctorId=${DOCTOR}&patientId=${PATIENT}&mode=online&startsAt=${gone}`,
+    );
+    expect(await screen.findByText(/The time you chose is no longer free/)).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { pressed: true, name: /[0-9]/ })).toHaveLength(0);
+  });
 });
 
 describe('patient appointments', () => {

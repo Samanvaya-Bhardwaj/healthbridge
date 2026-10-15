@@ -220,7 +220,23 @@ export function BookAppointmentPage() {
     [slots.data, activeMode],
   );
   const days = useMemo(() => groupByDay(modeSlots), [modeSlots]);
-  const activeDay = day && days.some(([k]) => k === day) ? day : (days[0]?.[0] ?? null);
+  // Step 7: a time chosen elsewhere (an assistant or recommendation card) is pre-selected
+  // while it is still free. The patient still reviews and confirms it here.
+  const wantedStart = params.get('startsAt');
+  const [wantedDismissed, setWantedDismissed] = useState(false);
+  const wanted = useMemo(() => {
+    if (!wantedStart || wantedDismissed) return null;
+    const ms = new Date(wantedStart).getTime();
+    return modeSlots.find((s) => new Date(s.startsAt).getTime() === ms) ?? null;
+  }, [wantedStart, wantedDismissed, modeSlots]);
+  const wantedGone = Boolean(wantedStart && !wantedDismissed && slots.isSuccess && !wanted);
+  const chosen = selected ?? wanted;
+  const activeDay =
+    day && days.some(([k]) => k === day)
+      ? day
+      : chosen
+        ? new Date(chosen.startsAt).toDateString()
+        : (days[0]?.[0] ?? null);
   const daySlots = days.find(([k]) => k === activeDay)?.[1] ?? [];
   const clinicName = (id) => {
     const c = doctor.data?.clinics?.find((x) => x.id === id);
@@ -230,14 +246,14 @@ export function BookAppointmentPage() {
   const submit = useSafeMutation({
     mutationFn: () =>
       rescheduleId
-        ? schedulingApi.reschedule(rescheduleId, selected.startsAt)
+        ? schedulingApi.reschedule(rescheduleId, chosen.startsAt)
         : schedulingApi.book(
             {
               patientId,
               doctorId,
-              startsAt: selected.startsAt,
+              startsAt: chosen.startsAt,
               mode: activeMode,
-              ...(selected.clinicId ? { clinicId: selected.clinicId } : {}),
+              ...(chosen.clinicId ? { clinicId: chosen.clinicId } : {}),
               reason,
             },
             idempotencyKey,
@@ -247,6 +263,7 @@ export function BookAppointmentPage() {
     onError: (error) => {
       if (STALE_SLOT_CODES.has(error?.code)) {
         setSelected(null);
+        setWantedDismissed(true);
         slots.refetch();
       }
     },
@@ -277,7 +294,7 @@ export function BookAppointmentPage() {
 
   const doctorName = doctor.data?.professionalName ?? 'Your doctor';
   const reasonOk = Boolean(rescheduleId) || reason.trim().length >= 3;
-  const ready = Boolean(selected) && reasonOk;
+  const ready = Boolean(chosen) && reasonOk;
   const n = rescheduleId
     ? { date: 1, time: 2, confirm: 3 }
     : { type: 1, date: 2, time: 3, reason: 4, confirm: 5 };
@@ -285,8 +302,8 @@ export function BookAppointmentPage() {
     <SummaryRows
       doctorName={doctorName}
       mode={activeMode}
-      slot={selected}
-      clinicName={selected?.clinicId ? clinicName(selected.clinicId) : undefined}
+      slot={chosen}
+      clinicName={chosen?.clinicId ? clinicName(chosen.clinicId) : undefined}
       rescheduling={Boolean(rescheduleId)}
     />
   );
@@ -322,6 +339,9 @@ export function BookAppointmentPage() {
           doctor in your care team. Bookings open up to {BOOKING_HORIZON_DAYS} days ahead.
         </EmptyState>
       )}
+      {wantedGone && (
+        <Alert tone="info">The time you chose is no longer free. Here are the current times.</Alert>
+      )}
       {slots.isSuccess && modes.length > 0 && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="space-y-4">
@@ -354,6 +374,7 @@ export function BookAppointmentPage() {
                             setMode(m);
                             setDay(null);
                             setSelected(null);
+                            setWantedDismissed(true);
                           }}
                           className="mt-1 h-4 w-4 shrink-0 accent-primary"
                         />
@@ -386,6 +407,7 @@ export function BookAppointmentPage() {
                   onChange={(key) => {
                     setDay(key);
                     setSelected(null);
+                    setWantedDismissed(true);
                   }}
                 />
               </Step>
@@ -396,7 +418,7 @@ export function BookAppointmentPage() {
                 number={n.time}
                 title="Available time"
                 hint={`Shown in your time zone. Each consultation is ${slotMinutes(daySlots[0])} minutes.`}
-                done={Boolean(selected)}
+                done={Boolean(chosen)}
               >
                 <div className="space-y-4">
                   {dayParts(daySlots).map(([part, list]) => (
@@ -406,7 +428,7 @@ export function BookAppointmentPage() {
                       </p>
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                         {list.map((slot) => {
-                          const on = selected?.startsAt === slot.startsAt;
+                          const on = chosen?.startsAt === slot.startsAt;
                           return (
                             <button
                               key={slot.startsAt}
@@ -451,7 +473,7 @@ export function BookAppointmentPage() {
             {activeMode && (
               <Step number={n.confirm} title={rescheduleId ? 'Confirm' : 'Confirm and pay'}>
                 <div className="mb-4 lg:hidden">{summary}</div>
-                <Policies slot={selected} mode={activeMode} rescheduling={Boolean(rescheduleId)} />
+                <Policies slot={chosen} mode={activeMode} rescheduling={Boolean(rescheduleId)} />
                 {submit.isError && (
                   <Alert tone="error" className="mt-4">
                     {authErrorMessage(submit.error)}
@@ -459,7 +481,7 @@ export function BookAppointmentPage() {
                 )}
                 {!ready && (
                   <p className="mt-4 text-sm text-text-muted">
-                    {!selected
+                    {!chosen
                       ? 'Choose a time to continue.'
                       : 'Add a short reason for your visit to continue.'}
                   </p>
@@ -472,8 +494,8 @@ export function BookAppointmentPage() {
                 >
                   {rescheduleId
                     ? 'Confirm new time'
-                    : selected?.feePaise > 0
-                      ? `Book and pay ${formatFee(selected.feePaise)}`
+                    : chosen?.feePaise > 0
+                      ? `Book and pay ${formatFee(chosen.feePaise)}`
                       : 'Book appointment'}
                 </Button>
               </Step>
