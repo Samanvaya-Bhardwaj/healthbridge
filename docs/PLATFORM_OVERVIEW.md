@@ -214,7 +214,8 @@ A revoked consent blocks the **very next** request.
 ### 3.10 Consultations and prescriptions
 
 - **Waiting room:** for online visits, opens 15 minutes before the start. The doctor sees
-  that the patient is present and starts the consultation from 10 minutes before.
+  that the patient is present. The doctor can start the consultation at any time; in-clinic
+  visits don't need a check-in first.
 - **Video:**
   - **live** with LiveKit: camera and microphone, mute, stop camera, leave;
   - a **mock** room by default in development;

@@ -507,15 +507,17 @@ describe('outcomes', () => {
     );
   });
 
-  it('in-clinic consultations start after check-in and have no video', async () => {
+  it('the doctor can start at any time, days before the booked time', async () => {
+    const { doctor, appt } = await liveSetup('anytime', { start: false });
+    offsetMs = 0; // back to now: the appointment is two days away
+    const started = expectOk(
+      await api(h, doctor).post(`/appointments/${appt.id}/consultation/start`),
+    );
+    expect(started.consultation).toMatchObject({ status: 'live', video: true });
+  });
+
+  it('in-clinic consultations start without a check-in and have no video', async () => {
     const { doctor, appt } = await liveSetup('clinic', { start: false, mode: 'in_clinic' });
-    const before = await api(h, doctor).post(`/appointments/${appt.id}/consultation/start`);
-    expect(before.body.code).toBe('appointment_time_rule');
-    // The clinic desk checks the patient in (scheduling runs on the real clock).
-    await h
-      .ownerKnex('appointments')
-      .where({ id: appt.id })
-      .update({ status: 'checked_in', checked_in_at: clock() });
     const started = expectOk(
       await api(h, doctor).post(`/appointments/${appt.id}/consultation/start`),
     );

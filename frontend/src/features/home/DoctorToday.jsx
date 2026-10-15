@@ -88,10 +88,13 @@ function Visit({ a, consent, now, featured = false }) {
   const shared = coversDocuments(consent);
   const name = a.patient?.fullName ?? `Patient (ref ${a.reference})`;
   const age = ageFrom(a.patient?.dateOfBirth, now);
-  const startable =
-    !live &&
-    ((a.mode === 'online' && a.status === 'confirmed' && waitingWindowOpen(a, now)) ||
-      a.status === 'checked_in');
+  // The doctor may start whenever they choose; check-in stays available for the desk flow.
+  const startable = !live && ['confirmed', 'checked_in'].includes(a.status);
+  const canCheckIn =
+    a.status === 'confirmed' &&
+    a.mode === 'in_clinic' &&
+    now >= new Date(a.startsAt).getTime() - 60 * 60_000 &&
+    now < new Date(a.endsAt).getTime();
 
   let primary = null;
   if (live) {
@@ -104,22 +107,6 @@ function Visit({ a, consent, now, featured = false }) {
     primary = (
       <Button icon={Play} onClick={() => start.mutate()} loading={start.isPending}>
         Start consultation
-      </Button>
-    );
-  } else if (
-    a.status === 'confirmed' &&
-    a.mode === 'in_clinic' &&
-    now >= new Date(a.startsAt).getTime() - 60 * 60_000 &&
-    now < new Date(a.endsAt).getTime()
-  ) {
-    primary = (
-      <Button
-        variant="secondary"
-        icon={UserCheck}
-        onClick={() => checkIn.mutate()}
-        loading={checkIn.isPending}
-      >
-        Check in
       </Button>
     );
   } else if (OPEN_ROOM.includes(a.status)) {
@@ -181,6 +168,16 @@ function Visit({ a, consent, now, featured = false }) {
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:pl-20">
           {primary}
+          {canCheckIn && (
+            <Button
+              variant="secondary"
+              icon={UserCheck}
+              onClick={() => checkIn.mutate()}
+              loading={checkIn.isPending}
+            >
+              Check in
+            </Button>
+          )}
           {shared && (
             <ButtonLink
               as={Link}
