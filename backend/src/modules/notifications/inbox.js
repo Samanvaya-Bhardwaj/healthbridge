@@ -1,4 +1,4 @@
-import { INBOX_PAGE_LIMIT, PERMISSIONS } from '@healthbridge/shared';
+import { INBOX_PAGE_LIMIT, NOTIFICATION_CATEGORIES, PERMISSIONS } from '@healthbridge/shared';
 import { isUuid } from '../../core/db/ids.js';
 import { withActor } from '../../core/db/actorContext.js';
 import { BadRequestError, NotFoundError } from '../../core/http/errors.js';
@@ -30,7 +30,13 @@ const toView = (row) => ({
 });
 
 /** In-app inbox (ADR-0026): own notifications only (RLS), read/unread state. */
-export function createInboxService({ knex, accessPolicy, now = () => new Date() }) {
+/** Database row ↔ API shape (no row: every category on). */
+export const toPreferencesView = (row) => ({
+  email: Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c, row?.[`email_${c}`] ?? true])),
+  sms: row?.sms ?? true,
+});
+
+export function createInboxService({ knex, accessPolicy, audit, now = () => new Date() }) {
   const gate = (trx, principal, req) =>
     accessPolicy.enforce({ principal, permission: PERMISSIONS.NOTIFICATIONS_READ, req, trx });
 
@@ -101,5 +107,54 @@ export function createInboxService({ knex, accessPolicy, now = () => new Date() 
     });
   }
 
-  return { list, unreadCount, markRead, markAllRead };
+  // ── Step 8: notification preferences (own account only; RLS confines the row) ──
+
+  async function getPreferences(principal, req) {
+    return withActor(knex, principal.userId, async (trx) => {
+      await accessPolicy.enforce({ principal, permission: PERMISSIONS.ACCOUNT_READ, req, trx });
+      const row = await trx('notification_preferences')
+        .where({ user_id: principal.userId })
+        .first();
+      return toPreferencesView(row);
+    });
+  }
+
+  /** @param {{ email?: Record<string, boolean>, sms?: boolean }} patch */
+  async function updatePreferences(principal, patch, req) {
+    return withActor(knex, principal.userId, async (trx) => {
+      await accessPolicy.enforce({ principal, permission: PERMISSIONS.ACCOUNT_UPDATE, req, trx });
+      const current = toPreferencesView(
+        await trx('notification_preferences').where({ user_id: principal.userId }).first(),
+      );
+      const next = {
+        email: { ...current.email, ...(patch.email ?? {}) },
+        sms: patch.sms ?? current.sms,
+      };
+      const row = {
+        user_id: principal.userId,
+        ...Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [`email_${c}`, next.email[c]])),
+        sms: next.sms,
+        updated_at: now(),
+      };
+      await trx('notification_preferences').insert(row).onConflict('user_id').merge();
+      await audit?.record(
+        {
+          category: 'account',
+          action: 'account.notification_preferences_update',
+          outcome: 'success',
+          resourceType: 'user',
+          resourceId: principal.userId,
+          // What is off (category names only), never message content.
+          metadata: {
+            emailOff: NOTIFICATION_CATEGORIES.filter((c) => !next.email[c]),
+            sms: next.sms,
+          },
+        },
+        { req, trx },
+      );
+      return next;
+    });
+  }
+
+  return { list, unreadCount, markRead, markAllRead, getPreferences, updatePreferences };
 }

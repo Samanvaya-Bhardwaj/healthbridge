@@ -179,7 +179,7 @@ export function ProfilePage() {
           <p className="mt-1.5 text-sm text-text-muted">
             Password and signed-in devices are under{' '}
             <Link to="/app/account" className="font-medium text-primary hover:text-primary-hover">
-              Sign-in &amp; security
+              Account settings
             </Link>
             .
           </p>

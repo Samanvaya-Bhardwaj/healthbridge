@@ -193,7 +193,7 @@ export const SECTIONS = {
   },
   account: {
     key: 'account',
-    label: 'Sign-in & security',
+    label: 'Account settings',
     path: 'account',
     permission: P.ACCOUNT_READ,
     icon: KeyRound,

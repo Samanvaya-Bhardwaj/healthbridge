@@ -529,3 +529,15 @@ The directory, public profile and availability rules (and so slots) filter with 
 | `doctor_canonical_specialties(text[])` | The free text → canonical rule, shared by the trigger and tests |
 
 Indexes: GIN on `search_document`, `specialties` and `areas_of_practice`; a trigram index on `professional_name`; `lower(clinics.city)`.
+
+## Notification preferences (step 8)
+
+`notification_preferences` has one row per user who changed something; no row means everything is on.
+
+| Column | Notes |
+|---|---|
+| `user_id` | The account (RLS: own row only; the `notifications` system purpose reads it) |
+| `email_appointments`, `email_payments`, `email_reminders`, `email_documents`, `email_follow_ups` | Email per category |
+| `sms` | Text messages, where a phone number and an SMS template exist |
+
+Templates map to categories in `@healthbridge/shared` (`NOTIFICATION_TEMPLATE_CATEGORY`). `ALWAYS_SENT_TEMPLATES` (`emergency_guidance`, `follow_up_urgent` and `payment_required`) ignore the preference. A message held back by a preference is a `notification_deliveries` row with `status = skipped` and `skip_reason = preference`.

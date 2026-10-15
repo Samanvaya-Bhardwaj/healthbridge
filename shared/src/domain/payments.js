@@ -65,6 +65,56 @@ export const NOTIFICATION_TEMPLATES = Object.freeze([
   'appointment_withdrawn',
 ]);
 
+/**
+ * Notification preferences (step 8): which kinds of message a person also wants by email
+ * (and SMS where it exists). The in-app inbox always gets everything. Safety messages are
+ * always sent, whatever the preference.
+ */
+export const NOTIFICATION_CATEGORIES = Object.freeze([
+  'appointments',
+  'payments',
+  'reminders',
+  'documents',
+  'follow_ups',
+]);
+export const NOTIFICATION_TEMPLATE_CATEGORY = Object.freeze({
+  appointment_booked: 'appointments',
+  appointment_cancelled: 'appointments',
+  appointment_rescheduled: 'appointments',
+  appointment_expired: 'appointments',
+  appointment_withdrawn: 'appointments',
+  in_person_visit_requested: 'appointments',
+  emergency_guidance: 'appointments',
+  payment_required: 'payments',
+  payment_confirmed: 'payments',
+  payment_failed: 'payments',
+  payment_refunded: 'payments',
+  appointment_reminder: 'reminders',
+  document_available: 'documents',
+  document_rejected: 'documents',
+  prescription_available: 'documents',
+  follow_up_due: 'follow_ups',
+  follow_up_attention: 'follow_ups',
+  follow_up_urgent: 'follow_ups',
+});
+/** Sent by email whatever the preference: safety, and a payment that holds a booking. */
+export const ALWAYS_SENT_TEMPLATES = Object.freeze([
+  'emergency_guidance',
+  'follow_up_urgent',
+  'payment_required',
+]);
+export const notificationPreferencesSchema = z
+  .object({
+    email: z
+      .object(Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c, z.boolean()])))
+      .partial()
+      .strict(),
+    sms: z.boolean(),
+  })
+  .partial()
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
+
 export const manualRefundSchema = z
   .object({
     amountPaise: z.number().int().positive().max(10_000_000).optional(),

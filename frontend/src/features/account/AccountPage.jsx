@@ -14,6 +14,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { KeyRound } from 'lucide-react';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { NotificationPreferences } from './NotificationPreferences.jsx';
 
 const formatDate = (value) =>
   new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -213,8 +214,8 @@ export function AccountPage() {
       <PageHeader
         icon={KeyRound}
         eyebrow="Account"
-        title="Sign-in & security"
-        description="Your account details, password, email confirmation and the devices signed in to your account."
+        title="Account settings"
+        description="Your account details, notifications, password, email confirmation and the devices signed in to your account."
       />
       <Card>
         <h2 className="text-base font-semibold text-text">Account</h2>
@@ -238,6 +239,7 @@ export function AccountPage() {
           </div>
         </dl>
       </Card>
+      <NotificationPreferences />
       <ChangePasswordCard />
       <SessionsCard />
     </div>

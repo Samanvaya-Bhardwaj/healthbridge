@@ -1,3 +1,4 @@
+import { ALWAYS_SENT_TEMPLATES, NOTIFICATION_TEMPLATE_CATEGORY } from '@healthbridge/shared';
 import { withSystem } from '../../core/db/actorContext.js';
 import { newId } from '../../core/db/ids.js';
 import { domainMetrics, timed } from '../../core/metrics/domain.js';
@@ -141,6 +142,22 @@ export function createNotificationService({
         .forUpdate()
         .first();
       if (row.status === 'sent' || row.status === 'skipped') return { status: 'duplicate' };
+      // Step 8: the person's preference for this kind of message (the inbox always gets it;
+      // safety messages are sent whatever the preference). Recorded as a skipped delivery.
+      if (recipientUserId && !ALWAYS_SENT_TEMPLATES.includes(template)) {
+        const prefs = await trx('notification_preferences')
+          .where({ user_id: recipientUserId })
+          .first();
+        const category = NOTIFICATION_TEMPLATE_CATEGORY[template];
+        const wanted =
+          channel === 'sms' ? (prefs?.sms ?? true) : (prefs?.[`email_${category}`] ?? true);
+        if (!wanted) {
+          await trx('notification_deliveries')
+            .where({ id: row.id })
+            .update({ status: 'skipped', skip_reason: 'preference' });
+          return { status: 'skipped' };
+        }
+      }
       try {
         await timed(domainMetrics.notificationLatency, { channel }, send);
       } catch (err) {

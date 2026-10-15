@@ -5,6 +5,7 @@ import {
   closeFollowUpSchema,
   createFollowUpSchema,
   followUpResponseSchema,
+  notificationPreferencesSchema,
 } from '@healthbridge/shared';
 import { validate } from '../../core/http/validate.js';
 
@@ -99,6 +100,16 @@ export function followUpRoutes(container) {
   );
   route('post', '/notifications/:id/read', [validate({ params: param('id') })], (req) =>
     inboxService.markRead(req.principal, req.valid.params.id, req),
+  );
+  // Step 8: which notifications also arrive by email or SMS (the inbox gets all of them).
+  route('get', '/notifications/preferences', [], (req) =>
+    inboxService.getPreferences(req.principal, req),
+  );
+  route(
+    'put',
+    '/notifications/preferences',
+    [validate({ body: notificationPreferencesSchema })],
+    (req) => inboxService.updatePreferences(req.principal, req.valid.body, req),
   );
 
   return router;

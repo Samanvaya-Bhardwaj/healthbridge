@@ -312,6 +312,7 @@ service token and `X-Patient-Scope`.
 | GET | `/notifications/unread-count` | `notifications:read` | |
 | POST | `/notifications/:id/read` | owner | |
 | POST | `/notifications/read-all` | owner | |
+| GET / PUT | `/notifications/preferences` | `account:read` / `account:update` (own account) | Step 8: `{ email: { appointments, payments, reminders, documents, follow_ups }, sms }`. The inbox always receives everything. Emergency guidance, urgent follow-ups and payment-required notices are always sent. A message held back is recorded as a skipped delivery (`preference`). |
 
 Internal (AI service): `POST /v1/followups/summary` (scope purpose `follow_up_summary`).
 

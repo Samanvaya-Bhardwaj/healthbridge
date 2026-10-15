@@ -60,7 +60,7 @@ describe('sign in', () => {
       'Prescriptions',
       'Privacy & Access',
       'Profile',
-      'Sign-in & security',
+      'Account settings',
     ]) {
       expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
     }

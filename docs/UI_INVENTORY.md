@@ -104,11 +104,11 @@ or booking hints for a new patient, and no "today" view for a doctor.
 
    | Role | Navigation |
    |---|---|
-   | Patient | Home, My Doctors, Appointments, Health Records, Prescriptions, Timeline, Follow-ups, Privacy & Access, Profile, Sign-in & security |
-   | Doctor | Today, Schedule, My Patients, Patient Records, Follow-ups, Professional profile, Sign-in & security |
-   | Clinic admin | Clinic overview, Clinic schedule, Clinic team, Sign-in & security |
-   | Platform admin | Overview, Doctor verification, Clinics, Users, Audit log, Operations, Sign-in & security |
-   | Support | Overview, User lookup, Sign-in & security (the dead-end item is removed) |
+   | Patient | Home, My Doctors, Appointments, Health Records, Prescriptions, Timeline, Follow-ups, Privacy & Access, Profile, Account settings |
+   | Doctor | Today, Schedule, My Patients, Patient Records, Follow-ups, Professional profile, Account settings |
+   | Clinic admin | Clinic overview, Clinic schedule, Clinic team, Account settings |
+   | Platform admin | Overview, Doctor verification, Clinics, Users, Audit log, Operations, Account settings |
+   | Support | Overview, User lookup, Account settings (the dead-end item is removed) |
 
 5. **Role home pages** that answer "what next", using existing data and endpoints only:
    - **patient:** first-use steps (profile, add a doctor, book) and upcoming visits;

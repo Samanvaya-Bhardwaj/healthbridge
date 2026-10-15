@@ -563,7 +563,7 @@ All planned milestones (M0–M12) are complete.
 **Not included yet** (planned for Phase 2 in the architecture):
 
 - **Sign-in and messaging:** two-factor login (TOTP) for doctors and admins; real SMS or
-  WhatsApp delivery and notification preferences.
+  WhatsApp delivery.
 - **Clinic tools:** a clinic admin suite (staff rota, billing overview); real-time
   waiting-room updates; analytics dashboards; second-opinion sharing between doctors.
 - **Payments:** automatic payment reconciliation and partial refunds.

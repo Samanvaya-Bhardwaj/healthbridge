@@ -325,7 +325,7 @@ export function createContainer({
     logger,
     ...(now ? { now } : {}),
   });
-  const inboxService = createInboxService({ knex, accessPolicy, ...(now ? { now } : {}) });
+  const inboxService = createInboxService({ knex, accessPolicy, audit, ...(now ? { now } : {}) });
   const prescriptionService = createPrescriptionService({
     knex,
     config,

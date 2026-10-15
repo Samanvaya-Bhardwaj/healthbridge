@@ -252,6 +252,10 @@ export const inboxApi = {
   unreadCount: () => data(apiRequest('/notifications/unread-count')),
   read: (id) => data(apiRequest(`/notifications/${id}/read`, { method: 'POST' })),
   readAll: () => data(apiRequest('/notifications/read-all', { method: 'POST' })),
+  /** Step 8: which notifications also arrive by email or SMS. */
+  preferences: () => data(apiRequest('/notifications/preferences')),
+  updatePreferences: (body) =>
+    data(apiRequest('/notifications/preferences', { method: 'PUT', body })),
 };
 
 /**
