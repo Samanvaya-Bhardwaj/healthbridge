@@ -31,40 +31,34 @@ const appt = (overrides = {}) => ({
 });
 
 describe('consultation lifecycle', () => {
-  it('the doctor starts a consultation at any time; nobody else can', () => {
-    for (const now of [
-      at('2026-09-28T04:00:00Z'), // a week early
-      at('2026-10-05T03:52:00Z'),
-      at('2026-10-06T10:00:00Z'), // the next day
-    ]) {
-      expect(appointmentTransition(appt(), 'start_consultation', 'doctor', now)).toBe(
-        'in_consultation',
-      );
-    }
-    for (const party of ['patient', 'clinic']) {
-      expect(() =>
-        appointmentTransition(appt(), 'start_consultation', party, at('2026-10-05T04:00:00Z')),
-      ).toThrow(ForbiddenError);
-    }
+  it('starts an online consultation from 10 minutes before until an hour after the end', () => {
+    expect(
+      appointmentTransition(appt(), 'start_consultation', 'doctor', at('2026-10-05T03:52:00Z')),
+    ).toBe('in_consultation');
+    expect(() =>
+      appointmentTransition(appt(), 'start_consultation', 'doctor', at('2026-10-05T03:40:00Z')),
+    ).toThrow(ConflictError);
+    expect(() =>
+      appointmentTransition(appt(), 'start_consultation', 'doctor', at('2026-10-05T05:20:00Z')),
+    ).toThrow(ConflictError);
+    expect(() =>
+      appointmentTransition(appt(), 'start_consultation', 'patient', at('2026-10-05T04:00:00Z')),
+    ).toThrow(ForbiddenError);
   });
 
-  it('starts an in-clinic consultation with or without check-in, never from a closed state', () => {
+  it('starts an in-clinic consultation only after check-in', () => {
     const now = at('2026-10-05T04:01:00Z');
-    for (const status of ['confirmed', 'checked_in']) {
-      expect(
-        appointmentTransition(
-          appt({ mode: 'in_clinic', status }),
-          'start_consultation',
-          'doctor',
-          now,
-        ),
-      ).toBe('in_consultation');
-    }
-    for (const status of ['pending_payment', 'cancelled', 'completed', 'no_show']) {
-      expect(() =>
-        appointmentTransition(appt({ status }), 'start_consultation', 'doctor', now),
-      ).toThrow(ConflictError);
-    }
+    expect(() =>
+      appointmentTransition(appt({ mode: 'in_clinic' }), 'start_consultation', 'doctor', now),
+    ).toThrow(ConflictError);
+    expect(
+      appointmentTransition(
+        appt({ mode: 'in_clinic', status: 'checked_in' }),
+        'start_consultation',
+        'doctor',
+        now,
+      ),
+    ).toBe('in_consultation');
   });
 
   it('completes a live consultation only through the outcome', () => {

@@ -108,8 +108,7 @@ test('doctor and patient see and hear each other in a live consultation @video',
   );
   // psql prints e.g. "2026-10-03 13:50:00+00" (then "UPDATE 1").
   const startsAt = new Date(moved.trim().split(/\r?\n/)[0].replace(' ', 'T').replace(/\+00$/, 'Z'));
-  // The doctor may start at any time; waiting until near the booked time keeps the
-  // waiting room (which opens 15 minutes before) part of this journey.
+  // The doctor may start from 10 minutes before the booked time.
   const wait = startsAt.getTime() - 10 * 60_000 - Date.now() + 2_000;
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
 

@@ -28,7 +28,7 @@ The platform must never make a clinical decision itself.
 | Step | What happens |
 |---|---|
 | Waiting room | For online appointments, opens **15 minutes** before the start. The patient side sends a heartbeat (`consultation_presence`). The doctor sees whether the patient is waiting. Status polling returns no clinical content. |
-| Start | Doctor only, with `consultations:conduct`. Allowed at any time from a confirmed or checked-in appointment (the start window and the in-clinic check-in prerequisite were removed on 2026-10-15 at the owner's request). The appointment moves to `in_consultation` (`start_consultation`). A `consultations` row is created; online consultations get a random video room. |
+| Start | Doctor only, with `consultations:conduct`. Allowed from 10 minutes before the start until 60 minutes after the end. In-clinic visits must be checked in first. The appointment moves to `in_consultation` (`start_consultation`). A `consultations` row is created; online consultations get a random video room. |
 | Video | `VideoProvider` adapter: `mock` (default) or `livekit`. The backend issues short-lived (≤ 10 min), per-participant join tokens with opaque identities, after authorisation. It never relays media. |
 | Notes | SOAP note, envelope-encrypted (see below). One draft, then **signed**. Signed notes are never edited. A **correction** creates a new signed version (`supersedes_id`, reason required) and marks the previous one `superseded`. |
 | Prescription | One chain per consultation: draft → **signed** → superseded by a signed correction. Drafts are possible only while the consultation is live; corrections remain possible later. |
