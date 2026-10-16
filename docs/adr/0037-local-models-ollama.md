@@ -45,6 +45,10 @@ leaves the operator's infrastructure.
   the unambiguous ones in the message and corrects the form: weekday, today, tomorrow,
   online, in clinic, morning, afternoon and evening. Negations and "either" are left alone.
   The model keeps everything else (kind of doctor, areas, names, corrections).
+- **Small models also over-fill the form.** Code keeps a "can't search by" note (gender,
+  age, fees, ratings, insurance) only if the message mentions it. A question about one's
+  own reports or results (for example "What did my last HbA1c report say?"), with no word
+  about doctors, booking or times, is read as a records question (ADR-0039).
 
 ## Consequences
 

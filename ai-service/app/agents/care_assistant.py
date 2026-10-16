@@ -277,12 +277,53 @@ _CUES: list[tuple[str, str, re.Pattern[str]]] = [
 ]
 
 
+# A preference HealthBridge cannot search by is answered only if the message mentions it:
+# small models otherwise list them unprompted ("I can't choose by gender…").
+_UNSUPPORTED_CUES = {
+    "gender": re.compile(r"\b(female|woman|women|lady|ladies|male|man|men|gents?|gender)\b", re.I),
+    "age": re.compile(r"\b(age|aged|young|younger|old|older|elderly|senior)\b", re.I),
+    "fees": re.compile(
+        r"\b(cheap\w*|affordable|low[- ]cost|fees?|price\w*|cost\w*|budget|expensive|charges?"
+        r"|rupees?|rs|inr)\b",
+        re.I,
+    ),
+    "ratings": re.compile(r"\b(rated|ratings?|reviews?|stars?|best|top|famous|popular)\b", re.I),
+    "insurance": re.compile(r"\b(insurance|insured|cashless|mediclaim|tpa|cghs)\b", re.I),
+}
+# A question about one's own documents or results, with no word about doctors or booking,
+# is a records question whatever a small model guessed (Part 4, ADR-0039).
+_RECORD_WORDS = re.compile(
+    r"\b(reports?|results?|records?|documents?|labs?|tests?|scans?|x-?rays?|ecg|ekg|echo\w*"
+    r"|mri|ultrasound|hba1c|a1c|cholesterol|lipids?|thyroid|tsh|vitamin|ha?emoglobin|sugar"
+    r"|glucose|creatinine|kidney|egfr|spirometry|discharge|eye check|retina\w*|allerg\w*"
+    r"|vaccin\w*|blood pressure)\b",
+    re.I,
+)
+_OWN = re.compile(r"\b(my|our|her|his|their|last|latest|recent|previous)\b", re.I)
+_QUESTION = re.compile(
+    r"^\s*(what|how|when|which|did|was|were|is|are|does|do|show|tell|summari[sz]e|explain)\b"
+    r"|\?\s*$",
+    re.I,
+)
+_BOOKING_WORDS = re.compile(
+    r"\b(book\w*|appointments?|consult\w*|doctors?|dr|slots?|visit|see|meet|specialist"
+    r"|physician|online|clinic|tomorrow|today|morning|afternoon|evening|"
+    + "|".join(WEEKDAYS)
+    + r")\b",
+    re.I,
+)
+
+
 def _not_negated(text: str, match: re.Match[str]) -> bool:
     return not _NEGATED.search(text[max(0, match.start() - 16) : match.start()])
 
 
 def _explicit_cues(message: str, raw: dict[str, Any]) -> dict[str, Any]:
-    """The form, corrected for unambiguous words: weekday, today/tomorrow, mode, window."""
+    """The form, corrected for unambiguous words: weekday, today/tomorrow, mode, window.
+
+    Also drops preferences the message never mentioned, and reads a question about one's
+    own documents as a records question.
+    """
     fixed = dict(raw)
     text = message or ""
     if (m := _WEEKDAY_WORD.search(text)) and _not_negated(text, m):
@@ -299,6 +340,21 @@ def _explicit_cues(message: str, raw: dict[str, Any]) -> dict[str, Any]:
     for field, values in found.items():
         if len(set(values)) == 1:  # "online or in person" is not a preference
             fixed[field] = values[0]
+    if isinstance(fixed.get("unsupported"), list):
+        fixed["unsupported"] = [
+            u
+            for u in fixed["unsupported"]
+            if (u in _UNSUPPORTED_CUES and _UNSUPPORTED_CUES[u].search(text))
+            or (u == "other" and fixed.get("intent") == "unsupported")
+        ]
+    if (
+        fixed.get("intent") in (None, "find_doctor", "book_appointment", "unsupported", "greeting")
+        and _RECORD_WORDS.search(text)
+        and _OWN.search(text)
+        and _QUESTION.search(text)
+        and not _BOOKING_WORDS.search(text)
+    ):
+        fixed["intent"] = "ask_records"
     return fixed
 
 

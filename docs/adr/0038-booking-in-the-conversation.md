@@ -55,6 +55,9 @@ That flow must not let a model book, pay or change anything by itself.
      booking.
    - Expired or closed proposals are refused (`409`), and so is someone else's (`404`).
    - The model has no write tool: the five assistant tools stay read-only.
+   - A confirmed proposal is finished. On the next turn the backend clears the booking
+     doctor and time from the conversation (and its intent), so a new question starts
+     afresh instead of offering the booked time again.
 5. **The care team, in the same flow.**
    - A doctor can accept new patients automatically (`doctors.accepts_new_patients`,
      set on their profile).

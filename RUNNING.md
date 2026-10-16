@@ -148,8 +148,10 @@ tokens and IDs. It reads the port and demo password from your `.env`.
 On a laptop CPU a 3B model answers in about 10–40 seconds, and the first message after a
 start is the slowest (the model loads). Tapping a doctor, a day or a time needs no model at
 all. Larger models (`llama3.1`) understand better but take a minute or more per message
-without a GPU. `npm run check` and CI keep using the offline fake model, so their results
-don't depend on a model.
+without a GPU. CI uses the offline fake model, so its results don't depend on a model.
+`npm run check` needs it too (the browser journeys expect its replies): switch `.env` back
+to `LLM_PROVIDER=fake` and `EMBEDDING_PROVIDER=hashing` and run `npm start -- --no-build`
+before checking. The check says so if you forget.
 
 **Using Claude instead of the offline fake model:**
 

@@ -229,7 +229,7 @@ def test_malformed_clarification_fields_are_dropped():
     )
     tools, searches = recording_tools()
     with TestClient(app) as client:
-        (body,), _ = converse(client, ["x"], tools)
+        (body,), _ = converse(client, ["a woman doctor please"], tools)
     state = body["state"]
     assert state["pendingChoice"] is None  # one valid option is not a choice
     assert state["removed"] == ["city"]
@@ -245,3 +245,41 @@ def test_emergency_wording_still_wins_over_a_question():
         (body,), (executed,) = converse(client, ["My child has headaches and a seizure"], tools)
     assert body["reply"]["kind"] == "emergency"
     assert executed == [] and searches == [] and llm.calls == []
+
+
+def scripted(**overrides):
+    """The offline planner's form, with fields a small model got wrong."""
+    from app.llm.care_fake import care_assistant_intent
+
+    return {"care_assistant_intent": lambda r: {**care_assistant_intent(r), **overrides}}
+
+
+def test_preferences_the_message_never_mentions_are_not_answered():
+    every = ["gender", "age", "fees", "ratings", "insurance", "other"]
+    app, _, _ = app_with(scripted(unsupported=every))
+    tools, _ = recording_tools()
+    with TestClient(app) as client:
+        (body,), _ = converse(
+            client, ["I need a doctor for my diabetes, online, tomorrow morning"], tools
+        )
+        assert body["state"]["notices"] == []
+        assert "I can't" not in body["reply"]["message"]
+        (body,), _ = converse(client, ["A cheap female doctor for my diabetes"], tools)
+        assert body["state"]["notices"] == ["gender", "fees"]
+
+
+def test_a_question_about_ones_own_results_is_a_records_question():
+    app, _, _ = app_with(scripted(intent="book_appointment"))
+    tools, _ = recording_tools()
+    cases = [
+        ("What did my last HbA1c report say?", "ask_records"),
+        ("How has my sugar changed?", "ask_records"),
+        ("Can you summarise my echo report?", "ask_records"),
+        ("Book a doctor to go over my reports", "book_appointment"),
+        ("My sugar is high", "book_appointment"),
+        ("Which tests should I get?", "book_appointment"),
+    ]
+    with TestClient(app) as client:
+        for message, intent in cases:
+            (body,), _ = converse(client, [message], tools)
+            assert body["state"]["intent"] == intent, message

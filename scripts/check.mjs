@@ -54,6 +54,18 @@ gate('Frontend production build', npm, ['run', 'build', '-w', 'frontend']);
 gate('Dependency audit (production)', npm, ['audit', '--omit=dev', '--audit-level=high']);
 
 if (!opts.quick) {
+  // The browser journeys expect the offline models (deterministic replies, quick turns).
+  const llm = env.LLM_PROVIDER || 'fake';
+  const embeddings = env.EMBEDDING_PROVIDER || 'hashing';
+  if (llm !== 'fake' || embeddings !== 'hashing') {
+    console.error(
+      `
+The stack uses LLM_PROVIDER=${llm} and EMBEDDING_PROVIDER=${embeddings}. The browser` +
+        ' journeys need the offline models: set LLM_PROVIDER=fake and EMBEDDING_PROVIDER=hashing' +
+        ' in .env, run `npm start -- --no-build`, then check again (or use --quick).',
+    );
+    process.exit(1);
+  }
   if (!compose('exec', '-T', 'api', 'true')) {
     console.error('\nThe stack is not running. Start it with `npm start`, or use --quick.');
     process.exit(1);

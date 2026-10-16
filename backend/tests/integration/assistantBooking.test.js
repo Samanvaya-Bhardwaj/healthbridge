@@ -107,6 +107,55 @@ describe('booking through the assistant (ADR-0038)', () => {
     ]);
   });
 
+  it('after Confirm, the next turn starts afresh instead of offering the booked time', async () => {
+    const doctor = await doctorWithWeek('ab-doc7');
+    const patient = await createPatient(h, 'ab-pt7');
+    await linkCare(h, patient, doctor);
+    const slot = await aSlot(patient, doctor);
+    const s = await session(patient);
+    script = proposing(doctor.doctor.id, slot.startsAt);
+    const turn = expectOk(await say(patient, s));
+    const card = turn.reply.cards.find((c) => c.type === 'booking');
+    // The state the graph keeps after a tap on that time.
+    const chosen = async () => {
+      const row = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+      await h
+        .ownerKnex('agent_sessions')
+        .where({ id: s.id })
+        .update({
+          state: {
+            ...row.state,
+            intent: 'book_appointment',
+            selectedDoctorId: doctor.doctor.id,
+            bookingDoctorId: doctor.doctor.id,
+            slotStarts: [slot.startsAt],
+            chosenStart: slot.startsAt,
+          },
+        });
+    };
+    let seen;
+    script = (input) => {
+      seen = input.state;
+      return {
+        state: input.state,
+        action: { type: 'respond' },
+        reply: { kind: 'help', message: 'Hello!', cards: [] },
+        run: { runId: randomUUID() },
+      };
+    };
+    await chosen();
+    // Not confirmed yet: the choice stands.
+    const kept = expectOk(await say(patient, s, turn.session.version));
+    expect(seen).toMatchObject({ bookingDoctorId: doctor.doctor.id, chosenStart: slot.startsAt });
+
+    expectOk(await confirm(patient, s, card.actionId));
+    await chosen();
+    expectOk(await say(patient, s, kept.session.version));
+    expect(seen).toMatchObject({ intent: null, bookingDoctorId: null, chosenStart: null });
+    const stored = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+    expect(stored.state).toMatchObject({ bookingDoctorId: null, chosenStart: null });
+  });
+
   it('drops a booking card for a time that is not offered, and stores nothing', async () => {
     const doctor = await doctorWithWeek('ab-doc2');
     const patient = await createPatient(h, 'ab-pt2');

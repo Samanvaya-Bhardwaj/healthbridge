@@ -688,8 +688,29 @@ export function createAssistantService({
         'assistant_turn_limit',
       );
     }
-    const previous =
+    let previous =
       careAssistantStateSchema.safeParse(row.state).data ?? careAssistantStateSchema.parse({});
+    if (previous.bookingDoctorId && previous.chosenStart) {
+      // ADR-0038: a proposal the person confirmed is finished. The next turn starts afresh
+      // instead of offering that (now booked) time again.
+      const settled = await withActor(knex, principal.userId, (trx) =>
+        trx('assistant_actions')
+          .where({ session_id: row.id })
+          .whereIn('status', ['done', 'awaiting_doctor'])
+          .whereRaw("payload->>'doctorId' = ?", [previous.bookingDoctorId])
+          .whereRaw("(payload->>'startsAt')::timestamptz = ?::timestamptz", [previous.chosenStart])
+          .first('id'),
+      );
+      if (settled) {
+        previous = {
+          ...previous,
+          intent: null,
+          bookingDoctorId: null,
+          chosenStart: null,
+          requestedTime: null,
+        };
+      }
+    }
     const context = {
       ...calendarContext(timeZone, now()),
       specialties: [...ASSISTANT_SPECIALTIES],
