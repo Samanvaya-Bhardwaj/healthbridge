@@ -88,6 +88,8 @@ export const adminApi = {
 };
 
 export const schedulingApi = {
+  /** Step 7+: the appointment as an iCalendar file (patient side). */
+  calendarFile: (id) => apiRequest(`/appointments/${id}/calendar.ics`, { responseType: 'text' }),
   slots: (doctorId, params) => data(apiRequest(`/doctors/${doctorId}/slots${qs(params)}`)),
   book: (body, idempotencyKey) =>
     data(

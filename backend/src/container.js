@@ -237,6 +237,7 @@ export function createContainer({
     accessPolicy,
     audit,
     logger,
+    calendar: { appUrl: config.http.publicAppUrl, from: config.mail.from },
     ...(now ? { now } : {}),
   });
   // M13.3: recommendations for the patient side (search + continuity + availability).

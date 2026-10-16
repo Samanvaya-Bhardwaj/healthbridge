@@ -55,8 +55,8 @@ export function readCookie(name) {
 
 export const hasSessionCookie = () => Boolean(readCookie(CSRF_COOKIE));
 
-async function send(path, { method, body, signal, timeoutMs, extraHeaders }) {
-  const headers = { accept: 'application/json', ...extraHeaders };
+async function send(path, { method, body, signal, timeoutMs, extraHeaders, responseType }) {
+  const headers = { accept: responseType === 'text' ? '*/*' : 'application/json', ...extraHeaders };
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (accessToken && !SESSION_ENDPOINTS.has(path)) headers.authorization = `Bearer ${accessToken}`;
   if (CSRF_ENDPOINTS.has(path)) {
@@ -87,6 +87,7 @@ async function send(path, { method, body, signal, timeoutMs, extraHeaders }) {
   const requestId = response.headers.get('x-request-id') ?? undefined;
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') ?? '';
+  if (response.ok && responseType === 'text') return response.text();
   const payload = contentType.includes('json') ? await response.json().catch(() => null) : null;
 
   if (!response.ok) {
@@ -108,13 +109,13 @@ async function send(path, { method, body, signal, timeoutMs, extraHeaders }) {
  * authenticated endpoint it refreshes the session once and retries.
  *
  * @param {string} path e.g. "/auth/me"
- * @param {{ method?: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number, headers?: Record<string, string> }} [options]
+ * @param {{ method?: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number, headers?: Record<string, string>, responseType?: 'json'|'text' }} [options]
  */
 export async function apiRequest(
   path,
-  { method = 'GET', body, signal, timeoutMs = DEFAULT_TIMEOUT_MS, headers } = {},
+  { method = 'GET', body, signal, timeoutMs = DEFAULT_TIMEOUT_MS, headers, responseType } = {},
 ) {
-  const options = { method, body, signal, timeoutMs, extraHeaders: headers };
+  const options = { method, body, signal, timeoutMs, extraHeaders: headers, responseType };
   const hadToken = Boolean(accessToken);
   try {
     return await send(path, options);

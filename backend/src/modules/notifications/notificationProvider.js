@@ -73,9 +73,24 @@ export function createSmtpNotificationProvider({ from, logger, ...mail }) {
   const sms = createFakeNotificationProvider({ logger });
   return withTemplateOperations({
     name: 'smtp',
-    async sendEmail({ to, subject, text, template }) {
+    async sendEmail({ to, subject, text, template, calendar }) {
       try {
-        await transport.sendMail({ from, to, subject, text });
+        await transport.sendMail({
+          from,
+          to,
+          subject,
+          text,
+          // An invitation mail clients offer to add (and update or remove) in the calendar.
+          ...(calendar
+            ? {
+                icalEvent: {
+                  method: calendar.method,
+                  filename: 'healthbridge-appointment.ics',
+                  content: calendar.content,
+                },
+              }
+            : {}),
+        });
       } catch (err) {
         throw new NotificationProviderError(
           'unavailable',

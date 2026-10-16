@@ -3,6 +3,13 @@ import { withSystem } from '../../core/db/actorContext.js';
 import { newId } from '../../core/db/ids.js';
 import { domainMetrics, timed } from '../../core/metrics/domain.js';
 import { SMS_TEMPLATES, renderInbox, renderTemplate } from './templates.js';
+import { CALENDAR_TEMPLATES, appointmentIcs, calendarFacts } from '../scheduling/calendarEvent.js';
+
+const CALENDAR_NOTE = {
+  REQUEST:
+    '\n\nA calendar invitation is attached: open it to add this appointment to your calendar.',
+  CANCEL: '\n\nThe calendar invitation for this appointment is cancelled.',
+};
 
 /**
  * Which template an outbox event produces, decided from the event payload (the state at
@@ -205,6 +212,11 @@ export function createNotificationService({
 
   async function sendToRecipients(ctx, template, vars, keyPrefix, sourceEventId) {
     const results = [];
+    // Step 7+: booked, confirmed, moved and cancelled appointments update the calendar.
+    const method = CALENDAR_TEMPLATES[template];
+    const facts = method
+      ? await withSystem(knex, 'notifications', (trx) => calendarFacts(trx, ctx.appointment.id))
+      : null;
     for (const recipient of ctx.recipients) {
       const renderVars = {
         ...ctx.base,
@@ -232,8 +244,24 @@ export function createNotificationService({
             provider.sendEmail({
               to: recipient.email,
               subject: content.subject,
-              text: content.text,
+              text: facts ? content.text + CALENDAR_NOTE[method] : content.text,
               template,
+              ...(facts
+                ? {
+                    calendar: {
+                      method,
+                      content: appointmentIcs(facts, {
+                        method,
+                        appUrl: config.http.publicAppUrl,
+                        from: config.mail.from,
+                        attendee: { email: recipient.email, name: recipient.display_name },
+                        forDependent: recipient.relationship !== 'self',
+                        patientName: recipient.patient_name,
+                        stamp: now(),
+                      }),
+                    },
+                  }
+                : {}),
             }),
         }),
       );

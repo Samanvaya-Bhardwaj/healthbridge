@@ -346,6 +346,18 @@ Each layer is tested on its own:
   consultations (a configurable list, not a compliance claim).
 - **Notices:** generic wording only, with no medicines, notes or diagnoses.
 
+## Calendar invitations (step 7+)
+
+- Booking, payment-confirmed and reschedule emails carry an iCalendar invitation
+  (`METHOD:REQUEST`); cancellations carry `CANCEL`. One entry per booking chain, updated by
+  `SEQUENCE`.
+- An entry holds only what the person already sees in the app: the doctor's name, the time,
+  the clinic or "online", the booking reference and a link. Never a reason, note or
+  diagnosis. For a dependent, the guardian's entry names the dependent.
+- "Google Calendar" and "Outlook" open those sites with the details filled in. That happens
+  only when the person clicks; the download (`/appointments/:id/calendar.ics`) is for the
+  patient side only.
+
 ## Follow-ups and the inbox (M10, ADR-0026)
 
 - **Escalation:**

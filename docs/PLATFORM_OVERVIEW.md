@@ -263,6 +263,9 @@ A revoked consent blocks the **very next** request.
   - records: document available, document rejected, prescription available;
   - consultations: in-person visit requested, emergency guidance;
   - follow-ups: due, needs attention, urgent.
+- **Calendar:** booking, payment and reschedule emails carry a calendar invitation that
+  mail clients add (and update when the time moves); a cancellation removes it. The
+  appointment page also offers Google Calendar, Outlook and an `.ics` download.
 - **Wording is generic:** no symptoms, medicines, notes or diagnoses in any notification.
 - **Reliability:** notifications are produced by background workers from a transactional
   outbox, so they are delayed but never lost if the queue is down.

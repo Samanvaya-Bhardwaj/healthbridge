@@ -175,6 +175,23 @@ export function schedulingRoutes(container) {
   );
 
   // Gate 1 is clinic-aware for clinic schedulers, so it is evaluated in the service.
+  // Step 7+: add to calendar (the same entry the confirmation email carries).
+  router.get(
+    '/appointments/:id/calendar.ics',
+    authenticate(),
+    noStore,
+    validate({ params: idParam('id') }),
+    async (req, res) => {
+      const { reference, ics } = await appointmentService.calendarFile(
+        req.principal,
+        req.valid.params.id,
+        req,
+      );
+      res.set('Content-Type', 'text/calendar; charset=utf-8');
+      res.set('Content-Disposition', `attachment; filename="healthbridge-${reference}.ics"`);
+      res.send(ics);
+    },
+  );
   router.get(
     '/appointments/:id',
     authenticate(),

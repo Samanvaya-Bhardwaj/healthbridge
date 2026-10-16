@@ -9,6 +9,7 @@ import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { MODE_LABELS, formatDateTime, formatFee, formatTime } from './format.js';
 import { openRazorpayCheckout } from './razorpayCheckout.js';
+import { CalendarLinks } from './CalendarLinks.jsx';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { BackLink } from '../../components/ui/BackLink.jsx';
 import { CreditCard } from 'lucide-react';
@@ -108,7 +109,12 @@ export function PaymentPage() {
           {a.paymentStatus === 'paid' ? 'Payment received — ' : ''}your appointment is confirmed. A
           confirmation is in your notifications.
         </Alert>
-        <Card>{summary}</Card>
+        <Card>
+          {summary}
+          <div className="mt-4">
+            <CalendarLinks appointment={a} compact />
+          </div>
+        </Card>
         <Card>
           <h2 className="text-base font-semibold text-text">What happens next</h2>
           <p className="mt-1 text-sm text-text-muted">

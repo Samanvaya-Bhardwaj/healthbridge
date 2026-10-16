@@ -41,6 +41,7 @@ import { EmergencyGuidance, NoteView, VideoPanel } from './ConsultationParts.jsx
 import { PrescriptionList } from './Prescriptions.jsx';
 import { LoadError } from '../../components/ui/LoadError.jsx';
 import { useSafeMutation } from '../../lib/useSafeMutation.js';
+import { CalendarLinks } from '../appointments/CalendarLinks.jsx';
 
 const UPCOMING = ['pending_payment', 'confirmed', 'checked_in'];
 const SHARE_SCOPES = ['patient_profile', 'medical_documents'];
@@ -612,6 +613,18 @@ export function PatientAppointment({ view, status, appointmentId, notice }) {
       {notice && <Alert tone="success">{notice}</Alert>}
       {status?.emergencyGuidance && <EmergencyGuidance guidance={status.emergencyGuidance} />}
       <NowPanel a={a} view={view} status={status} appointmentId={appointmentId} />
+      {['confirmed', 'checked_in'].includes(a.status) && (
+        <Card>
+          <SectionHeader
+            icon={CalendarPlus}
+            title="Add to your calendar"
+            description="The confirmation email has an invitation too; it updates if the time changes."
+          />
+          <div className="mt-3">
+            <CalendarLinks appointment={{ ...a, id: appointmentId }} compact />
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Details a={a} />

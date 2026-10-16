@@ -8,10 +8,11 @@ import { DateTime } from 'luxon';
 import { isUuid, newId } from '../../core/db/ids.js';
 import { withActor, withSystem } from '../../core/db/actorContext.js';
 import { appendOutboxEvent } from '../../core/events/outbox.js';
-import { ConflictError, NotFoundError } from '../../core/http/errors.js';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../core/http/errors.js';
 import { appointmentTransition, initialStatus } from './domain/appointmentStateMachine.js';
 import { findSlot } from './domain/slots.js';
 import { toAppointmentView } from './repository.js';
+import { appointmentIcs, calendarFacts } from './calendarEvent.js';
 
 const DATA = 'data_access';
 const PG_EXCLUSION_VIOLATION = '23P01';
@@ -39,6 +40,8 @@ export function createAppointmentService({
   accessPolicy,
   audit,
   logger,
+  // Links and the organiser of calendar entries (Step 7+).
+  calendar = { appUrl: 'http://localhost:8080', from: 'no-reply@healthbridge.local' },
   now = () => new Date(),
 }) {
   const patientResource = (patientId) => ({ type: 'patient', id: patientId, patientId });
@@ -265,6 +268,40 @@ export function createAppointmentService({
       trx,
     });
     return { row, party: PARTY[decision.relationship] };
+  }
+
+  /**
+   * The patient side's calendar file for one appointment (a download: METHOD:PUBLISH, or
+   * CANCEL once cancelled). Doctors keep their schedule in the app.
+   */
+  async function calendarFile(principal, id, req) {
+    return withActor(knex, principal.userId, async (trx) => {
+      const { party } = await authorizeAppointment(
+        trx,
+        principal,
+        id,
+        PERMISSIONS.APPOINTMENTS_READ,
+        req,
+      );
+      if (party !== 'patient') {
+        throw new ForbiddenError(
+          'Only the patient side can add this appointment to a calendar.',
+          'wrong_party',
+        );
+      }
+      const facts = await calendarFacts(trx, id);
+      const cancelled = ['cancelled', 'expired', 'no_show'].includes(facts.status);
+      return {
+        reference: facts.id.slice(-8).toUpperCase(),
+        ics: appointmentIcs(facts, {
+          method: cancelled ? 'CANCEL' : 'PUBLISH',
+          appUrl: calendar.appUrl,
+          from: calendar.from,
+          forDependent: facts.patient_user_id !== principal.userId,
+          stamp: now(),
+        }),
+      };
+    });
   }
 
   async function get(principal, id, req) {
@@ -532,5 +569,6 @@ export function createAppointmentService({
     listForDoctor,
     listForClinic,
     withdrawIneligible,
+    calendarFile,
   };
 }

@@ -194,6 +194,7 @@ Authorization: Bearer <doctor token>
 | POST | `/appointments` | `appointments:create` | `{ patientId, doctorId, startsAt, mode, clinicId?, reason }`; optional `Idempotency-Key` header. Errors: `care_relationship_required`, `slot_not_offered`, `slot_unavailable`, `patient_double_booked`, `idempotency_conflict`, `doctor_unavailable`, `practice_site_closed` (ADR-0030) |
 | GET | `/appointments?patientId&scope=upcoming|past` | `appointments:read` | Patient side |
 | GET | `/appointments/:id` | `appointments:read` | Reason included for the patient side and the doctor only |
+| GET | `/appointments/:id/calendar.ics` | Bearer, patient side | Step 7+: the appointment as an iCalendar file (`METHOD:PUBLISH`, or `CANCEL` once cancelled). UID `appointment-<first booking id>@healthbridge`, so a reschedule updates the same entry. `403` for the doctor, `404` for others. |
 | POST | `/appointments/:id/cancel` | `appointments:manage` | `{ reasonCode }` |
 | POST | `/appointments/:id/reschedule` | `appointments:manage` | `{ startsAt }`; patient side; atomic |
 | POST | `/appointments/:id/{check-in,complete,no-show}` | `appointments:manage` | Party and time rules (ADR-0019) |
