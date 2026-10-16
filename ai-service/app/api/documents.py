@@ -164,6 +164,7 @@ async def analyze(body: AnalyzeRequest, scope: ScopeDep, request: Request) -> di
                 extraction_id=extraction_id,
                 chunks=chunks,
                 vectors=vectors,
+                embedding_model=embedder.model_id,
             )
 
     log_event(

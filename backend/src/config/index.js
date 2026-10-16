@@ -80,6 +80,8 @@ const envSchema = z
     MAIL_FROM: z.string().min(3).default('HealthBridge <no-reply@healthbridge.local>'),
 
     AI_SERVICE_URL: z.url(),
+    // Multiplies every AI-service timeout: a local model on a laptop CPU (Ollama) is slow.
+    AI_SERVICE_TIMEOUT_SCALE: z.coerce.number().min(1).max(50).default(1),
     INTERNAL_SERVICE_SECRET: z.string().min(32, 'must be at least 32 characters'),
 
     // ── Consultations (ADR-0025) ──
@@ -462,7 +464,11 @@ export function loadConfig(env = process.env) {
       holdSweepIntervalMs: e.HOLD_SWEEP_INTERVAL_MS,
       reminderSweepIntervalMs: e.REMINDER_SWEEP_INTERVAL_MS,
     },
-    aiService: { url: e.AI_SERVICE_URL, internalSecret: e.INTERNAL_SERVICE_SECRET },
+    aiService: {
+      url: e.AI_SERVICE_URL,
+      internalSecret: e.INTERNAL_SERVICE_SECRET,
+      timeoutScale: e.AI_SERVICE_TIMEOUT_SCALE,
+    },
     video: {
       provider: e.VIDEO_PROVIDER,
       tokenTtlSeconds: e.VIDEO_TOKEN_TTL_SECONDS,

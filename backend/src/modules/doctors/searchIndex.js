@@ -38,6 +38,10 @@ export function createDoctorSearchIndex({ knex, aiClient, logger }) {
 
   async function refresh({ limit = 200 } = {}) {
     if (!aiClient?.embedPublic) return { embedded: 0, skipped: 'no_ai_client' };
+    // A profile embedded by another model is stale too (e.g. after switching to Ollama).
+    const current = aiClient.embeddingModel
+      ? ((await aiClient.embeddingModel().catch(() => null))?.model ?? null)
+      : null;
     const rows = await knex('doctors as d')
       .leftJoin('doctor_profile_embeddings as e', 'e.doctor_id', 'd.id')
       .whereRaw('authz.doctor_is_bookable(d.id)')
@@ -50,13 +54,19 @@ export function createDoctorSearchIndex({ knex, aiClient, logger }) {
         'd.areas_of_practice',
         'd.bio',
         'e.content_hash',
+        'e.model',
       )
       .orderBy('d.id')
       .limit(5000);
     const stale = rows
-      .map((row) => ({ id: row.id, text: profileText(row), stored: row.content_hash }))
+      .map((row) => ({
+        id: row.id,
+        text: profileText(row),
+        stored: row.content_hash,
+        model: row.model,
+      }))
       .map((r) => ({ ...r, hash: sha256(r.text) }))
-      .filter((r) => r.hash !== r.stored)
+      .filter((r) => r.hash !== r.stored || (current && r.model !== current))
       .slice(0, limit);
     let embedded = 0;
     for (let i = 0; i < stale.length; i += BATCH) {
@@ -85,16 +95,16 @@ export function createDoctorSearchIndex({ knex, aiClient, logger }) {
     return { embedded, pending: Math.max(0, stale.length - embedded) };
   }
 
-  /** @returns {Promise<string|null>} a pgvector literal, or null when unavailable */
+  /** @returns {Promise<{ literal: string, model: string }|null>} null when unavailable */
   async function embedQuery(text) {
     if (!text || !aiClient?.embedPublic) return null;
     if (queryCache.has(text)) return queryCache.get(text);
     try {
-      const { vectors } = await aiClient.embedPublic(
+      const { model, vectors } = await aiClient.embedPublic(
         { purpose: 'doctor_search_query', kind: 'query', texts: [text] },
         { timeout: 1_500 },
       );
-      const vector = toVector(vectors[0]);
+      const vector = { literal: toVector(vectors[0]), model };
       if (queryCache.size >= QUERY_CACHE_LIMIT) queryCache.delete(queryCache.keys().next().value);
       queryCache.set(text, vector);
       return vector;

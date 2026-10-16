@@ -187,12 +187,13 @@ async def insert_chunks(
     extraction_id: str,
     chunks: list[str],
     vectors: list[list[float]],
+    embedding_model: str,
 ) -> None:
     for index, (content, vector) in enumerate(zip(chunks, vectors, strict=True)):
         await conn.execute(
             """INSERT INTO ai.document_chunks (id, patient_id, document_id, document_type,
-                 extraction_id, chunk_index, content, embedding)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s::extensions.vector)""",
+                 extraction_id, chunk_index, content, embedding, embedding_model)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s::extensions.vector,%s)""",
             (
                 new_id(),
                 patient_id,
@@ -202,5 +203,6 @@ async def insert_chunks(
                 index,
                 content,
                 to_pgvector(vector),
+                embedding_model,
             ),
         )

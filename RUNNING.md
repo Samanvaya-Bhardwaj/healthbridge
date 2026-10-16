@@ -117,6 +117,31 @@ tokens and IDs. It reads the port and demo password from your `.env`.
 
 **Password reset:** **Sign in** → **Forgot your password?** The email arrives in Mailpit.
 
+**Local AI with Ollama** (prompts and records stay on this machine):
+
+1. Install [Ollama](https://ollama.com) and pull a chat model and an embedding model:
+   `ollama pull llama3.2` and `ollama pull nomic-embed-text`.
+2. In `.env`, set:
+
+   ```
+   LLM_PROVIDER=ollama
+   LLM_MODEL_DEFAULT=llama3.2:latest
+   LLM_MODEL_FAST=llama3.2:latest
+   LLM_TIMEOUT_SECONDS=600
+   EMBEDDING_PROVIDER=ollama
+   OLLAMA_EMBED_MODEL=nomic-embed-text
+   AI_SERVICE_TIMEOUT_SCALE=15
+   ```
+
+3. Run `npm start -- --no-build`. The AI service reaches Ollama at
+   `host.docker.internal:11434`.
+
+On a laptop CPU a 3B model answers in about 10–40 seconds, and the first message after a
+start is the slowest (the model loads). Tapping a doctor, a day or a time needs no model at
+all. Larger models (`llama3.1`) understand better but take a minute or more per message
+without a GPU. `npm run check` and CI keep using the offline fake model, so their results
+don't depend on a model.
+
 **Using Claude instead of the offline fake model:**
 
 1. In `.env`, set `LLM_PROVIDER=claude`, `ANTHROPIC_API_KEY=…` and a daily spend ceiling, `LLM_DAILY_BUDGET_USD=5` (required with an external model; see ADR-0036).

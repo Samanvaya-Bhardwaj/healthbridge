@@ -23,6 +23,17 @@ def build_llm_provider(settings: Settings, guard: SpendGuard | None = None) -> L
             max_retries=settings.llm_max_retries,
             refusal_fallback=settings.llm_refusal_fallback,
         )
+    elif settings.llm_provider == "ollama":
+        from app.llm.providers.ollama import OllamaProvider
+
+        inner = OllamaProvider(
+            base_url=settings.ollama_base_url,
+            model_default=settings.llm_model_default,
+            model_fast=settings.llm_model_fast,
+            timeout_seconds=settings.llm_timeout_seconds,
+            keep_alive=settings.ollama_keep_alive,
+            context_tokens=settings.ollama_context_tokens,
+        )
     else:
         # Deterministic, rule-based stand-ins for the document/RAG workflows.
         inner = FakeLLMProvider(dict(DEFAULT_HANDLERS))

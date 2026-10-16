@@ -62,6 +62,14 @@ export function policyFindings(services) {
           )
         : warn('LLM_PROVIDER', 'fake model: AI features use the offline stand-in'),
     );
+  } else if (provider === 'ollama') {
+    // Self-hosted: no external processing, no per-token cost.
+    out.push(
+      warn(
+        'LLM_PROVIDER',
+        'self-hosted Ollama model: run it on infrastructure you control (OLLAMA_BASE_URL)',
+      ),
+    );
   } else {
     if (env === 'production' && !approved) {
       out.push(
@@ -79,7 +87,11 @@ export function policyFindings(services) {
       out.push(pass('LLM_DAILY_BUDGET_USD', `ceiling set (${budget} USD a day)`));
     }
   }
-  if ((ai.EMBEDDING_PROVIDER ?? 'hashing') !== 'hashing' && env === 'production' && !approved) {
+  if (
+    !['hashing', 'ollama'].includes(ai.EMBEDDING_PROVIDER ?? 'hashing') &&
+    env === 'production' &&
+    !approved
+  ) {
     out.push(fail('EMBEDDING_PROVIDER', 'external embeddings in production need approval'));
   }
 

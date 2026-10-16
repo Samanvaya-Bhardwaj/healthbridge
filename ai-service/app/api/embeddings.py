@@ -28,9 +28,11 @@ class EmbedRequest(BaseModel):
     texts: Annotated[list[Text], Field(min_length=1, max_length=64)]
 
 
-def model_id(embedder) -> str:
-    model = getattr(embedder, "_model", None)
-    return f"{embedder.name}:{model}" if model else embedder.name
+@router.get("/model")
+async def current_model(request: Request) -> dict:
+    """The model new vectors come from (the backend re-embeds when it changes)."""
+    embedder = request.app.state.embedder
+    return {"model": embedder.model_id, "dimensions": embedder.dimensions}
 
 
 @router.post("")
@@ -42,4 +44,4 @@ async def embed(body: EmbedRequest, request: Request) -> dict:
         raise ProblemError(
             503, "embedding_unavailable", "Embeddings unavailable", "Try again later."
         ) from exc
-    return {"model": model_id(embedder), "dimensions": embedder.dimensions, "vectors": vectors}
+    return {"model": embedder.model_id, "dimensions": embedder.dimensions, "vectors": vectors}

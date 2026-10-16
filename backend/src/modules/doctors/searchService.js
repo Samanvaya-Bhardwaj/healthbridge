@@ -44,6 +44,10 @@ export function createDoctorSearchService({ knex, index = null }) {
       ? phrases.map((phrase) => `plainto_tsquery('english', ${p(phrase)})`).join(' || ')
       : "''::tsquery";
     const selectInTeam = `d.id = ANY (${p(careTeamDoctorIds)}::uuid[])`;
+    // Profile vectors of the query's model only (another model's space is not comparable).
+    const joinVector = vector
+      ? `LEFT JOIN doctor_profile_embeddings e ON e.doctor_id = d.id AND e.model = ${p(vector.model)}`
+      : '';
 
     const where = ['authz.doctor_is_bookable(d.id)'];
     // Internal only (not in the public criteria): search within a given set of doctors.
@@ -88,7 +92,7 @@ export function createDoctorSearchService({ knex, index = null }) {
                                           INTERSECT SELECT unnest(${p(areas)}::text[])))`;
     // Vector similarity of the public profile to the vocabulary query (when available).
     const orderVector = vector
-      ? `+ 1.5 * coalesce(1 - (e.embedding OPERATOR(extensions.<=>) ${p(vector)}::extensions.vector), 0)`
+      ? `+ 1.5 * coalesce(1 - (e.embedding OPERATOR(extensions.<=>) ${p(vector.literal)}::extensions.vector), 0)`
       : '';
     const orderInTeam = `d.id = ANY (${p(careTeamDoctorIds)}::uuid[])`;
     const limit = p(c.limit);
@@ -115,7 +119,7 @@ export function createDoctorSearchService({ knex, index = null }) {
                           FROM offered o WHERE o.doctor_id = d.id), '{}') AS modes,
               ${selectInTeam} AS in_care_team
          FROM doctors d CROSS JOIN q
-         ${vector ? 'LEFT JOIN doctor_profile_embeddings e ON e.doctor_id = d.id' : ''}
+         ${joinVector}
         WHERE ${where.join('\n          AND ')}
         ORDER BY ${orderName}
                  (2.0 * ${orderAreas}

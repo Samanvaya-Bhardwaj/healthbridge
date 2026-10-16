@@ -66,10 +66,15 @@ async def hybrid_search(
         "vec": vector,
         "q": " ".join(terms(query)) or query,
         "limit": 20,
+        "model": embedder.model_id,
     }
     vec_rows = await (
         await conn.execute(
-            _LATEST.format(score="1 - (c.embedding <=> %(vec)s::extensions.vector)", extra=""),
+            # Vectors are comparable only within one model; lexical ranking covers the rest.
+            _LATEST.format(
+                score="1 - (c.embedding <=> %(vec)s::extensions.vector)",
+                extra="AND c.embedding_model = %(model)s",
+            ),
             params,
         )
     ).fetchall()

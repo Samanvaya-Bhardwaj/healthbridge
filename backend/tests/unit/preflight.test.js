@@ -72,6 +72,24 @@ describe('deployment preflight policy (step 12)', () => {
     expect(text).not.toContain('sk-synthetic');
   });
 
+  it('accepts a self-hosted Ollama model without external approval or a budget', () => {
+    const findings = policyFindings(
+      base({
+        ai: {
+          LLM_PROVIDER: 'ollama',
+          LLM_EXTERNAL_PROCESSING_APPROVED: 'false',
+          LLM_DAILY_BUDGET_USD: '',
+          ANTHROPIC_API_KEY: '',
+          EMBEDDING_PROVIDER: 'ollama',
+        },
+      }),
+    );
+    expect(failed(findings)).toEqual([]);
+    expect(findings).toContainEqual(
+      expect.objectContaining({ level: 'WARN', check: 'LLM_PROVIDER' }),
+    );
+  });
+
   it('warns when backups stay on the host', () => {
     const findings = policyFindings(base({ backup: { BACKUP_REMOTE: '' } }));
     expect(findings).toContainEqual(

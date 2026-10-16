@@ -18,7 +18,12 @@ from app.core.db import Database, DatabaseLike
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, log_event, request_id_ctx
 from app.core.metrics import HTTP_DURATION
-from app.embeddings import EmbeddingProvider, HashingEmbeddingProvider, VoyageEmbeddingProvider
+from app.embeddings import (
+    EmbeddingProvider,
+    HashingEmbeddingProvider,
+    OllamaEmbeddingProvider,
+    VoyageEmbeddingProvider,
+)
 from app.llm.base import LLMProvider
 from app.llm.budget import SpendGuard
 from app.llm.factory import build_llm_provider
@@ -26,6 +31,22 @@ from app.llm.factory import build_llm_provider
 logger = logging.getLogger("healthbridge.ai")
 
 _SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{16,64}$")
+
+
+def _build_embedder(settings: Settings) -> EmbeddingProvider:
+    if settings.embedding_provider == "voyage" and settings.voyage_api_key:
+        return VoyageEmbeddingProvider(
+            api_key=settings.voyage_api_key.get_secret_value(),
+            model=settings.voyage_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+    if settings.embedding_provider == "ollama":
+        return OllamaEmbeddingProvider(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_embed_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+    return HashingEmbeddingProvider()
 
 
 def create_app(
@@ -49,15 +70,7 @@ def create_app(
             else None
         )
         llm = llm_provider or build_llm_provider(settings, guard)
-        embedder = embedding_provider or (
-            VoyageEmbeddingProvider(
-                api_key=settings.voyage_api_key.get_secret_value(),
-                model=settings.voyage_model,
-                timeout_seconds=settings.llm_timeout_seconds,
-            )
-            if settings.embedding_provider == "voyage" and settings.voyage_api_key
-            else HashingEmbeddingProvider()
-        )
+        embedder = embedding_provider or _build_embedder(settings)
         app.state.db = db
         app.state.llm = llm
         app.state.embedder = embedder
@@ -68,6 +81,7 @@ def create_app(
             appEnv=settings.app_env,
             llmProvider=llm.name,
             llmDailyBudgetUsd=settings.llm_daily_budget_usd,
+            embeddingModel=embedder.model_id,
         )
         try:
             yield

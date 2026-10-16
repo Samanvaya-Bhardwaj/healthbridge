@@ -39,6 +39,7 @@ x-backend-env: &backend-env
   PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
   TRUST_PROXY: 1
   AI_SERVICE_URL: http://ai-service:8000
+  AI_SERVICE_TIMEOUT_SCALE: ${AI_SERVICE_TIMEOUT_SCALE:-1}
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?}
   AUTH_JWT_PRIVATE_KEY: ${AUTH_JWT_PRIVATE_KEY:?run node scripts/generate-env.mjs --update}
   AUTH_JWT_PREVIOUS_PUBLIC_KEYS: ${AUTH_JWT_PREVIOUS_PUBLIC_KEYS:-}
@@ -273,11 +274,16 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hashing}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3.5}
+      # Local models (LLM_PROVIDER=ollama, EMBEDDING_PROVIDER=ollama): Ollama on the host.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
     # Intentionally no published ports: internal only.
     networks: [private]
+    # Reaches Ollama on the host (built into Docker Desktop; needed on Linux).
+    extra_hosts: ['host.docker.internal:host-gateway']
     restart: unless-stopped
 
   # Optional real video (ADR-0028): `npm start -- --video` (or `--profile video` with

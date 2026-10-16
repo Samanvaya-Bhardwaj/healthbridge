@@ -656,3 +656,34 @@ def test_the_backend_order_is_kept_as_given():
     assert body["state"]["candidateDoctorIds"] == [DERM_NEW, DERM_IN_TEAM]
     assert [c["doctorId"] for c in body["reply"]["cards"]] == [DERM_NEW, DERM_IN_TEAM]
     assert "in the order I'd suggest for you" in body["reply"]["message"]
+
+
+def test_explicit_words_correct_a_small_models_form() -> None:
+    """Local models (Ollama) misread days and modes; unambiguous words are read by code."""
+    misread = {
+        "intent": "find_doctor",
+        "specialty": "Dermatology",
+        "specialtyFromConcern": False,
+        "dayKind": "today",
+        "weekday": None,
+        "date": None,
+        "timeWindow": None,
+        "consultationMode": None,
+    }
+    app, _, _ = app_with({"care_assistant_intent": misread})
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "a skin doctor online on Monday evening please", TOOLS)
+    crit = body["state"]["criteria"]
+    assert crit["date"] == context()["weekdays"]["monday"]
+    assert crit["consultationMode"] == "online"
+    assert crit["timeWindow"] == "evening"
+
+    # "online or in person" is not a preference; "not online" is not "online".
+    app, _, _ = app_with({"care_assistant_intent": {**misread, "consultationMode": "online"}})
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "a skin doctor, online or in person is fine", TOOLS)
+    assert body["state"]["criteria"]["consultationMode"] == "online"  # the model's own answer
+    app, _, _ = app_with({"care_assistant_intent": misread})
+    with TestClient(app) as client:
+        body, _ = run_turn(client, "a skin doctor, not online please", TOOLS)
+    assert body["state"]["criteria"]["consultationMode"] is None

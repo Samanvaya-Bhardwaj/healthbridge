@@ -9,10 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.llm.pricing import PRICES
 
 AppEnv = Literal["development", "test", "staging", "production"]
-LLMProviderName = Literal["claude", "fake"]
-EmbeddingProviderName = Literal["hashing", "voyage"]
+LLMProviderName = Literal["claude", "ollama", "fake"]
+EmbeddingProviderName = Literal["hashing", "voyage", "ollama"]
 
-# Providers that send data outside HealthBridge infrastructure.
+# Providers that send data outside HealthBridge infrastructure. Ollama is self-hosted: it
+# runs where the operator puts it (a laptop in development, a private server otherwise).
 EXTERNAL_LLM_PROVIDERS: frozenset[str] = frozenset({"claude"})
 EXTERNAL_EMBEDDING_PROVIDERS: frozenset[str] = frozenset({"voyage"})
 MIN_SECRET_LENGTH = 32
@@ -54,6 +55,12 @@ class Settings(BaseSettings):
     embedding_provider: EmbeddingProviderName = "hashing"
     voyage_api_key: SecretStr | None = None
     voyage_model: str = "voyage-3.5"
+
+    # Ollama (self-hosted): chat models come from LLM_MODEL_DEFAULT / LLM_MODEL_FAST.
+    ollama_base_url: str = "http://host.docker.internal:11434"
+    ollama_embed_model: str = "nomic-embed-text"
+    ollama_keep_alive: str = "30m"
+    ollama_context_tokens: int = Field(default=8192, ge=2048, le=131072)
 
     @property
     def is_production(self) -> bool:

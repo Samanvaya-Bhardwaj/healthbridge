@@ -235,6 +235,54 @@ def _resolve_day(raw: dict[str, Any], ctx: StepContext) -> str | None:
     return None
 
 
+# Explicit words in the message, read by code. Small local models misread these often, and
+# they are unambiguous, so code corrects the form for them (the model keeps the rest).
+_WEEKDAY_WORD = re.compile(r"\b(" + "|".join(WEEKDAYS) + r")\b", re.I)
+_NEGATED = re.compile(r"\b(not|no|don'?t|without)\s+(an?\s+)?$", re.I)
+_CUES: list[tuple[str, str, re.Pattern[str]]] = [
+    (
+        "consultationMode",
+        "online",
+        re.compile(r"\b(online|video( call| consult\w*)?|tele\w*)\b", re.I),
+    ),
+    (
+        "consultationMode",
+        "in_clinic",
+        re.compile(
+            r"\b(in[- ]clinic|in[- ]person|at the clinic|visit the clinic|clinic visit)\b", re.I
+        ),
+    ),
+    ("timeWindow", "morning", re.compile(r"\bmorning\b", re.I)),
+    ("timeWindow", "afternoon", re.compile(r"\bafternoon\b", re.I)),
+    ("timeWindow", "evening", re.compile(r"\b(evening|night)\b", re.I)),
+]
+
+
+def _not_negated(text: str, match: re.Match[str]) -> bool:
+    return not _NEGATED.search(text[max(0, match.start() - 16) : match.start()])
+
+
+def _explicit_cues(message: str, raw: dict[str, Any]) -> dict[str, Any]:
+    """The form, corrected for unambiguous words: weekday, today/tomorrow, mode, window."""
+    fixed = dict(raw)
+    text = message or ""
+    if (m := _WEEKDAY_WORD.search(text)) and _not_negated(text, m):
+        fixed.update(dayKind="weekday", weekday=m.group(1).lower(), date=None)
+    elif re.search(r"\btomorrow\b", text, re.I):
+        fixed.update(dayKind="tomorrow", weekday=None, date=None)
+    elif re.search(r"\btoday\b", text, re.I):
+        fixed.update(dayKind="today", weekday=None, date=None)
+    found: dict[str, list[str]] = {}
+    for field, value, pattern in _CUES:
+        m = pattern.search(text)
+        if m and _not_negated(text, m):
+            found.setdefault(field, []).append(value)
+    for field, values in found.items():
+        if len(set(values)) == 1:  # "online or in person" is not a preference
+            fixed[field] = values[0]
+    return fixed
+
+
 def _uuid_list(items: Any, limit: int) -> list[str]:
     out: list[str] = []
     for item in items if isinstance(items, list) else []:
@@ -362,6 +410,7 @@ def build_care_assistant(llm: LLMProvider):
                     cards=[Card(type="link", target="my_doctors")],
                 ),
             }
+        raw = _explicit_cues(state.get("message") or "", raw)
         allowed = {s.lower(): s for s in ctx.specialties}
         specialty = allowed.get(str(raw.get("specialty") or "").lower())
         mode = raw.get("consultationMode") if raw.get("consultationMode") in MODES else None

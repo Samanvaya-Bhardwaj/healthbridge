@@ -13,9 +13,17 @@ const SCOPE_TOKEN_TTL_SECONDS = 120;
  * one patient — and documents — the backend authorised for the purpose (ADR-0022); the AI
  * service runs its database work confined to that patient by RLS.
  *
- * @param {{ url: string, internalSecret: string, timeoutMs?: number, fetchImpl?: typeof fetch }} options
+ * @param {{ url: string, internalSecret: string, timeoutMs?: number, timeoutScale?: number,
+ *   fetchImpl?: typeof fetch }} options
+ *   `timeoutScale` multiplies every timeout (a local model on a laptop CPU is slow).
  */
-export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchImpl = fetch }) {
+export function createAiClient({
+  url,
+  internalSecret,
+  timeoutMs = 5_000,
+  timeoutScale = 1,
+  fetchImpl = fetch,
+}) {
   const key = new TextEncoder().encode(internalSecret);
   const baseUrl = url.replace(/\/+$/, '');
 
@@ -54,7 +62,7 @@ export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchIm
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeout),
+      signal: AbortSignal.timeout(timeout * timeoutScale),
     });
     if (!response.ok) {
       const error = new Error(`AI service responded ${response.status} for ${method} ${path}`);
@@ -115,6 +123,8 @@ export function createAiClient({ url, internalSecret, timeoutMs = 5_000, fetchIm
      * Embeddings of PUBLIC text for doctor search (M13.2, ADR-0031): profile text, or a
      * query built from the controlled vocabulary. No patient scope: never patient data.
      */
+    /** The model new embeddings come from (stored vectors of another model are refreshed). */
+    embeddingModel: ({ requestId } = {}) => request('/v1/embeddings/model', { requestId }),
     embedPublic: ({ purpose, kind, texts }, { requestId, timeout = 5_000 } = {}) =>
       request('/v1/embeddings', {
         method: 'POST',
