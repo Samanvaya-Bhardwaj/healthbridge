@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { z } from 'zod';
 import {
   ASSISTANT_ANY_DOCTOR_CHOICE,
@@ -10,7 +11,7 @@ import {
 } from '@healthbridge/shared';
 import { isUuid, newId } from '../../core/db/ids.js';
 import { withActor, withSystem } from '../../core/db/actorContext.js';
-import { ConflictError, ForbiddenError, NotFoundError } from '../../core/http/errors.js';
+import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../core/http/errors.js';
 import { domainMetrics } from '../../core/metrics/domain.js';
 import { SELF_RELATIONSHIPS } from '../../core/authz/accessPolicy.js';
 import { calendarContext } from './calendar.js';
@@ -40,10 +41,13 @@ const EMERGENCY_REPLY = Object.freeze({
 const APPOINTMENT_INTENTS = new Set(['view_appointments', 'reschedule', 'cancel']);
 const MAX_RECORD_CARDS = 3;
 const MAX_PRESCRIPTION_CARDS = 2;
+/** ADR-0038: a proposed booking waits this long for the person's Confirm. */
+const PROPOSAL_TTL_MS = 15 * 60_000;
+const BOOKING_REASON_NOTE = 'Booked with the HealthBridge Assistant.';
 const RECENT_PRESCRIPTION_DAYS = 90;
 
 const cardSchema = z.object({
-  type: z.enum(['doctor', 'slot', 'link', 'choice']),
+  type: z.enum(['doctor', 'slot', 'link', 'choice', 'booking']),
   doctorId: z.uuid().optional(),
   startsAt: z.iso.datetime({ offset: true }).optional(),
   target: z.enum(['my_doctors', 'appointments', 'records', 'prescriptions']).optional(),
@@ -63,7 +67,7 @@ const stepSchema = z.object({
   ]),
   reply: z
     .object({
-      kind: z.enum(['answer', 'clarify', 'emergency', 'fallback', 'not_yet', 'help']),
+      kind: z.enum(['answer', 'clarify', 'confirm', 'emergency', 'fallback', 'not_yet', 'help']),
       message: z.string().min(1).max(700),
       cards: z.array(cardSchema).max(12).default([]),
     })
@@ -191,6 +195,124 @@ export function createAssistantService({
     });
   }
 
+  const actionView = (action) => ({
+    id: action.id,
+    status: action.status,
+    ...(action.result ?? {}),
+  });
+
+  async function finishAction(principal, action, status, result, errorCode = null) {
+    await withActor(knex, principal.userId, (trx) =>
+      trx('assistant_actions')
+        .where({ id: action.id, status: 'proposed' })
+        .update({ status, result: result ?? null, error_code: errorCode, decided_at: now() }),
+    );
+  }
+
+  /**
+   * ADR-0038: the person confirmed a proposed booking. Access is checked again, then the
+   * booking goes through the one booking path (eligibility guard, payment hold, outbox)
+   * with an idempotency key derived from the proposal, so a retried tap books once.
+   * Not yet in the doctor's care team: a care request is sent first; it is active at once
+   * when the doctor accepts new patients, otherwise the booking waits for the doctor.
+   */
+  async function confirmAction(principal, sessionId, actionId, { reason }, req) {
+    if (!isUuid(sessionId) || !isUuid(actionId)) throw new NotFoundError();
+    const action = await withActor(knex, principal.userId, async (trx) => {
+      const found = await trx('assistant_actions')
+        .where({ id: actionId, session_id: sessionId })
+        .first();
+      if (!found) throw new NotFoundError();
+      // A revoked guardianship ends the person's access here too.
+      await authorizeScope(trx, principal, found.patient_id, req);
+      return found;
+    });
+    if (action.status === 'done' || action.status === 'awaiting_doctor') {
+      return actionView(action); // a repeated tap: the same result, nothing booked twice
+    }
+    if (action.status !== 'proposed') {
+      throw new ConflictError(
+        'This booking can no longer be confirmed. Ask me for the times again.',
+        'assistant_action_closed',
+      );
+    }
+    if (new Date(action.expires_at) <= now()) {
+      await finishAction(principal, action, 'failed', null, 'assistant_action_expired');
+      throw new ConflictError(
+        'This proposal expired. Ask me for the times again.',
+        'assistant_action_expired',
+      );
+    }
+    const p = action.payload;
+    const team = await careService.listForPatient(principal, action.patient_id, req);
+    let care = team.find((r) => r.doctorId === p.doctorId && r.status !== 'ended') ?? null;
+    if (!care) {
+      care = await careService.request(
+        principal,
+        { patientId: action.patient_id, doctorId: p.doctorId },
+        req,
+      );
+    }
+    if (care.status !== 'active') {
+      const result = { careRelationshipId: care.id, careStatus: care.status };
+      await finishAction(principal, action, 'awaiting_doctor', result);
+      await audit.record(
+        {
+          category: 'data_access',
+          action: 'assistant.action_confirmed',
+          outcome: 'success',
+          resourceType: 'assistant_action',
+          resourceId: action.id,
+          patientId: action.patient_id,
+          reason: 'awaiting_doctor',
+          metadata: { kind: 'book' },
+        },
+        { req },
+      );
+      return { id: action.id, status: 'awaiting_doctor', ...result };
+    }
+    let booked;
+    try {
+      booked = await appointmentService.book(
+        principal,
+        {
+          patientId: action.patient_id,
+          doctorId: p.doctorId,
+          startsAt: p.startsAt,
+          mode: p.mode,
+          ...(p.clinicId ? { clinicId: p.clinicId } : {}),
+          reason: reason?.trim() || BOOKING_REASON_NOTE,
+        },
+        { idempotencyKey: `assistant-${action.id}` },
+        req,
+      );
+    } catch (err) {
+      if (err instanceof AppError && err.status === 409) {
+        await finishAction(principal, action, 'failed', null, err.code ?? 'booking_failed');
+      }
+      throw err;
+    }
+    const result = {
+      appointmentId: booked.appointment.id,
+      appointmentStatus: booked.appointment.status,
+    };
+    await finishAction(principal, action, 'done', result);
+    await audit.record(
+      {
+        category: 'data_access',
+        action: 'assistant.action_confirmed',
+        outcome: 'success',
+        resourceType: 'assistant_action',
+        resourceId: action.id,
+        patientId: action.patient_id,
+        reason: booked.appointment.status,
+        metadata: { kind: 'book', appointmentId: booked.appointment.id },
+      },
+      { req },
+    );
+    return { id: action.id, status: 'done', ...result, appointment: booked.appointment };
+  }
+
   /** The person closes the conversation; its structured state stops being usable. */
   async function endSession(principal, sessionId, req) {
     if (!isUuid(sessionId)) throw new NotFoundError();
@@ -232,11 +354,21 @@ export function createAssistantService({
       (id) => previous.candidateDoctorIds.includes(id) || previous.excludedDoctorIds.includes(id),
     );
     if (next.selectedDoctorId && !known(next.selectedDoctorId)) next.selectedDoctorId = null;
+    // ADR-0038: the booking doctor is one the backend showed; a chosen time one it offered.
+    if (
+      next.bookingDoctorId &&
+      !known(next.bookingDoctorId) &&
+      previous.bookingDoctorId !== next.bookingDoctorId
+    ) {
+      next.bookingDoctorId = null;
+    }
     next.slotStarts = next.slotStarts.filter(
       (s) =>
         evidence.slots.has(`${next.selectedDoctorId}|${s}`) ||
         (next.selectedDoctorId === previous.selectedDoctorId && previous.slotStarts.includes(s)),
     );
+    if (next.chosenStart && !next.slotStarts.includes(next.chosenStart)) next.chosenStart = null;
+    if (!next.bookingDoctorId) next.chosenStart = null;
     return next;
   }
 
@@ -299,9 +431,90 @@ export function createAssistantService({
     return [];
   }
 
+  /**
+   * ADR-0038: a proposal for a time the assistant offered. The slot is checked again with
+   * the backend's own slot rules (as the person's view), then stored for 15 minutes. Nothing
+   * is booked: only the confirm endpoint, called by the person's tap, books.
+   * @returns {Promise<object|null>} the booking card, or null when the time is gone
+   */
+  async function proposeBooking({ principal, row, doctorId, startsAt, tools, team, req }) {
+    const at = DateTime.fromISO(startsAt).toUTC();
+    if (!at.isValid) return null;
+    const slots = await availabilityService
+      .slots(principal, doctorId, {
+        from: at.minus({ days: 1 }).toISODate(),
+        to: at.plus({ days: 1 }).toISODate(),
+      })
+      .catch(() => []);
+    const slot = slots.find((s) => Date.parse(s.startsAt) === at.toMillis());
+    if (!slot) return null;
+    const profile = await doctorService.publicProfile(doctorId).catch(() => null);
+    const facts = tools.evidence.doctors.get(doctorId);
+    if (!profile && !facts) return null;
+    const clinic = slot.clinicId
+      ? ((profile?.clinics ?? facts?.clinics ?? []).find((c) => c.id === slot.clinicId) ?? null)
+      : null;
+    const id = newId();
+    const created = now();
+    const expiresAt = new Date(created.getTime() + PROPOSAL_TTL_MS);
+    const payload = {
+      doctorId,
+      startsAt: slot.startsAt,
+      endsAt: slot.endsAt,
+      mode: slot.mode,
+      clinicId: slot.clinicId ?? null,
+      feePaise: slot.feePaise ?? 0,
+    };
+    await withActor(knex, principal.userId, async (trx) => {
+      await trx('assistant_actions').insert({
+        id,
+        session_id: row.id,
+        user_id: principal.userId,
+        patient_id: row.patient_id,
+        kind: 'book',
+        payload,
+        created_at: created,
+        expires_at: expiresAt,
+      });
+      await audit.record(
+        {
+          category: 'data_access',
+          action: 'assistant.action_proposed',
+          outcome: 'success',
+          resourceType: 'assistant_action',
+          resourceId: id,
+          patientId: row.patient_id,
+          metadata: { kind: 'book', doctorId, mode: slot.mode, paid: payload.feePaise > 0 },
+        },
+        { req, trx },
+      );
+    });
+    const careStatus = team.get(doctorId) ?? 'none';
+    return {
+      type: 'booking',
+      actionId: id,
+      expiresAt: expiresAt.toISOString(),
+      doctor: {
+        id: doctorId,
+        professionalName: profile?.professionalName ?? facts.professionalName,
+        primarySpecialization: profile?.primarySpecialization ?? facts.primarySpecialization,
+      },
+      startsAt: slot.startsAt,
+      endsAt: slot.endsAt,
+      mode: slot.mode,
+      clinic: clinic ? { id: clinic.id, name: clinic.name, city: clinic.city ?? null } : null,
+      feePaise: payload.feePaise,
+      careStatus,
+      // Not yet in the care team: confirming also asks to join it (at once when the doctor
+      // accepts new patients; otherwise the doctor accepts first).
+      joinsCareTeam: careStatus !== 'active',
+      acceptsNewPatients: Boolean(profile?.acceptsNewPatients),
+    };
+  }
+
   /** Cards show backend data only; anything the backend did not return is dropped. */
-  async function hydrate(reply, tools, patientId) {
-    const team = reply.cards.some((c) => c.type === 'doctor' || c.type === 'slot')
+  async function hydrate(reply, tools, patientId, booking = null) {
+    const team = reply.cards.some((c) => ['doctor', 'slot', 'booking'].includes(c.type))
       ? await tools.careTeam().catch(() => new Map())
       : new Map();
     const cards = [];
@@ -330,6 +543,24 @@ export function createAssistantService({
           patientId,
           bookable: team.get(doctor.id) === 'active',
         });
+      } else if (card.type === 'booking' && booking && card.doctorId && card.startsAt) {
+        const proposal = await proposeBooking({
+          ...booking,
+          doctorId: card.doctorId,
+          startsAt: card.startsAt,
+          tools,
+          team,
+        });
+        if (!proposal) {
+          // The time went in the meantime: say so instead of a card that cannot book.
+          return {
+            kind: 'answer',
+            message: 'That time isn’t free any more. Ask me for other times with this doctor.',
+            cards: [],
+            source: 'ai_assistant',
+          };
+        }
+        cards.push(proposal);
       }
     }
     return { kind: reply.kind, message: reply.message, cards, source: 'ai_assistant' };
@@ -388,7 +619,7 @@ export function createAssistantService({
     };
   }
 
-  async function sendMessage(principal, sessionId, { text, version, timeZone }, req) {
+  async function sendMessage(principal, sessionId, { text, version, timeZone, select }, req) {
     const started = performance.now();
     // Screened before anything that involves the AI service (deterministic, shared rule).
     const emergency = isPossibleAssistantEmergency(text);
@@ -449,6 +680,8 @@ export function createAssistantService({
             message: text,
             inputDigest: inputDigester.digest('care_assistant_message', text),
             state: previous,
+            // ADR-0038: a tap on an offered doctor or time (applied without a model call).
+            ...(select ? { selection: select } : {}),
           },
           { requestId: req?.id },
         ),
@@ -493,7 +726,11 @@ export function createAssistantService({
     } else if (!failure) {
       failure = 'invalid_ai_response';
     }
-    const hydrated = await hydrate(failure ? FALLBACK_REPLY : reply, tools, row.patient_id);
+    const hydrated = await hydrate(failure ? FALLBACK_REPLY : reply, tools, row.patient_id, {
+      principal,
+      row,
+      req,
+    });
     if (!failure) {
       hydrated.cards.push(...(await recordCards(next.intent, principal, row.patient_id, req)));
     }
@@ -545,5 +782,5 @@ export function createAssistantService({
     return withSystem(knex, 'assistant', (trx) => repository.deleteExpired(trx));
   }
 
-  return { createSession, getSession, endSession, sendMessage, purgeExpired };
+  return { createSession, getSession, endSession, sendMessage, purgeExpired, confirmAction };
 }

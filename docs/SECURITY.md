@@ -446,7 +446,8 @@ Each layer is tested on its own:
   - the patient is fixed at session creation (self or a guarded dependent);
   - AccessPolicy re-checks it on every turn;
   - tool arguments can't name a patient (strict schemas), and model-produced IDs are ignored.
-- **Tools:** an explicit allow-list of five read-only tools wrapping the existing domain services, so AccessPolicy, consent and RLS apply unchanged. There is no write tool: booking, rescheduling and cancelling happen on their pages, each with an explicit confirmation (ADR-0034).
+- **Tools:** an explicit allow-list of five read-only tools wrapping the existing domain services, so AccessPolicy, consent and RLS apply unchanged. There is no write tool.
+- **Booking (ADR-0038):** the model can only ask for a booking card. The backend re-checks the slot, stores a 15-minute proposal (own user only, RLS; audited), and books only on the person's Confirm, through the one booking path with an idempotency key from the proposal. The scope is re-checked on Confirm. A patient may create an active care relationship only with a doctor who accepts new patients (database policy). Taps are structured selections; only offered options are accepted.
 - **Untrusted output:**
   - the model fills a fixed form and writes no free text that reaches the person;
   - the backend validates the returned state, drops IDs it didn't return, and builds cards from its own data.

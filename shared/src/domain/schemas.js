@@ -174,6 +174,8 @@ const doctorProfileFields = {
   // M13.2: the doctor's own listed focus, from a controlled list (never a diagnosis).
   areasOfPractice: z.array(z.enum(PRACTICE_AREA_CODES)).max(8).optional(),
   bio: optionalText(1000),
+  // ADR-0038: patients who request or book this doctor join the care team at once.
+  acceptsNewPatients: z.boolean().optional(),
 };
 
 export const doctorProfileSchema = z.object(doctorProfileFields).strict();

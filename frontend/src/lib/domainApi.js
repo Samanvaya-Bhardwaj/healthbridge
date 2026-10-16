@@ -272,7 +272,8 @@ export const assistantApi = {
       apiRequest('/assistant/sessions', { method: 'POST', body: patientId ? { patientId } : {} }),
     ),
   get: (id) => data(apiRequest(`/assistant/sessions/${id}`)),
-  send: (id, { text, version }) =>
+  // A local AI model (Ollama on a laptop CPU) can take a minute: a long timeout here.
+  send: (id, { text, version, select }) =>
     data(
       apiRequest(`/assistant/sessions/${id}/messages`, {
         method: 'POST',
@@ -280,7 +281,18 @@ export const assistantApi = {
           text,
           version,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          ...(select ? { select } : {}),
         },
+        timeoutMs: 240_000,
+      }),
+    ),
+  /** ADR-0038: the person's Confirm of a proposed booking. */
+  confirm: (id, actionId, { reason }) =>
+    data(
+      apiRequest(`/assistant/sessions/${id}/actions/${actionId}/confirm`, {
+        method: 'POST',
+        body: { reason },
+        timeoutMs: 60_000,
       }),
     ),
   end: (id) => apiRequest(`/assistant/sessions/${id}`, { method: 'DELETE' }),

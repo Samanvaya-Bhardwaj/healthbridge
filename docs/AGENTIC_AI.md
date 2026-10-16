@@ -12,7 +12,7 @@ The working guide to M13. The decision record is [ADR-0029](adr/0029-agentic-ai-
 | **M13.2** Doctor search | Shared specialty terms and areas of practice; one SQL search with eligibility, specialty, city, language, mode and name filters; deterministic ranking with reasons; no-match told apart from search unavailable (ADR-0031). Vector ranking added on top. | Done |
 | **M13.3** Recommendations | Search order lifted by care team, past visits, profile city and language, and soonest free time; fact-based explanations and next steps; patient side only; served by the existing read-only `searchDoctors` tool and the My Doctors page (ADR-0032) | Done |
 | **M13.4** Appointment orchestration | Slot cards and recommendations hand the exact time to the booking page; the patient reviews and confirms there (one idempotent, eligibility-guarded, paid booking path; no write tool) (ADR-0034) | Done |
-| M13.5 | Reschedule and cancel: on the appointment page, each with an explicit confirmation; the assistant shows the upcoming appointments and links to each | Done (through the app) |
+| M13.5 | Booking in the conversation (ADR-0038): choose a doctor and a time, confirm, pay, calendar. Reschedule and cancel stay on the appointment page, each with an explicit confirmation; the assistant shows the upcoming appointments and links to each | Done |
 | Step 10 | Answers from the record (upcoming appointments, medicines on recent signed prescriptions), shown by the backend and never sent to the AI; daily spend ceiling; deferred document analysis on passing failures (ADR-0036) | Done |
 | M13.6–M13.7 | Calendar adapter, medication schedule and reminders | Later |
 
@@ -116,17 +116,27 @@ Rejected calls never throw. They come back as error codes:
 | Role | Access |
 |---|---|
 | A patient | For themselves |
-| A guardian | For a dependent they guard; `view` and `manage` scopes can use the assistant. Booking for a dependent (on the booking page) requires `manage`. |
+| A guardian | For a dependent they guard; `view` and `manage` scopes can use the assistant. Booking for a dependent requires `manage`. |
 | Doctors, clinic admins, platform admins, support | Refused: no `assistant:use` |
 
-## Booking (M13.4, ADR-0034)
+## Booking in the conversation (ADR-0038)
 
-There is no approval table and no booking tool. Slot cards and recommendations link to the
-booking page with the doctor, the patient, the consultation type and the exact time
-(`startsAt`). The patient reviews and confirms there, and the existing idempotent,
-eligibility-guarded, paid booking flow applies unchanged. A view-only guardian can use
-the assistant, but booking for a dependent still needs a `manage` guardianship, which
-the appointment service enforces.
+1. **Choose a doctor:** tap **Book** on a doctor card, or say "the second one" or "book
+   Dr. Meera".
+2. **Choose a time:** the assistant offers free times (the asked-for day and window, or the
+   coming days). Tap one, or say "at 10:30".
+3. **Check and confirm:** the backend re-checks the time and shows a booking card with the
+   doctor, time, mode, clinic, fee and whether the doctor joins the care team, plus a
+   reason-for-visit field. Nothing is booked until **Confirm booking**.
+4. **Pay** (paid times): in the chat, with the same checkout as the payment page.
+5. **Calendar and notices:** the confirmation email carries a calendar invitation, the
+   inbox gets the notice, and the chat shows Google Calendar, Outlook and `.ics` links.
+
+Taps are structured selections applied by code (no model call). The model has no write
+tool; only the confirm endpoint, called by the person's tap, books (idempotently, through
+`appointmentService.book`). A doctor who accepts new patients automatically joins the
+care team on Confirm; otherwise a care request is sent and the booking waits for them.
+Booking for a dependent needs a `manage` guardianship (the appointment service checks it).
 
 ## Answers from the record (step 10, ADR-0036)
 

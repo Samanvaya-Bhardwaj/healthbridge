@@ -12,6 +12,7 @@ const FIELD_TO_COLUMN = {
   languages: 'languages',
   areasOfPractice: 'areas_of_practice',
   bio: 'bio',
+  acceptsNewPatients: 'accepts_new_patients',
 };
 
 export function toDoctorColumns(input) {
@@ -40,6 +41,7 @@ export function toDoctorView(row) {
     areasOfPractice: row.areas_of_practice ?? [],
     specialties: row.specialties ?? [],
     bio: row.bio,
+    acceptsNewPatients: row.accepts_new_patients ?? false,
     profileStatus: row.profile_status,
     verificationStatus: row.verification_status,
     verifiedAt: row.verified_at,
@@ -65,6 +67,7 @@ export function toPublicDoctorView(row) {
     registrationCouncil: row.registration_council,
     registrationNumber: row.registration_number,
     verified: row.verification_status === 'verified',
+    acceptsNewPatients: row.accepts_new_patients ?? false,
     clinics: row.clinics ?? [],
   };
 }

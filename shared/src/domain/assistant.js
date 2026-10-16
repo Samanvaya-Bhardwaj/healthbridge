@@ -76,9 +76,33 @@ export const assistantSessionCreateSchema = z
   })
   .strict();
 
+/**
+ * ADR-0038: a tap on a doctor or time the assistant offered. Applied by code without a
+ * model call; the AI service accepts only options it offered, the backend only IDs it
+ * returned.
+ */
+export const assistantSelectionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('doctor'), doctorId: z.uuid() }).strict(),
+  z
+    .object({
+      kind: z.literal('slot'),
+      doctorId: z.uuid(),
+      startsAt: z.iso.datetime({ offset: true }),
+    })
+    .strict(),
+]);
+
+/** ADR-0038: the person confirms a proposed booking, with the reason for the visit. */
+export const assistantConfirmSchema = z
+  .object({
+    reason: z.string().trim().min(3, 'Briefly describe the reason for your visit.').max(500),
+  })
+  .strict();
+
 export const assistantMessageSchema = z
   .object({
     text: z.string().trim().min(1).max(ASSISTANT_MAX_MESSAGE),
+    select: assistantSelectionSchema.optional(),
     // Optimistic concurrency: the session version the browser last saw.
     version: z.number().int().min(1),
     timeZone: timeZone.default('Asia/Kolkata'),
@@ -153,6 +177,16 @@ export const careAssistantStateSchema = z
     removed: z.array(z.enum(ASSISTANT_CRITERIA)).max(ASSISTANT_CRITERIA.length).default([]),
     // - preferences from the latest message that cannot be searched (answered honestly).
     notices: z.array(z.enum(ASSISTANT_UNSUPPORTED)).max(ASSISTANT_UNSUPPORTED.length).default([]),
+    // ADR-0038: booking in the conversation. The doctor the person chose, the time they
+    // picked from those offered, and a clock time asked for in words (HH:MM). References
+    // and a time only; the proposal itself lives in the backend.
+    bookingDoctorId: uuid.nullable().default(null),
+    chosenStart: z.iso.datetime({ offset: true }).nullable().default(null),
+    requestedTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .nullable()
+      .default(null),
   })
   .strict();
 

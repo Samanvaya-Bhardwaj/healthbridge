@@ -126,12 +126,9 @@ describe('HealthBridge Assistant', () => {
         'Why suggested: Dermatology · Lists Acne · Practises in Pune · Online consultations',
       ),
     ).toBeInTheDocument();
-    // Booking stays the existing, confirmed flow.
-    expect(screen.getByRole('link', { name: 'Book with Dr. Meera Iyer' })).toHaveAttribute(
-      'href',
-      `/app/appointments/book?doctorId=${DOCTOR}&patientId=${PATIENT}`,
-    );
-    expect(screen.getByRole('link', { name: /continue to booking/ })).toBeInTheDocument();
+    // ADR-0038: booking continues in the conversation; nothing is booked by a suggestion.
+    expect(screen.getAllByRole('button', { name: 'Book' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /choose this time/ })).toBeInTheDocument();
 
     const sent = calls.find((c) => c.key.endsWith('/messages'));
     expect(JSON.parse(sent.init.body)).toMatchObject({
@@ -263,6 +260,132 @@ describe('HealthBridge Assistant', () => {
     expect(within(medicines).getByText(/Ask your doctor before changing/)).toBeInTheDocument();
     // The AI's own words stay labelled as such.
     expect(screen.getAllByText('AI suggestion').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('books in the conversation: doctor, time, confirm, pay, calendar (ADR-0038)', async () => {
+    const APPT = '0192b6f0-0000-7000-8000-0000000000c9';
+    const ACTION = '0192b6f0-0000-7000-8000-0000000000aa';
+    const START = '2026-10-12T05:00:00Z';
+    let turn = 0;
+    let paid = false;
+    const sent = [];
+    const appointment = () => ({
+      id: APPT,
+      reference: '000000C9',
+      status: paid ? 'confirmed' : 'pending_payment',
+      paymentStatus: paid ? 'paid' : 'pending',
+      mode: 'online',
+      startsAt: START,
+      endsAt: '2026-10-12T05:15:00Z',
+      feePaise: 50_000,
+      holdExpiresAt: '2026-10-11T10:00:00Z',
+      doctor: { id: DOCTOR, professionalName: 'Dr. Meera Iyer' },
+    });
+    const calls = signedIn({
+      [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: (init) => {
+        turn += 1;
+        sent.push(JSON.parse(init.body));
+        const replies = [
+          {
+            kind: 'answer',
+            message: 'Here is 1 verified doctor.',
+            cards: [doctor(DOCTOR, 'Dr. Meera Iyer', 'active')],
+          },
+          {
+            kind: 'clarify',
+            message: 'Here are the free times. Which time suits you?',
+            cards: [
+              {
+                type: 'slot',
+                doctorId: DOCTOR,
+                doctorName: 'Dr. Meera Iyer',
+                startsAt: START,
+                mode: 'online',
+                feePaise: 50_000,
+                patientId: PATIENT,
+                bookable: true,
+              },
+            ],
+          },
+          {
+            kind: 'confirm',
+            message: "Here's the booking. Check the details, then tap Confirm booking.",
+            cards: [
+              {
+                type: 'booking',
+                actionId: ACTION,
+                doctor: {
+                  id: DOCTOR,
+                  professionalName: 'Dr. Meera Iyer',
+                  primarySpecialization: 'General Medicine',
+                },
+                startsAt: START,
+                endsAt: '2026-10-12T05:15:00Z',
+                mode: 'online',
+                clinic: null,
+                feePaise: 50_000,
+                careStatus: 'active',
+                joinsCareTeam: false,
+                acceptsNewPatients: false,
+              },
+            ],
+          },
+        ];
+        return json(200, {
+          data: {
+            session: sessionView(turn + 1),
+            reply: { ...replies[turn - 1], source: 'ai_assistant' },
+            understood: { intent: 'book_appointment', criteria: {} },
+            degraded: false,
+          },
+        });
+      },
+      [`POST /api/v1/assistant/sessions/${SESSION}/actions/${ACTION}/confirm`]: () =>
+        json(200, {
+          data: {
+            id: ACTION,
+            status: 'done',
+            appointmentId: APPT,
+            appointmentStatus: 'pending_payment',
+          },
+        }),
+      [`GET /api/v1/appointments/${APPT}`]: () => json(200, { data: appointment() }),
+      [`POST /api/v1/appointments/${APPT}/payment`]: () =>
+        json(200, {
+          data: { payment: { id: 'p1', amountPaise: 50_000 }, checkout: { provider: 'fake' } },
+        }),
+      [`POST /api/v1/appointments/${APPT}/payment/simulate`]: () => {
+        paid = true;
+        return json(200, { data: { status: 'processing' } });
+      },
+    });
+    open('/app/assistant');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Book an appointment' }));
+    await user.click(await screen.findByRole('button', { name: 'Book' }));
+    await user.click(await screen.findByRole('button', { name: /choose this time/ }));
+    expect(sent[1].select).toEqual({ kind: 'doctor', doctorId: DOCTOR });
+    expect(sent[2].select).toEqual({ kind: 'slot', doctorId: DOCTOR, startsAt: START });
+
+    const booking = await screen.findByRole('region', { name: 'Booking to confirm' });
+    expect(within(booking).getByText('Not booked yet')).toBeInTheDocument();
+    const confirm = within(booking).getByRole('button', { name: 'Confirm booking' });
+    expect(confirm).toBeDisabled(); // the reason for the visit comes first
+    await user.type(
+      within(booking).getByLabelText('Reason for the visit'),
+      'Synthetic: sugar review',
+    );
+    await user.click(confirm);
+    const confirmCall = calls.find((c) => c.key.endsWith('/confirm'));
+    expect(JSON.parse(confirmCall.init.body)).toEqual({ reason: 'Synthetic: sugar review' });
+
+    const pay = await screen.findByRole('region', { name: 'Payment' });
+    await user.click(within(pay).getByRole('button', { name: /^Pay / }));
+    await user.click(await screen.findByRole('button', { name: /test payment/ }));
+    const done = await screen.findByRole('region', { name: 'Booked' }, { timeout: 8000 });
+    expect(within(done).getByText(/Booked and paid/)).toBeInTheDocument();
+    expect(within(done).getByRole('link', { name: /Google Calendar/ })).toBeInTheDocument();
+    expect(within(done).getByRole('button', { name: /Download .ics/ })).toBeInTheDocument();
   });
 
   it('offers a fresh conversation when the session has ended', async () => {

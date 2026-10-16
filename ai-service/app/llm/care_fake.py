@@ -241,6 +241,20 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
     language = next((lang for lang in _LANGUAGES if re.search(rf"\b{lang.lower()}\b", low)), None)
     city = next((c for c in _CITIES if re.search(rf"\bin {c.lower()}\b", low)), None)
     name = re.search(r"\b(?:Dr\.?|Doctor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", text)
+    ordinal = re.search(r"\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\b", low)
+    pick = (
+        {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5}.get(ordinal.group(1))
+        or int(ordinal.group(1)[0])
+        if ordinal and re.search(r"\b(one|doctor|dr)\b", low)
+        else None
+    )
+    clock = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b", low)
+    time = None
+    if clock and clock.group(3):
+        hour = int(clock.group(1)) % 12 + (12 if clock.group(3) == "pm" else 0)
+        time = f"{hour:02d}:{clock.group(2) or '00'}"
+    elif clock:
+        time = f"{int(clock.group(4)):02d}:{clock.group(5)}"
 
     return {
         "intent": _intent(text, specialty is not None or name is not None),
@@ -258,5 +272,7 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
         "specialtyOptions": options,
         "remove": remove,
         "showOthers": bool(re.search(_SHOW_OTHERS, low)),
+        "pickDoctor": pick,
+        "time": time,
         "unsupported": list(dict.fromkeys(unsupported)),
     }

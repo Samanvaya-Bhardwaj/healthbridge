@@ -22,7 +22,7 @@ and never calls the backend.
 """
 
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -141,6 +141,21 @@ class CareState(BaseModel):
     clarifyTurns: int = Field(default=0, ge=0, le=MAX_CLARIFY_TURNS)
     removed: list[Literal[*CRITERIA]] = Field(default_factory=list, max_length=6)  # type: ignore[valid-type]
     notices: list[Literal[*UNSUPPORTED]] = Field(default_factory=list, max_length=6)  # type: ignore[valid-type]
+    # Booking in the conversation (ADR-0038): the doctor the person chose, the time they
+    # picked from those offered, and a clock time they asked for in words. A picked time
+    # becomes a proposal in the backend; only the person's Confirm books it.
+    bookingDoctorId: Uuid | None = None
+    chosenStart: str | None = None
+    requestedTime: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+class Selection(BaseModel):
+    """A tap on an option the assistant offered: applied by code, with no model call."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["doctor", "slot"]
+    doctorId: Uuid
+    startsAt: str | None = Field(default=None, max_length=40)
 
 
 class AreaRef(BaseModel):
@@ -163,6 +178,8 @@ class StepContext(BaseModel):
     specialties: list[str] = Field(min_length=1, max_length=40)
     areas: list[AreaRef] = Field(default_factory=list, max_length=120)
     actingFor: Literal["self", "dependent"] = "self"
+    # The person's offset from UTC now (their own time zone), for "at 10:30".
+    utcOffsetMinutes: int = Field(default=0, ge=-720, le=840)
 
 
 class ToolResult(BaseModel):
@@ -174,7 +191,7 @@ class ToolResult(BaseModel):
 
 
 class Card(BaseModel):
-    type: Literal["doctor", "slot", "link", "choice"]
+    type: Literal["doctor", "slot", "link", "choice", "booking"]
     doctorId: Uuid | None = None
     startsAt: str | None = None
     target: Literal["my_doctors", "appointments", "records", "prescriptions"] | None = None
@@ -183,7 +200,7 @@ class Card(BaseModel):
 
 
 class Reply(BaseModel):
-    kind: Literal["answer", "clarify", "emergency", "fallback", "not_yet", "help"]
+    kind: Literal["answer", "clarify", "confirm", "emergency", "fallback", "not_yet", "help"]
     message: str
     cards: list[Card] = Field(default_factory=list, max_length=12)
 
@@ -195,6 +212,8 @@ class GraphState(TypedDict, total=False):
     context: StepContext
     message: str | None
     tool_result: ToolResult | None
+    selection: Selection | None
+    stale_selection: bool
     tools_this_turn: list[str]
     raw: Any
     tool_failed: bool
@@ -283,6 +302,23 @@ def _explicit_cues(message: str, raw: dict[str, Any]) -> dict[str, Any]:
     return fixed
 
 
+_CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+
+
+def _clock(value: Any) -> str | None:
+    """A clock time as HH:MM (24-hour), or None."""
+    m = _CLOCK.match(value.strip()) if isinstance(value, str) else None
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
+
+
+def _local_hhmm(iso: str, ctx: "StepContext") -> str | None:
+    try:
+        at = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (at + timedelta(minutes=ctx.utcOffsetMinutes)).strftime("%H:%M")
+
+
 def _uuid_list(items: Any, limit: int) -> list[str]:
     out: list[str] = []
     for item in items if isinstance(items, list) else []:
@@ -348,7 +384,53 @@ def build_care_assistant(llm: LLMProvider):
     totals = RunTotals()
 
     def start(state: GraphState) -> str:
-        return "observe" if state.get("tool_result") else "safety"
+        if state.get("tool_result"):
+            return "observe"
+        return "select" if state.get("selection") else "safety"
+
+    async def node_select(state: GraphState) -> GraphState:
+        """A tap on an offered doctor or time: applied by code, no model call (ADR-0038)."""
+        current, sel = state["state"], state["selection"]
+        offered = {
+            *current.candidateDoctorIds,
+            *current.careTeamDoctorIds,
+            *([current.bookingDoctorId] if current.bookingDoctorId else []),
+        }
+        cleared = {"pendingChoice": None, "clarifyTurns": 0, "notices": []}
+        if sel.kind == "doctor" and sel.doctorId in offered:
+            return {
+                "state": current.model_copy(
+                    update={
+                        **cleared,
+                        "intent": "book_appointment",
+                        "bookingDoctorId": sel.doctorId,
+                        "chosenStart": None,
+                        "requestedTime": None,
+                        "slotStarts": [],
+                    }
+                )
+            }
+        if (
+            sel.kind == "slot"
+            and sel.startsAt in current.slotStarts
+            and sel.doctorId in {current.selectedDoctorId, current.bookingDoctorId}
+        ):
+            return {
+                "state": current.model_copy(
+                    update={
+                        **cleared,
+                        "intent": "book_appointment",
+                        "bookingDoctorId": sel.doctorId,
+                        "chosenStart": sel.startsAt,
+                        "requestedTime": None,
+                    }
+                )
+            }
+        # Not one of the options offered (or no longer): say so and offer the current ones.
+        return {
+            "stale_selection": True,
+            "state": current.model_copy(update={**cleared, "chosenStart": None}),
+        }
 
     async def node_safety(state: GraphState) -> GraphState:
         if is_possible_emergency(state.get("message") or ""):
@@ -508,6 +590,14 @@ def build_care_assistant(llm: LLMProvider):
             getattr(merged, k) != getattr(current.criteria, k) for k in ("date", "timeWindow")
         )
         intent = raw["intent"]
+        # ADR-0038: "the second one" picks a doctor already shown; "at 10:30" a time.
+        pick = raw.get("pickDoctor")
+        picked_doctor = (
+            current.candidateDoctorIds[pick - 1]
+            if isinstance(pick, int) and 1 <= pick <= len(current.candidateDoctorIds)
+            else None
+        )
+        requested_time = _clock(raw.get("time"))
         refinement = bool(stated or removing or show_others or options or notices)
         if intent in ("unsupported", "greeting") and refinement and current.intent in SEARCHING:
             # "tomorrow evening" or "any city" on its own refines the search under way.
@@ -528,10 +618,26 @@ def build_care_assistant(llm: LLMProvider):
             update["specialtyFromConcern"] = bool(raw.get("specialtyFromConcern"))
         elif "specialty" in removing:
             update["specialtyFromConcern"] = False
-        if search_changed:
+        booking_doctor = current.bookingDoctorId
+        if picked_doctor:
+            booking_doctor = picked_doctor
+            update["intent"] = "book_appointment"
+        if requested_time and (booking_doctor or current.slotStarts):
+            update["intent"] = "book_appointment"
+        if search_changed and not picked_doctor:
             update.update(candidateDoctorIds=[], selectedDoctorId=None, slotStarts=[])
+            booking_doctor = None
         elif day_changed:
             update.update(slotStarts=[])
+        # A picked time survives a plain "yes"; anything new means choosing again.
+        keep_choice = not (search_changed or day_changed or requested_time or picked_doctor)
+        update.update(
+            bookingDoctorId=booking_doctor,
+            chosenStart=current.chosenStart if keep_choice else None,
+            requestedTime=requested_time,
+        )
+        if booking_doctor is None:
+            update["chosenStart"] = None
         return {"state": current.model_copy(update=update)}
 
     def after_validate(state: GraphState) -> str:
@@ -586,14 +692,109 @@ def build_care_assistant(llm: LLMProvider):
         def tool(name: str, args: dict[str, Any]) -> GraphState:
             return {"action": {"type": "tool", "tool": name, "args": args}, "reply": None}
 
-        def respond(kind: str, message: str, cards: list[Card] | None = None) -> GraphState:
+        def respond(
+            kind: str,
+            message: str,
+            cards: list[Card] | None = None,
+            update: dict[str, Any] | None = None,
+        ) -> GraphState:
             # Step 6: preferences that cannot be searched are answered honestly, up front.
             honest = " ".join(UNSUPPORTED_TEXT[n] for n in current.notices)
             return {
                 "action": {"type": "respond"},
                 "reply": Reply(kind=kind, message=f"{honest} {message}".strip(), cards=cards or []),
-                "state": current.model_copy(update={"lastTools": used[-6:]}),
+                "state": current.model_copy(update={"lastTools": used[-6:], **(update or {})}),
             }
+
+        def propose(start: str) -> GraphState:
+            # The backend re-checks the slot and builds the proposal; Confirm books it.
+            return respond(
+                "confirm",
+                "Here's the booking. Check the details, then tap Confirm booking. "
+                "Nothing is booked until you do.",
+                [Card(type="booking", doctorId=current.bookingDoctorId, startsAt=start)],
+                {"chosenStart": start, "requestedTime": None},
+            )
+
+        def booking_route() -> GraphState:
+            """ADR-0038: with a chosen doctor, find times, take the person's pick, propose."""
+            doctor = current.bookingDoctorId
+            rounds = used.count("findAvailableSlots")
+            if current.chosenStart and not state.get("stale_selection"):
+                return propose(current.chosenStart)
+            offered = current.slotStarts if current.selectedDoctorId == doctor else []
+            if state.get("stale_selection") and offered and not used:
+                # Not one of the times offered: offer those again (no new lookup needed).
+                return respond(
+                    "clarify",
+                    "That time isn't available any more. Please pick one of these.",
+                    [Card(type="slot", doctorId=doctor, startsAt=s) for s in offered],
+                )
+            if rounds == 0 and len(used) < MAX_TOOL_ROUNDS and not state.get("tool_failed"):
+                args: dict[str, Any] = {"doctorId": doctor}
+                if crit.date:
+                    args["date"] = crit.date
+                if crit.timeWindow:
+                    args["timeWindow"] = crit.timeWindow
+                if crit.consultationMode:
+                    args["mode"] = crit.consultationMode
+                return tool("findAvailableSlots", args)
+            if state.get("tool_failed"):
+                return respond(
+                    "fallback",
+                    "I couldn't look up free times just now. Please try again in a moment.",
+                )
+            starts = current.slotStarts if current.selectedDoctorId == doctor else []
+            if current.requestedTime and starts:
+                matching = [s for s in starts if _local_hhmm(s, ctx) == current.requestedTime]
+                if len(matching) == 1:
+                    return propose(matching[0])
+            if (
+                not starts
+                and (crit.date or crit.timeWindow)
+                and rounds == 1
+                and len(used) < MAX_TOOL_ROUNDS
+            ):
+                # Nothing then: look at the coming days instead.
+                args = {"doctorId": doctor}
+                if crit.consultationMode:
+                    args["mode"] = crit.consultationMode
+                return tool("findAvailableSlots", args)
+            stale = "That time isn't available any more. " if state.get("stale_selection") else ""
+            when = " ".join(
+                filter(
+                    None,
+                    [
+                        f"on {_day_label(crit.date)}" if crit.date else "",
+                        f"in the {crit.timeWindow}" if crit.timeWindow else "",
+                    ],
+                )
+            )
+            if starts:
+                lead = (
+                    f"There are no free times {when}; here are the next ones."
+                    if rounds == 2
+                    else f"Here are the free times {when}.".replace("  ", " ").replace(" .", ".")
+                )
+                missed = (
+                    f" {current.requestedTime} isn't free; please pick one of these."
+                    if current.requestedTime
+                    else ""
+                )
+                return respond(
+                    "clarify",
+                    f"{stale}{lead}{missed} Which time suits "
+                    f"{'them' if ctx.actingFor == 'dependent' else 'you'}?",
+                    [Card(type="slot", doctorId=doctor, startsAt=s) for s in starts],
+                    {"requestedTime": None},
+                )
+            return respond(
+                "answer",
+                f"{stale}This doctor has no free times in the coming week. You could choose "
+                "another doctor, or ask for another kind of doctor.",
+                [Card(type="link", target="my_doctors")],
+                {"bookingDoctorId": None, "requestedTime": None},
+            )
 
         intent = current.intent
         if current.pendingChoice is not None and not used:
@@ -606,6 +807,8 @@ def build_care_assistant(llm: LLMProvider):
                 "You can also choose any kind of doctor.",
                 cards,
             )
+        if intent in SEARCHING and current.bookingDoctorId:
+            return booking_route()
         if intent in SEARCHING:
             narrowed = bool(
                 crit.specialty
@@ -674,6 +877,15 @@ def build_care_assistant(llm: LLMProvider):
                 found_text = f"I couldn't find {other}verified doctor {summary}".rstrip() + "."
                 parts.append(f"{found_text} {_relax_hint(crit)}")
                 return respond("answer", " ".join(parts), [Card(type="link", target="my_doctors")])
+            if (
+                intent == "book_appointment"
+                and len(candidates) == 1
+                and crit.doctorName
+                and len(used) < MAX_TOOL_ROUNDS
+            ):
+                # "Book Dr. Meera": the one named doctor is the choice; go on to times.
+                current = current.model_copy(update={"bookingDoctorId": candidates[0]})
+                return booking_route()
             one = len(candidates) == 1
             parts.append(
                 f"Here {'is' if one else 'are'} "
@@ -715,10 +927,7 @@ def build_care_assistant(llm: LLMProvider):
                     "narrow this down."
                 )
             if intent == "book_appointment":
-                parts.append(
-                    "Booking happens on the booking page: choose a time to continue. "
-                    "You can book once a doctor has accepted you into their care team."
-                )
+                parts.append("Tap Book on a doctor and I'll find a time with them.")
             return respond("answer", " ".join(parts), cards)
         if intent == "view_appointments":
             return respond(
@@ -765,7 +974,11 @@ def build_care_assistant(llm: LLMProvider):
     graph.add_node("validate", node_validate)
     graph.add_node("observe", node_observe)
     graph.add_node("route", node_route)
-    graph.add_conditional_edges(START, start, {"observe": "observe", "safety": "safety"})
+    graph.add_node("select", node_select)
+    graph.add_conditional_edges(
+        START, start, {"observe": "observe", "safety": "safety", "select": "select"}
+    )
+    graph.add_edge("select", "route")
     graph.add_conditional_edges("safety", after_safety, {END: END, "understand": "understand"})
     graph.add_edge("understand", "validate")
     graph.add_conditional_edges("validate", after_validate, {END: END, "route": "route"})

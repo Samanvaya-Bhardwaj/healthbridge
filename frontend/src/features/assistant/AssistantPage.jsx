@@ -29,6 +29,7 @@ import { PatientSelect } from '../records/PatientSelect.jsx';
 import { usePatientChoice } from '../records/usePatientChoice.js';
 import { MODE_LABELS, formatDateTime, formatFee, formatFullDate } from '../appointments/format.js';
 import { whySuggested } from '../care/recommendationText.js';
+import { BookingCard } from './AssistantBooking.jsx';
 
 const QUICK_ACTIONS = [
   [Stethoscope, 'Find a doctor', 'I would like to find a doctor'],
@@ -58,6 +59,25 @@ const day = (iso) =>
 const time = (iso) =>
   new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 
+/** While a reply is coming; a local model on a laptop can take up to a minute. */
+function Thinking() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), 8_000);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div>
+      <LoadingState label="The assistant is looking this up" rows={1} />
+      {slow && (
+        <p className="mt-2 text-xs text-text-muted" role="status">
+          Still working… a local AI model can take up to a minute.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** "What I understood": the structured state, so the person can see and correct it. */
 function Understood({ understood }) {
   const c = understood?.criteria ?? {};
@@ -78,7 +98,7 @@ function Understood({ understood }) {
   );
 }
 
-function DoctorCard({ card, patientId, actingFor }) {
+function DoctorCard({ card, patientId, actingFor, latest, onSelect }) {
   const d = card.doctor;
   const why = whySuggested(d);
   const detail = [
@@ -107,16 +127,17 @@ function DoctorCard({ card, patientId, actingFor }) {
           )}
         </p>
       </div>
-      {card.careStatus === 'active' ? (
-        <ButtonLink
-          as={Link}
+      <div className="flex flex-col items-end gap-2">
+        <Button
+          type="button"
           size="sm"
-          variant="secondary"
-          to={`/app/appointments/book?doctorId=${d.id}&patientId=${patientId}`}
+          disabled={!latest}
+          onClick={() =>
+            onSelect(`Book with ${d.professionalName}`, { kind: 'doctor', doctorId: d.id })
+          }
         >
-          Book with {d.professionalName}
-        </ButtonLink>
-      ) : (
+          Book
+        </Button>
         <ButtonLink
           as={Link}
           size="sm"
@@ -125,13 +146,16 @@ function DoctorCard({ card, patientId, actingFor }) {
         >
           View in My Doctors
         </ButtonLink>
-      )}
+      </div>
     </li>
   );
 }
 
-function Slots({ slots }) {
+function Slots({ slots, latest, onSelect }) {
   const first = slots[0];
+  const days = new Set(slots.map((s) => s.startsAt.slice(0, 10)));
+  const label = (s) =>
+    days.size > 1 ? `${day(s.startsAt.slice(0, 10))}, ${time(s.startsAt)}` : time(s.startsAt);
   return (
     <div className="rounded-xl border border-dashed border-ai/40 bg-ai-soft/30 p-3">
       <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
@@ -141,30 +165,29 @@ function Slots({ slots }) {
       <ul className="mt-2 flex flex-wrap gap-2">
         {slots.map((s) => (
           <li key={s.startsAt}>
-            {s.bookable ? (
-              <ButtonLink
-                as={Link}
-                size="sm"
-                variant="secondary"
-                to={`/app/appointments/book?doctorId=${s.doctorId}&patientId=${s.patientId}&mode=${s.mode}&startsAt=${encodeURIComponent(s.startsAt)}`}
-                aria-label={`${time(s.startsAt)}, ${MODE_LABELS[s.mode] ?? ''}, continue to booking`}
-              >
-                {time(s.startsAt)}
-              </ButtonLink>
-            ) : (
-              <span className="inline-flex min-h-9 items-center rounded-full border border-border px-3 text-sm text-text-muted">
-                {time(s.startsAt)}
-              </span>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={!latest}
+              aria-label={`${label(s)}, ${MODE_LABELS[s.mode] ?? ''}: choose this time`}
+              onClick={() =>
+                onSelect(`${day(s.startsAt.slice(0, 10))}, ${time(s.startsAt)}`, {
+                  kind: 'slot',
+                  doctorId: s.doctorId,
+                  startsAt: s.startsAt,
+                })
+              }
+            >
+              {label(s)}
+            </Button>
           </li>
         ))}
       </ul>
       <p className="mt-2 text-xs text-text-muted">
         {MODE_LABELS[first.mode]}
-        {first.feePaise !== null ? ` · ${formatFee(first.feePaise)}` : ''}.{' '}
-        {first.bookable
-          ? 'Choose a time to continue on the booking page; nothing is booked until you confirm there.'
-          : 'Send a care request to this doctor in My Doctors first; you can book once they accept.'}
+        {first.feePaise !== null ? ` · ${formatFee(first.feePaise)}` : ''}. Choose a time and I’ll
+        show the booking for you to confirm; nothing is booked before that.
       </p>
     </div>
   );
@@ -250,7 +273,7 @@ function MedicationCards({ cards }) {
   );
 }
 
-function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
+function AssistantReply({ turn, patientId, sessionId, actingFor, onChoose, onSelect, latest }) {
   const { reply, understood, degraded } = turn;
   const choices = reply.cards.filter((c) => c.type === 'choice');
   const doctors = reply.cards.filter((c) => c.type === 'doctor');
@@ -258,6 +281,7 @@ function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
   const links = reply.cards.filter((c) => c.type === 'link' && LINKS[c.target]);
   const appointments = reply.cards.filter((c) => c.type === 'appointment');
   const medications = reply.cards.filter((c) => c.type === 'medication');
+  const bookings = reply.cards.filter((c) => c.type === 'booking');
   const linkButtons = links.length > 0 && (
     <div className="mt-3 flex flex-wrap gap-2">
       {links.map((c) => (
@@ -287,7 +311,7 @@ function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
   return (
     <div className="rounded-2xl border border-ai/25 bg-surface-raised p-4">
       <p className="mb-2">
-        {reply.kind === 'clarify' ? (
+        {reply.kind === 'clarify' || reply.kind === 'confirm' ? (
           <Badge tone="ai" icon={HelpCircle}>
             Question
           </Badge>
@@ -319,15 +343,37 @@ function AssistantReply({ turn, patientId, actingFor, onChoose, latest }) {
       {doctors.length > 0 && (
         <ul className="mt-3 space-y-2">
           {doctors.map((c) => (
-            <DoctorCard key={c.doctor.id} card={c} patientId={patientId} actingFor={actingFor} />
+            <DoctorCard
+              key={c.doctor.id}
+              card={c}
+              patientId={patientId}
+              actingFor={actingFor}
+              latest={latest}
+              onSelect={onSelect}
+            />
           ))}
         </ul>
       )}
       {slots.length > 0 && (
         <div className="mt-3">
-          <Slots slots={slots} />
+          <Slots slots={slots} latest={latest} onSelect={onSelect} />
         </div>
       )}
+      {bookings.map((c) => (
+        <BookingCard
+          key={c.actionId}
+          card={c}
+          sessionId={sessionId}
+          actingFor={actingFor}
+          latest={latest}
+          onAskAgain={() =>
+            onSelect(`Other times with ${c.doctor.professionalName}`, {
+              kind: 'doctor',
+              doctorId: c.doctor.id,
+            })
+          }
+        />
+      ))}
       {appointments.length > 0 && <AppointmentCards cards={appointments} />}
       {medications.length > 0 && <MedicationCards cards={medications} />}
       {linkButtons}
@@ -363,8 +409,8 @@ export function AssistantPage() {
   const turns = current?.turns ?? [];
 
   const send = useMutation({
-    mutationFn: ({ sessionId, text: message, version }) =>
-      assistantApi.send(sessionId, { text: message, version }),
+    mutationFn: ({ sessionId, text: message, version, select }) =>
+      assistantApi.send(sessionId, { text: message, version, select }),
     onSuccess: (result, { sessionId }) => {
       setConversation((c) =>
         c?.sessionId === sessionId
@@ -392,7 +438,7 @@ export function AssistantPage() {
     setRestartKey((k) => k + 1);
   };
 
-  const submit = (message) => {
+  const submit = (message, select) => {
     const clean = message.trim();
     if (!clean || !session.data) return;
     const sessionId = session.data.id;
@@ -407,7 +453,7 @@ export function AssistantPage() {
     });
     setText('');
     send.mutate(
-      { sessionId, text: clean, version },
+      { sessionId, text: clean, version, ...(select ? { select } : {}) },
       {
         onSettled: () => {
           if (inFlight.current === sessionId) inFlight.current = null;
@@ -508,15 +554,17 @@ export function AssistantPage() {
                       turn={t}
                       patientId={session.data.patientId}
                       actingFor={actingFor}
+                      sessionId={session.data.id}
                       latest={t.id === turns.at(-1)?.id && !send.isPending}
                       onChoose={submit}
+                      onSelect={submit}
                     />
                   </li>
                 ),
               )}
               {send.isPending && (
                 <li>
-                  <LoadingState label="The assistant is looking this up" rows={1} />
+                  <Thinking />
                 </li>
               )}
             </ol>

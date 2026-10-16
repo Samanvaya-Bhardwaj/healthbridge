@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { z } from 'zod';
 import {
   ASSISTANT_TIME_WINDOWS,
@@ -6,7 +7,7 @@ import {
 } from '@healthbridge/shared';
 import { AppError } from '../../core/http/errors.js';
 import { domainMetrics } from '../../core/metrics/domain.js';
-import { slotQuery } from './calendar.js';
+import { safeZone, slotQuery } from './calendar.js';
 
 /**
  * The care assistant's tools (M13.1, ADR-0029): an explicit allow-list. The AI service
@@ -55,6 +56,18 @@ const errorCode = (err) =>
   err instanceof AppError && /^[a-z_]{1,48}$/.test(err.code ?? '') ? err.code : 'tool_failed';
 
 const MAX_RECOMMENDED = 5;
+const PER_DAY_WITHOUT_DATE = 2;
+
+/** A filter keeping at most PER_DAY_WITHOUT_DATE slots per local day (in order). */
+function spreadAcrossDays(timeZone) {
+  const perDay = new Map();
+  return (slot) => {
+    const day = DateTime.fromISO(slot.startsAt, { zone: safeZone(timeZone) }).toISODate();
+    const n = perDay.get(day) ?? 0;
+    perDay.set(day, n + 1);
+    return n < PER_DAY_WITHOUT_DATE;
+  };
+}
 
 /** Recommendations in the search result's shape, explanations and next step included. */
 const toFound = ({ status, recommendations }) => ({
@@ -189,6 +202,8 @@ export function createToolContext(
         })
       )
         .filter(query.keep)
+        // Without a day, the coming days (at most two times a day), so there is a choice.
+        .filter(date ? () => true : spreadAcrossDays(timeZone))
         .slice(0, MAX_SLOTS);
       if (!evidence.doctors.has(doctorId)) {
         const d = await doctorService.publicProfile(doctorId);

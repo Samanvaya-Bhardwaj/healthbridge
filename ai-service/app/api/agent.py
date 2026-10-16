@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.care_assistant import (
     MAX_TOOL_ROUNDS,
+    Selection,
     StepContext,
     ToolName,
     ToolResult,
@@ -49,6 +50,8 @@ class StepRequest(BaseModel):
     inputDigest: InputDigest | None = None
     state: dict[str, Any] = Field(default_factory=dict)
     toolResult: ToolResult | None = None
+    # A tap on an offered doctor or time, sent with the message it is displayed as.
+    selection: Selection | None = None
     toolsThisTurn: Annotated[list[ToolName], Field(max_length=MAX_TOOL_ROUNDS)] = []
     context: StepContext
 
@@ -77,6 +80,7 @@ async def step(body: StepRequest, scope: ScopeDep, request: Request) -> dict:
             "context": body.context,
             "message": body.message,
             "tool_result": body.toolResult,
+            "selection": body.selection if body.message is not None else None,
             "tools_this_turn": list(body.toolsThisTurn),
         }
     )

@@ -59,6 +59,7 @@ const toForm = (p) => ({
   languages: p?.languages?.join(', ') ?? '',
   areasOfPractice: p?.areasOfPractice ?? [],
   bio: p?.bio ?? '',
+  acceptsNewPatients: p?.acceptsNewPatients ?? false,
 });
 
 /** Flat form fields → API shape (validated by the shared schema). */
@@ -78,6 +79,7 @@ const fromForm = (v) => ({
     .filter(Boolean),
   areasOfPractice: [v.areasOfPractice ?? []].flat().filter(Boolean),
   bio: v.bio,
+  acceptsNewPatients: Boolean(v.acceptsNewPatients),
 });
 
 /**
@@ -220,6 +222,18 @@ function DoctorForm({ profile, onSaved }) {
         selected={[chosenAreas ?? []].flat()}
         error={errors.areasOfPractice}
       />
+      <label className="flex items-start gap-3 rounded-xl border border-border p-3">
+        <input type="checkbox" className="mt-1" {...register('acceptsNewPatients')} />
+        <span>
+          <span className="block text-sm font-medium text-text">
+            Accept new patients automatically
+          </span>
+          <span className="block text-sm text-text-muted">
+            Patients who request you, or book you through the assistant, join your care team at once
+            instead of waiting for you to accept. You can still pause or end any relationship.
+          </span>
+        </span>
+      </label>
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? 'Saving…' : profile ? 'Save changes' : 'Create doctor profile'}
       </Button>

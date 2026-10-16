@@ -7,7 +7,7 @@ text that reaches the person, never chooses tools and never sees patient records
 
 import re
 
-CARE_PROMPT_VERSION = "care-assistant/2026-10-14"
+CARE_PROMPT_VERSION = "care-assistant/2026-10-16"
 
 INTENTS = [
     "find_doctor",
@@ -53,6 +53,10 @@ INTENT_SYSTEM = (
     "9. showOthers: true when the person asks for other doctors than those shown.\n"
     "10. unsupported: preferences HealthBridge cannot search by that the person states "
     "(gender, age, fees, ratings, insurance, other). Otherwise an empty list.\n"
+    "11. pickDoctor: when the person picks one of the doctors already shown by position "
+    "('the first one', 'the second doctor'), its number from 1; otherwise null.\n"
+    "12. time: an exact clock time the person asks for, as HH:MM in 24-hour time "
+    "('4 pm' -> 16:00, 'half past ten' -> 10:30); otherwise null.\n"
     "Answer only with the JSON form."
 )
 
@@ -89,6 +93,8 @@ def intent_schema(specialties: list[str], areas: list[str] | None = None) -> dic
                 "maxItems": 6,
             },
             "showOthers": {"type": "boolean"},
+            "pickDoctor": {"type": ["integer", "null"], "minimum": 1, "maximum": 5},
+            "time": {"type": ["string", "null"]},
             "unsupported": {
                 "type": "array",
                 "items": {"type": "string", "enum": UNSUPPORTED},

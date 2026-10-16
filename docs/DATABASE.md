@@ -555,3 +555,11 @@ Templates map to categories in `@healthbridge/shared` (`NOTIFICATION_TEMPLATE_CA
 | `key_id` | Clinical data key ID the HMAC key was derived from (HKDF `audit-log-seal`) |
 
 The index `audit_logs_seal_order_idx (occurred_at, id)` serves sealing and verification.
+
+## Booking in the conversation (ADR-0038)
+
+| Object | Notes |
+|---|---|
+| `doctors.accepts_new_patients` | The doctor accepts new patients automatically: a patient's care request is active at once |
+| `care_insert` policy | A patient-initiated relationship starts `pending`, or `active` only for a doctor who accepts new patients (`authz.doctor_accepts_new_patients`) |
+| `assistant_actions` | Proposed bookings waiting for the person's Confirm: `session_id`, `user_id`, `patient_id`, `kind` (`book`), `payload` (doctor, start, end, mode, clinic, fee), `status` (`proposed`, `done`, `awaiting_doctor`, `failed`), `result`, `error_code`, `expires_at` (at most an hour; 15 minutes in practice). RLS: own user only. Removed with the session; never deleted by the application. |

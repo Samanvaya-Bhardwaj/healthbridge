@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
+  assistantConfirmSchema,
   PERMISSIONS,
   assistantMessageSchema,
   assistantSessionCreateSchema,
@@ -62,6 +63,27 @@ export function assistantRoutes(container) {
         data: await assistantService.sendMessage(
           req.principal,
           req.valid.params.id,
+          req.valid.body,
+          req,
+        ),
+      });
+    },
+  );
+  // ADR-0038: the person's explicit Confirm of a proposed booking (never the model's).
+  router.post(
+    '/assistant/sessions/:id/actions/:actionId/confirm',
+    can,
+    noStore,
+    validate({
+      params: z.object({ id: z.string().max(64), actionId: z.string().max(64) }),
+      body: assistantConfirmSchema,
+    }),
+    async (req, res) => {
+      res.json({
+        data: await assistantService.confirmAction(
+          req.principal,
+          req.valid.params.id,
+          req.valid.params.actionId,
           req.valid.body,
           req,
         ),

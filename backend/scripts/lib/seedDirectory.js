@@ -100,6 +100,12 @@ export async function seedDirectory({
     }
     if (doctor.verification_status !== 'verified') continue;
     principal = await principalFor(userId);
+    // ADR-0038: most directory doctors accept new patients automatically, so the
+    // assistant can book them in one conversation; about one in five accepts personally.
+    const accepts = !/[05]$/.test(d.key);
+    if (Boolean(doctor.accepts_new_patients) !== accepts) {
+      await svc.doctorService.updateOwnProfile(principal, { acceptsNewPatients: accepts });
+    }
 
     if (d.clinicKey) {
       const clinicId = clinicIds[d.clinicKey];

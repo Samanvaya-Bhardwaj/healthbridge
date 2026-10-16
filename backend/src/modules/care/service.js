@@ -117,15 +117,19 @@ export function createCareService({ knex, care, patients, doctors, clinics, acce
         );
       }
       const id = newId();
+      // ADR-0038: a doctor may accept new patients automatically (the database checks it).
+      const accepted = Boolean(doctor.accepts_new_patients);
+      const at = new Date();
       await care.insert(trx, {
         id,
         patient_id: patientId,
         doctor_id: doctorId,
         clinic_id: clinicId ?? null,
-        status: 'pending',
+        status: accepted ? 'active' : 'pending',
         initiated_by: 'patient',
         requested_by_user_id: principal.userId,
         patient_display_name: patient.preferred_name ?? patient.full_name,
+        ...(accepted ? { responded_at: at, activated_at: at } : {}),
       });
       await audit.record(
         {
@@ -135,7 +139,7 @@ export function createCareService({ knex, care, patients, doctors, clinics, acce
           resourceType: 'care_relationship',
           resourceId: id,
           patientId,
-          metadata: { doctorId, clinicId: clinicId ?? null },
+          metadata: { doctorId, clinicId: clinicId ?? null, autoAccepted: accepted },
         },
         { req, trx },
       );

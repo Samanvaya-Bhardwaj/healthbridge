@@ -32,6 +32,8 @@ export function calendarContext(timeZone, now = new Date()) {
     tomorrow: today.plus({ days: 1 }).toISODate(),
     weekdays,
     horizon: today.plus({ days: BOOKING_HORIZON_DAYS }).toISODate(),
+    // ADR-0038: for clock times in words ("at 10:30").
+    utcOffsetMinutes: DateTime.fromJSDate(now, { zone }).offset,
   };
 }
 
