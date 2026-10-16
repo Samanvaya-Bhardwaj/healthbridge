@@ -6,6 +6,7 @@ import { createLogger } from '../../src/core/logger/index.js';
 import { createKnex } from '../../src/core/db/knex.js';
 import { createNoopMailer } from '../../src/core/mail/mailer.js';
 import { createContainer } from '../../src/container.js';
+import { createAiClient } from '../../src/core/ai/client.js';
 
 export function createScriptRuntime(name) {
   const config = loadConfig();
@@ -14,9 +15,10 @@ export function createScriptRuntime(name) {
   });
   const knex = createKnex(config.db, `healthbridge-${name}`);
   const mailer = createNoopMailer({ logger });
-  const container = createContainer({ config, logger, knex, mailer });
+  const aiClient = createAiClient(config.aiService);
+  const container = createContainer({ config, logger, knex, mailer, aiClient });
   /** A second container on another clock (synthetic history happens "back then"). */
-  const makeContainer = (now) => createContainer({ config, logger, knex, mailer, now });
+  const makeContainer = (now) => createContainer({ config, logger, knex, mailer, aiClient, now });
   return { config, logger, knex, container, makeContainer, close: () => knex.destroy() };
 }
 

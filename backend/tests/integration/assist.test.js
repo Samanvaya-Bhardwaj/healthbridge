@@ -79,7 +79,7 @@ async function bookWith(patient, doctor) {
 }
 
 describe('record questions (patient-scoped RAG)', () => {
-  it('requires consent, the patient opt-in and a treating doctor; never patients or admins', async () => {
+  it('requires consent, the patient opt-in and a treating doctor; never admins or strangers', async () => {
     const s = await setup('rag-gate', { optIn: false });
     const path = `/patients/${s.patient.patient.id}/record-questions`;
     expect((await api(h, s.doctor).post(path, { question: 'What was the WBC?' })).body.code).toBe(
@@ -92,9 +92,10 @@ describe('record questions (patient-scoped RAG)', () => {
     expect((await api(h, s.doctor).post(path, { question: 'What was the WBC?' })).body.code).toBe(
       'ai_processing_disabled',
     );
-    expect((await api(h, s.patient).post(path, { question: 'What was the WBC?' })).status).toBe(
-      403,
-    );
+    // Part 4: the patient may ask about their own records, once AI reading is on.
+    const own = await api(h, s.patient).post(path, { question: 'What was the WBC?' });
+    expect(own.status).toBe(409);
+    expect(own.body.code).toBe('ai_processing_disabled');
     expect((await api(h, admin).post(path, { question: 'What was the WBC?' })).status).toBe(403);
     const stranger = await createVerifiedDoctor(h, admin, 'rag-gate-x');
     expect((await api(h, stranger).post(path, { question: 'What was the WBC?' })).status).toBe(404);
@@ -239,5 +240,64 @@ describe('doctor brief', () => {
       ),
     ).toHaveLength(0);
     expect((await api(h, s.doctor).post(path, {})).body.code).toBe('consent_required');
+  });
+});
+
+describe('the patient asks about their own records (Part 4)', () => {
+  it('answers from all their available documents and verified values, no consent needed', async () => {
+    const s = await setup('rag-own');
+    // A doctor (with consent) verified one value; the patient's question needs none.
+    expectOk(
+      await grant(h, s.patient, { patientId: s.patient.patient.id, doctorId: s.doctor.doctor.id }),
+      201,
+    );
+    expectOk(
+      await api(h, s.doctor).post(`/documents/${s.lab.id}/lab-results/verify`, {
+        fieldKeys: ['lab-1-wbc'],
+      }),
+    );
+    const before = ai.calls.length;
+    const res = expectOk(
+      await api(h, s.patient).post(`/patients/${s.patient.patient.id}/record-questions`, {
+        question: 'Private question: what was my WBC?',
+      }),
+    );
+    expect(res.status).toBe('answered');
+    expect(res.sentences[0].citations[0].title).toBe('Verified lab value: WBC');
+    const sent = ai.calls.slice(before).find((c) => c.kind === 'question');
+    expect(sent.documentIds.sort()).toEqual([s.lab.id, s.xray.id].sort());
+    const audits = await auditFor(h.knex, {
+      action: 'record.question_answered',
+      patient_id: s.patient.patient.id,
+    });
+    const mine = audits.find((a) => a.metadata.side === 'patient');
+    expect(mine.metadata).toMatchObject({ consentId: null, documentsInScope: 2 });
+    expect(JSON.stringify(audits)).not.toMatch(/Private question/);
+  });
+
+  it('never another patient’s records', async () => {
+    const s = await setup('rag-own-x');
+    const other = await createPatient(h, 'rag-own-x-other');
+    const before = ai.calls.length;
+    const res = await api(h, other).post(`/patients/${s.patient.patient.id}/record-questions`, {
+      question: 'What was the WBC?',
+    });
+    expect([403, 404]).toContain(res.status);
+    expect(ai.calls.slice(before).filter((c) => c.kind === 'question')).toHaveLength(0);
+  });
+});
+
+describe('re-embedding after a model switch (Part 4)', () => {
+  it('covers opted-in patients’ available documents only and returns counts', async () => {
+    const on = await setup('reembed-on');
+    const off = await setup('reembed-off', { optIn: false });
+    const before = ai.calls.length;
+    const result = await h.container.intelligenceService.reembedAll();
+    const sent = ai.calls.slice(before).filter((c) => c.kind === 'reembed');
+    const forOn = sent.filter((c) => c.patientId === on.patient.patient.id);
+    expect(forOn.flatMap((c) => c.documentIds).sort()).toEqual([on.lab.id, on.xray.id].sort());
+    expect(sent.some((c) => c.patientId === off.patient.patient.id)).toBe(false);
+    expect(result.patients).toBeGreaterThanOrEqual(1);
+    expect(result.updated).toBeGreaterThanOrEqual(2);
   });
 });

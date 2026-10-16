@@ -78,6 +78,10 @@ export function stubAiClient(getHarness) {
       });
       return { extractionId, reused: false };
     },
+    async reembedDocuments(input) {
+      calls.push({ kind: 'reembed', ...input });
+      return { model: 'stub', updated: input.documentIds.length, more: false };
+    },
     async askRecord(input) {
       calls.push({ kind: 'question', ...input });
       const fact = input.facts[0];

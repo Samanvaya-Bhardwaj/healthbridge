@@ -154,3 +154,89 @@ async def test_hybrid_retrieval_is_patient_and_document_scoped() -> None:
             assert await hybrid_search(conn, embedder, "hemoglobin", [d1, d2]) == []
     finally:
         await conn.close()
+
+
+async def test_added_vectors_are_scoped_append_only_and_used_by_retrieval() -> None:
+    """Part 4: after a model switch, a vector added beside a chunk ranks it by meaning."""
+    from app.embeddings import HashingEmbeddingProvider, to_pgvector
+    from app.rag.retrieval import hybrid_search
+
+    class SwitchedModel(HashingEmbeddingProvider):
+        @property
+        def model_id(self) -> str:
+            return "switched-test-model"
+
+    a, b, doc = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    text = "Echocardiogram: ejection fraction 60 percent, grade 1 diastolic dysfunction"
+    conn = await psycopg.AsyncConnection.connect(
+        host=os.environ["DB_HOST"],
+        port=int(os.environ.get("DB_PORT", "5432")),
+        dbname=os.environ["POSTGRES_DB"],
+        user=os.environ["DB_AI_USER"],
+        password=os.environ["DB_AI_PASSWORD"],
+    )
+    try:
+        async with conn.transaction(force_rollback=True):
+            await conn.execute("SELECT set_config('ai.patient_id', %s, true)", (a,))
+            run, ext, chunk = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+            await conn.execute(
+                "INSERT INTO ai.ai_runs (id, workflow, patient_id, status) VALUES (%s,'t',%s,'ok')",
+                (run, a),
+            )
+            await conn.execute(
+                """INSERT INTO ai.document_extractions (id, patient_id, document_id,
+                     document_type, version, run_id, input_sha256, prompt_version, status,
+                     text_source)
+                   VALUES (%s,%s,%s,'imaging',1,%s,%s,'t','completed','pdf_text')""",
+                (ext, a, doc, run, "c" * 64),
+            )
+            old = to_pgvector((await HashingEmbeddingProvider().embed([text]))[0])
+            await conn.execute(
+                """INSERT INTO ai.document_chunks (id, patient_id, document_id, document_type,
+                     extraction_id, chunk_index, content, embedding)
+                   VALUES (%s,%s,%s,'imaging',%s,0,%s,%s::extensions.vector)""",
+                (chunk, a, doc, ext, text, old),
+            )
+            switched = SwitchedModel()
+            # A query with no word in common: only a vector of the current model finds it.
+            assert await hybrid_search(conn, switched, "xyzzy cardiac", [doc]) == []
+            vec = to_pgvector((await switched.embed([text]))[0])
+            await conn.execute(
+                """INSERT INTO ai.chunk_vectors (chunk_id, patient_id, model, embedding)
+                   VALUES (%s,%s,%s,%s::extensions.vector)""",
+                (chunk, a, switched.model_id, vec),
+            )
+            hits = await hybrid_search(conn, switched, "xyzzy cardiac", [doc])
+            assert [h.source_id for h in hits] == [chunk]
+            # Another patient's scope neither sees nor can add vectors for this chunk.
+            await conn.execute("SELECT set_config('ai.patient_id', %s, true)", (b,))
+            assert await (
+                await conn.execute("SELECT count(*) FROM ai.chunk_vectors")
+            ).fetchone() == (0,)
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                async with conn.transaction():
+                    await conn.execute(
+                        """INSERT INTO ai.chunk_vectors (chunk_id, patient_id, model, embedding)
+                           VALUES (%s,%s,'other',%s::extensions.vector)""",
+                        (chunk, a, vec),
+                    )
+            # ...nor attach one to another patient's chunk under its own scope.
+            with pytest.raises(psycopg.errors.ForeignKeyViolation):
+                async with conn.transaction():
+                    await conn.execute(
+                        """INSERT INTO ai.chunk_vectors (chunk_id, patient_id, model, embedding)
+                           VALUES (%s,%s,'other',%s::extensions.vector)""",
+                        (chunk, b, vec),
+                    )
+            # Append-only: vectors are never rewritten or removed.
+            await conn.execute("SELECT set_config('ai.patient_id', %s, true)", (a,))
+            for statement in (
+                "UPDATE ai.chunk_vectors SET model = 'x'",
+                "DELETE FROM ai.chunk_vectors",
+                "UPDATE ai.document_chunks SET embedding_model = 'x'",
+            ):
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    async with conn.transaction():
+                        await conn.execute(statement)
+    finally:
+        await conn.close()

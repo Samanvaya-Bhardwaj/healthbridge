@@ -60,9 +60,13 @@ class FakeConnection:
                 for c in self.db.chunks
                 if c["document_id"] in docs
             ]
-            if sql.lstrip().startswith("SELECT DISTINCT ON (c.document_id)"):
+            if "AS score" not in sql:  # first-chunk and re-embed reads: no score column
                 rows = [(r[0], r[1], r[2]) for r in rows]
             return _Cursor(None, rows)
+        if "INSERT INTO ai.chunk_vectors" in sql:
+            chunk_id, patient_id, model, _vector = params
+            self.db.vectors.append((chunk_id, patient_id, model))
+            return _Cursor(None)
         if "max(version)" in sql:
             versions = [e["version"] for e in self.db.extractions if e["document_id"] == params[0]]
             return _Cursor((max(versions, default=0) + 1,))
@@ -134,6 +138,7 @@ class FakeDatabase:
         self.statements: list = []
         self.extractions: list = []
         self.chunks: list = []
+        self.vectors: list = []
         self.scopes: list[str] = []
 
     @asynccontextmanager

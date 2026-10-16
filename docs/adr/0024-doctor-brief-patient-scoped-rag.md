@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-03
 - **Refines:** ADR-0010 (patient-scoped RAG, insufficient-information fallback), ADR-0011
+- **Amended by:** ADR-0039 (the patient side may ask about their own records)
 
 ## Context
 

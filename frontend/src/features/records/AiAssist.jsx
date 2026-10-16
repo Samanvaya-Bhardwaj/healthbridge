@@ -18,7 +18,7 @@ import { useSafeMutation } from '../../lib/useSafeMutation.js';
 const AI_NOTICE =
   'AI-generated from the shared records. Every sentence cites its source — check the sources before relying on it. It does not diagnose or recommend treatment.';
 
-function Sentences({ sentences }) {
+export function Sentences({ sentences }) {
   return (
     <ul className="space-y-2">
       {sentences.map((s, i) => (
@@ -39,8 +39,12 @@ function Sentences({ sentences }) {
   );
 }
 
-/** Doctor: ask a question about a consented patient's records (patient-scoped RAG). */
-export function AskRecords({ patientId }) {
+/**
+ * Ask a question about a patient's records (patient-scoped RAG): a doctor with consent,
+ * or (Part 4) the patient side about their own documents.
+ */
+export function AskRecords({ patientId, audience = 'doctor' }) {
+  const own = audience === 'patient';
   const [question, setQuestion] = useState('');
   const ask = useSafeMutation({ mutationFn: () => assistApi.ask(patientId, question.trim()) });
   return (
@@ -54,11 +58,15 @@ export function AskRecords({ patientId }) {
       >
         <TextField
           className="min-w-64 flex-1"
-          label="Ask about these records"
+          label={own ? 'Ask about your documents' : 'Ask about these records'}
           value={question}
           maxLength={500}
           onChange={(e) => setQuestion(e.target.value)}
-          hint="For example: What was the most recent WBC count?"
+          hint={
+            own
+              ? 'For example: How has my HbA1c changed? What did the echo show?'
+              : 'For example: What was the most recent WBC count?'
+          }
         />
         <Button
           type="submit"
@@ -72,7 +80,9 @@ export function AskRecords({ patientId }) {
       {ask.isError && (
         <Alert tone="error">
           {ask.error?.code === 'ai_processing_disabled'
-            ? 'The patient has not turned on AI reading of their documents.'
+            ? own
+              ? 'Turn on AI reading of your documents (above) to ask about them.'
+              : 'The patient has not turned on AI reading of their documents.'
             : aiErrorMessage(ask.error)}
         </Alert>
       )}

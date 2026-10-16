@@ -14,6 +14,7 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { usePatientChoice } from './usePatientChoice.js';
 import { PatientSelect } from './PatientSelect.jsx';
 import { DocumentList } from './DocumentList.jsx';
+import { AskRecords } from './AiAssist.jsx';
 import { useDownload } from './useDownload.js';
 import { ExtractionPanel, LabResults } from './ExtractionPanel.jsx';
 import { intelligenceApi } from '../../lib/domainApi.js';
@@ -266,6 +267,17 @@ export function RecordsPage() {
           />
         )}
       </Card>
+      {aiEnabled && documents.data?.length > 0 && (
+        <Card className="border-ai/25">
+          <SectionHeader
+            icon={Sparkles}
+            title="Ask about your documents"
+            description="An AI summary that cites the document each sentence comes from. It isn't medical advice: ask your doctor about anything that worries you."
+            className="mb-3"
+          />
+          <AskRecords patientId={patientId} audience="patient" />
+        </Card>
+      )}
       <Card>
         <SectionHeader
           icon={FlaskConical}

@@ -272,12 +272,14 @@ Internal (AI service): `POST /v1/documents/analyze` (service token + `X-Patient-
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
-| POST | `/patients/:patientId/record-questions` | `ai_assist:use` + consent + patient opt-in | `{ question }` returns `{ status: answered \| insufficient_information, answer, sentences[{ text, citations[{ label, type, documentId, title }] }], source: "ai_generated" }`. `409 ai_processing_disabled` |
+| POST | `/patients/:patientId/record-questions` | `ai_assist:use` + consent + patient opt-in; or the patient side (`medical_records:read` as `patient_self`/`guardian_dependent`) + opt-in (ADR-0039) | `{ question }` returns `{ status: answered \| insufficient_information, answer, sentences[{ text, citations[{ label, type, documentId, title }] }], source: "ai_generated" }`. `409 ai_processing_disabled` |
 | POST | `/appointments/:id/brief` | `ai_assist:use`, own appointment | `{ refresh? }` returns `{ id, status, sections[{ heading, sentences }], message, feedback }` (12 h cache) |
 | POST | `/briefs/:id/feedback` | brief's doctor | `{ rating: helpful \| not_helpful, issue? }` |
 
 Internal (AI service): `POST /v1/assist/answer` and `POST /v1/assist/brief`, each with a
-service token and `X-Patient-Scope`.
+service token and `X-Patient-Scope`. `POST /v1/documents/reembed` `{ patientId,
+documentIds }` (purpose `document_analysis`) adds vectors of the current embedding model
+for existing chunks and returns `{ model, updated, more }` (ADR-0039).
 
 ## Endpoints (M9)
 

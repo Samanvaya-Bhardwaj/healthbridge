@@ -79,6 +79,40 @@ export function createIntelligenceService({
 }) {
   // ── Worker ──────────────────────────────────────────────────────
 
+  /**
+   * Part 4 (ADR-0037): after a switch of embedding model, vector ranking compares only
+   * within the current model; this adds vectors of the current one for existing chunks
+   * (append-only, beside the chunk; chunks that already have one are skipped, so a run
+   * with nothing to do is cheap). Only patients who turned AI reading on, and only their
+   * available documents. Counts only: no text comes back.
+   */
+  async function reembedAll({ batch = 100 } = {}) {
+    if (!aiClient?.reembedDocuments) return { patients: 0, updated: 0, skipped: 'no_ai_client' };
+    const groups = await withSystem(knex, 'documents', async (trx) => {
+      const { rows } = await trx.raw(
+        `SELECT patient_id, array_agg(id ORDER BY id) AS ids
+           FROM medical_documents
+          WHERE status = 'available' AND authz.ai_processing_enabled(patient_id)
+          GROUP BY patient_id`,
+      );
+      return rows;
+    });
+    let updated = 0;
+    for (const { patient_id: patientId, ids } of groups) {
+      for (let i = 0; i < ids.length; i += batch) {
+        const documentIds = ids.slice(i, i + batch);
+        // At most 400 chunks per call; `more` asks for another (bounded).
+        for (let round = 0; round < 25; round += 1) {
+          const result = await aiClient.reembedDocuments({ patientId, documentIds });
+          updated += result.updated ?? 0;
+          if (!result.more) break;
+        }
+      }
+    }
+    if (updated) logger?.info({ patients: groups.length, updated }, 'document chunks re-embedded');
+    return { patients: groups.length, updated };
+  }
+
   async function analyzeDocument(documentId, { requestId } = {}) {
     const doc = await withSystem(knex, 'documents', async (trx) => {
       const row = await documents.findById(trx, documentId);
@@ -428,5 +462,6 @@ export function createIntelligenceService({
     listLabResults,
     setAiProcessing,
     getAiProcessing,
+    reembedAll,
   };
 }

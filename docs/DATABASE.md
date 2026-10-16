@@ -448,6 +448,7 @@ CHECK constraints tie both object keys to the row's patient and document.
 | `ai.ai_sources` | Scoped insert/select | None |
 | `ai.document_extractions` | Scoped insert/select (append-only) | Read: patient side, `authz.has_consent(…, 'medical_documents', type)`, `documents` system |
 | `ai.document_chunks` | Scoped insert/select (append-only) | **None** |
+| `ai.chunk_vectors` | Scoped insert/select (append-only; ADR-0039) | **None** |
 | `document_metadata` | None | Read like documents; insert/update `documents` system only |
 | `lab_results` | None | Read: patient side and consented doctors. Insert: consented treating doctor as themself. Immutable (trigger) |
 
@@ -563,3 +564,10 @@ The index `audit_logs_seal_order_idx (occurred_at, id)` serves sealing and verif
 | `doctors.accepts_new_patients` | The doctor accepts new patients automatically: a patient's care request is active at once |
 | `care_insert` policy | A patient-initiated relationship starts `pending`, or `active` only for a doctor who accepts new patients (`authz.doctor_accepts_new_patients`) |
 | `assistant_actions` | Proposed bookings waiting for the person's Confirm: `session_id`, `user_id`, `patient_id`, `kind` (`book`), `payload` (doctor, start, end, mode, clinic, fee), `status` (`proposed`, `done`, `awaiting_doctor`, `failed`), `result`, `error_code`, `expires_at` (at most an hour; 15 minutes in practice). RLS: own user only. Removed with the session; never deleted by the application. |
+
+## Answers from the patient's own records (ADR-0039)
+
+| Object | Notes |
+|---|---|
+| `ai.document_chunks.embedding_model` | The model that embedded the chunk (`hashing` for chunks made before ADR-0037) |
+| `ai.chunk_vectors` | A vector of another embedding model for an existing chunk: `chunk_id`, `patient_id`, `model`, `embedding` (1024), primary key `(chunk_id, model)`, foreign key `(chunk_id, patient_id)` to the chunk (`chunks_id_patient_key`). Append-only: the AI role may select and insert under patient-scope RLS; the application role has no access. |

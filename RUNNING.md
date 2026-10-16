@@ -100,6 +100,12 @@ Every demo account uses the password shown by `npm start` (`DEMO_USER_PASSWORD` 
 - **Asha** has three past online visits with Dr. Meera about blood sugar. Each has a signed SOAP note and a signed prescription, and one prescription has a correction with its reason. Two check-ins are answered and closed, and one is still to come.
 - **Kamala** (Asha's dependent) had a blood-pressure review that asked for an in-clinic visit. That visit is booked and paid with the test provider.
 - **Lab reports:** synthetic PDFs (blood count, HbA1c, lipids) are scanned. With Asha's opt-in, the AI reads hers, so Dr. Meera has lab values to verify.
+- **A synthetic health file** (Part 4) of 25 more documents, each a realistic PDF from a named (fictional) lab, hospital or clinic, with consistent dates and values. All three patients have AI reading turned on, so their documents are read and indexed.
+  - **Asha** (type 2 diabetes, on metformin): annual health check, HbA1c and sugars, vitamin D and iron, ECG, dietitian notes, urine microalbumin, retinal screening, a 2024 gastroenteritis discharge and a thyroid profile.
+  - **Kamala** (Asha's mother: blood pressure, cholesterol, knees): cataract surgery discharge, lipids, a Deccan Heart Clinic prescription (telmisartan, atorvastatin), knee X-ray and orthopaedic letter, kidney function, ECG, echocardiogram and a home BP log. Kamala has also given Dr. Meera consent to her documents.
+  - **Vikram** (asthma): asthma-attack discharge, chest X-ray, spirometry, allergy tests, a pulmonology letter, lipids and sugar, and vaccinations.
+
+Try **Health Records → Ask about your documents** as Asha ("How has my HbA1c changed?", "What did the eye check show?"), or ask the **Assistant** the same. Switch to Kamala in the assistant and ask "What did my echo show?". As Dr. Meera, ask about Asha's or Kamala's records on **Patient Records → Ask AI**.
 
 Try **Prescriptions**, **Timeline** and **Follow-ups** as Asha, or ask the **Assistant** "What medicines do I need to take?". As Dr. Meera, open **Patient Records** → Asha.
 
@@ -135,6 +141,9 @@ tokens and IDs. It reads the port and demo password from your `.env`.
 
 3. Run `npm start -- --no-build`. The AI service reaches Ollama at
    `host.docker.internal:11434`.
+4. Existing documents get vectors of the new embedding model when the worker starts, in
+   the background (about a minute for the demo documents). To do it now:
+   `docker compose exec api node scripts/reembed-records.js`. It prints the counts.
 
 On a laptop CPU a 3B model answers in about 10–40 seconds, and the first message after a
 start is the slowest (the model loads). Tapping a doctor, a day or a time needs no model at

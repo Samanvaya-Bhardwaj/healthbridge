@@ -39,6 +39,7 @@ def terms(text: str) -> list[str]:
 _LATEST = """
   SELECT c.id::text, c.document_id::text, c.content, {score} AS score
     FROM ai.document_chunks c
+    {join}
    WHERE c.document_id = ANY(%(docs)s::uuid[])
      AND c.extraction_id IN (
        SELECT DISTINCT ON (e.document_id) e.id FROM ai.document_extractions e
@@ -70,10 +71,16 @@ async def hybrid_search(
     }
     vec_rows = await (
         await conn.execute(
-            # Vectors are comparable only within one model; lexical ranking covers the rest.
+            # Vectors are comparable only within one model: the chunk's own, or one of the
+            # current model added after a switch (ai.chunk_vectors). Lexical ranking
+            # covers the rest.
             _LATEST.format(
-                score="1 - (c.embedding <=> %(vec)s::extensions.vector)",
-                extra="AND c.embedding_model = %(model)s",
+                join=("LEFT JOIN ai.chunk_vectors v ON v.chunk_id = c.id AND v.model = %(model)s"),
+                score=(
+                    "1 - (CASE WHEN c.embedding_model = %(model)s THEN c.embedding"
+                    " ELSE v.embedding END <=> %(vec)s::extensions.vector)"
+                ),
+                extra="AND (c.embedding_model = %(model)s OR v.chunk_id IS NOT NULL)",
             ),
             params,
         )
@@ -81,6 +88,7 @@ async def hybrid_search(
     text_rows = await (
         await conn.execute(
             _LATEST.format(
+                join="",
                 score="ts_rank(c.tsv, plainto_tsquery('simple', %(q)s))",
                 extra="AND c.tsv @@ plainto_tsquery('simple', %(q)s)",
             ),

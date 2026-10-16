@@ -276,3 +276,40 @@ def test_golden_set_extraction_precision_and_recall() -> None:
     recall = tp / (tp + fn)
     assert precision == pytest.approx(1.0)
     assert recall == pytest.approx(1.0)
+
+
+class TestReembed:
+    """Part 4: existing chunks get a vector of the current model, beside the chunk."""
+
+    def call(self, client, docs, scope=None):
+        return client.post(
+            "/v1/documents/reembed",
+            json={"patientId": PATIENT, "documentIds": docs},
+            headers=headers(scope if scope is not None else make_scope_token(PATIENT, docs)),
+        )
+
+    def test_adds_vectors_for_the_scoped_patient_only(self) -> None:
+        app, db, _ = app_with()
+        db.chunks = [
+            {"id": str(uuid.uuid4()), "document_id": DOCUMENT, "content": f"HbA1c: 6.{i} %"}
+            for i in range(3)
+        ]
+        with TestClient(app) as client:
+            res = self.call(client, [DOCUMENT])
+        assert res.status_code == 200
+        assert res.json() == {"model": "hashing", "updated": 3, "more": False}
+        assert {(pid, model) for _, pid, model in db.vectors} == {(PATIENT, "hashing")}
+        # Chunks are append-only: nothing is updated, and no text is written.
+        assert not [s for s in db.statements if s[1].startswith("UPDATE")]
+
+    def test_scope_is_enforced(self) -> None:
+        app, db, _ = app_with()
+        other_doc = str(uuid.uuid4())
+        with TestClient(app) as client:
+            for scope in (
+                make_scope_token(str(uuid.uuid4()), [DOCUMENT]),
+                make_scope_token(PATIENT, [other_doc]),
+                make_scope_token(PATIENT, [DOCUMENT], purpose="record_question"),
+            ):
+                assert self.call(client, [DOCUMENT], scope=scope).status_code == 403
+        assert db.vectors == []

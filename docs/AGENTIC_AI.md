@@ -158,10 +158,24 @@ Booking for a dependent needs a `manage` guardianship (the appointment service c
 ## Record questions (RAG)
 
 Free-text questions about documents and results are answered by the patient-scoped RAG
-(ADR-0024) for consented treating doctors, with citations and the exact fallback
-"Insufficient information. Please consult the doctor." In the assistant, `ask_records`
-points to Health Records. Answering patients' free-text record questions in the assistant
-would send clinical text to the model; that stays a separate decision under ADR-0008.
+(ADR-0024), with citations and the exact fallback "Insufficient information. Please
+consult the doctor." Consented treating doctors ask on Patient Records; the patient side
+asks about its own records on Health Records and in the assistant (ADR-0039).
+
+In the assistant, an `ask_records` turn works like this:
+
+1. The planner only chooses the intent. It never sees the record.
+2. After that step, the backend sends the person's message to the record-question
+   workflow, with the same access checks as Health Records: the patient's opt-in, all of
+   their available documents, and verified lab values as facts.
+3. The reply carries a `record_answer` card (`source: 'ai_generated'`, cited sentences).
+   The page labels it "AI summary of your documents · with sources" and links to Health
+   Records.
+4. With AI reading off, the reply points to Privacy & Access and nothing is sent. On any
+   other error, the planner's reply (a link to Health Records) stands.
+
+The message is not stored. The turn's audit row has the card count only, and the record
+question's audit row has counts and `side: patient`.
 
 ## Failure states
 

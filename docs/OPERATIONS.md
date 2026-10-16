@@ -216,6 +216,7 @@ path has not been deployed from this repository.
 
 ## 10. Doctor search index (M13.2, ADR-0031)
 
+- **Job:** `records-reembed` (once at worker start, 20 s after it) adds vectors of the current embedding model for opted-in patients' existing document chunks, and logs `document chunks re-embedded` with counts when it added any. `npm run records:reembed -w backend` (or `docker compose exec api node scripts/reembed-records.js`) runs it now (ADR-0039).
 - **Job:** `doctor-search-index` (every 5 minutes, and once at worker start) embeds public doctor-profile text through the AI service. It re-embeds a doctor only when the profile text changes.
 - **Without it:** search keeps working and ranks by text only. `GET /doctors/search` reports `meta.ranking: "lexical"` instead of `"hybrid"`.
 - **Changing the embedding provider:** vectors from different models are not comparable. Run `DELETE FROM doctor_profile_embeddings;` and let the job rebuild the index. It is small: one row per doctor.

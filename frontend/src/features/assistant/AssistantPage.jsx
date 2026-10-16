@@ -30,6 +30,7 @@ import { usePatientChoice } from '../records/usePatientChoice.js';
 import { MODE_LABELS, formatDateTime, formatFee, formatFullDate } from '../appointments/format.js';
 import { whySuggested } from '../care/recommendationText.js';
 import { BookingCard } from './AssistantBooking.jsx';
+import { Sentences } from '../records/AiAssist.jsx';
 
 const QUICK_ACTIONS = [
   [Stethoscope, 'Find a doctor', 'I would like to find a doctor'],
@@ -44,6 +45,7 @@ const LINKS = {
   appointments: ['/app/appointments', 'Open Appointments'],
   records: ['/app/records', 'Open Health Records'],
   prescriptions: ['/app/prescriptions', 'Open Prescriptions'],
+  privacy: ['/app/privacy', 'Open Privacy & Access'],
 };
 
 const SESSION_ENDED = new Set([
@@ -282,6 +284,7 @@ function AssistantReply({ turn, patientId, sessionId, actingFor, onChoose, onSel
   const appointments = reply.cards.filter((c) => c.type === 'appointment');
   const medications = reply.cards.filter((c) => c.type === 'medication');
   const bookings = reply.cards.filter((c) => c.type === 'booking');
+  const answers = reply.cards.filter((c) => c.type === 'record_answer');
   const linkButtons = links.length > 0 && (
     <div className="mt-3 flex flex-wrap gap-2">
       {links.map((c) => (
@@ -359,6 +362,20 @@ function AssistantReply({ turn, patientId, sessionId, actingFor, onChoose, onSel
           <Slots slots={slots} latest={latest} onSelect={onSelect} />
         </div>
       )}
+      {answers.map((c, i) => (
+        <section
+          key={i}
+          aria-label="Answer from your documents"
+          className="mt-3 rounded-xl border border-ai/25 bg-ai-soft/40 p-3"
+        >
+          <p className="mb-2">
+            <Badge tone="ai" icon={Sparkles}>
+              AI summary of your documents · with sources
+            </Badge>
+          </p>
+          <Sentences sentences={c.sentences} />
+        </section>
+      ))}
       {bookings.map((c) => (
         <BookingCard
           key={c.actionId}

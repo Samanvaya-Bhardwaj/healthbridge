@@ -35,6 +35,8 @@ export const MAINTENANCE_JOBS = Object.freeze({
   DOCTOR_SEARCH_INDEX: 'doctor-search-index',
   // Step 9: seals settled ranges of the audit log into the hash chain (ADR-0035).
   AUDIT_SEAL: 'audit-seal',
+  // Part 4: chunks of another embedding model get current vectors (once per start).
+  RECORDS_REEMBED: 'records-reembed',
 });
 
 /**
@@ -154,6 +156,7 @@ export function createJobProcessors(container, queues) {
         [MAINTENANCE_JOBS.ELIGIBILITY_SWEEP]: maintenanceJob,
         [MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX]: maintenanceJob,
         [MAINTENANCE_JOBS.AUDIT_SEAL]: maintenanceJob,
+        [MAINTENANCE_JOBS.RECORDS_REEMBED]: maintenanceJob,
       },
       async handle(job) {
         if (job.name === MAINTENANCE_JOBS.EXPIRE_HOLDS) return settlement.expireHolds();
@@ -164,6 +167,9 @@ export function createJobProcessors(container, queues) {
         }
         if (job.name === MAINTENANCE_JOBS.DOCTOR_SEARCH_INDEX) return doctorSearchIndex.refresh();
         if (job.name === MAINTENANCE_JOBS.AUDIT_SEAL) return auditSealer.sealDue();
+        if (job.name === MAINTENANCE_JOBS.RECORDS_REEMBED) {
+          return intelligenceService.reembedAll();
+        }
         if (job.name === MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING) {
           return {
             consents: await consentService.expireDue(),
@@ -229,6 +235,8 @@ export async function registerSchedules(queues, workers) {
     { every: 300_000 },
     { name: MAINTENANCE_JOBS.AUDIT_SEAL, data: {}, opts: { attempts: 1 } },
   );
+  // Delayed: the AI service may still be starting with the worker.
+  await maintenance.add(MAINTENANCE_JOBS.RECORDS_REEMBED, {}, { attempts: 4, delay: 20_000 });
   await maintenance.upsertJobScheduler(
     MAINTENANCE_JOBS.RECORDS_HOUSEKEEPING,
     { every: 60_000 },

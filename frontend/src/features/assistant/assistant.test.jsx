@@ -388,6 +388,48 @@ describe('HealthBridge Assistant', () => {
     expect(within(done).getByRole('button', { name: /Download .ics/ })).toBeInTheDocument();
   });
 
+  it('answers questions about the documents with sources, labelled as AI (Part 4)', async () => {
+    signedIn({
+      [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: () =>
+        json(200, {
+          data: {
+            session: sessionView(2),
+            reply: {
+              kind: 'answer',
+              message:
+                'From your documents. This is an AI summary with its sources, not medical advice: ask your doctor about anything that worries you.',
+              cards: [
+                {
+                  type: 'record_answer',
+                  source: 'ai_generated',
+                  sentences: [
+                    {
+                      text: 'Your HbA1c fell from 6.4 % to 6.1 %.',
+                      citations: [{ label: 'S1', type: 'document', title: 'HbA1c report' }],
+                    },
+                  ],
+                },
+                { type: 'link', target: 'records' },
+              ],
+            },
+            understood: { intent: 'ask_records', criteria: {} },
+            degraded: false,
+          },
+        }),
+    });
+    open('/app/assistant');
+    const box = await screen.findByLabelText('Your message');
+    await userEvent.type(box, 'how is my HbA1c{Enter}');
+    const answer = await screen.findByRole('region', { name: 'Answer from your documents' });
+    expect(within(answer).getByText(/Your HbA1c fell from 6.4 % to 6.1 %/)).toBeInTheDocument();
+    expect(within(answer).getByText('S1 · HbA1c report')).toBeInTheDocument();
+    expect(within(answer).getByText(/AI summary of your documents/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Health Records' })).toHaveAttribute(
+      'href',
+      '/app/records',
+    );
+  });
+
   it('offers a fresh conversation when the session has ended', async () => {
     signedIn({
       [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: () =>

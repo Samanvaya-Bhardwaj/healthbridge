@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createHarness } from './harness.js';
+import { auditFor, createHarness } from './harness.js';
 import {
   api,
   createPatient,
@@ -23,10 +23,18 @@ let script = () => {
   throw new Error('no script');
 };
 const calls = [];
+let recordAnswer = () => {
+  throw new Error('no record answer');
+};
+const questions = [];
 const ai = {
   async agentStep(input) {
     calls.push(structuredClone(input));
     return script(input);
+  },
+  async askRecord(input) {
+    questions.push(structuredClone(input));
+    return recordAnswer(input);
   },
 };
 
@@ -179,5 +187,62 @@ describe('assistant answers from the record (step 10)', () => {
     const turn = expectOk(await say(other, s, 'my medicines', 1));
     expect(turn.reply.cards.filter((c) => c.type === 'medication')).toEqual([]);
     expect(patient.patient.id).not.toBe(other.patient.id);
+  });
+});
+
+describe('assistant answers questions about the person’s documents (Part 4)', () => {
+  const ASK = classify('ask_records', {
+    kind: 'not_yet',
+    message: 'Your documents are in Health Records.',
+    cards: [{ type: 'link', target: 'records' }],
+  });
+
+  it('answers with sources from the record when AI reading is on; nothing is stored', async () => {
+    const patient = await createPatient(h, 'askrec');
+    expectOk(
+      await api(h, patient).put(`/patients/${patient.patient.id}/ai-processing`, { enabled: true }),
+    );
+    const s = expectOk(await session(patient), 201);
+    script = ASK;
+    recordAnswer = () => ({
+      status: 'answered',
+      answer: 'HbA1c was 6.1 %.',
+      sentences: [{ text: 'HbA1c was 6.1 %.', citations: [] }],
+    });
+    const turn = expectOk(await say(patient, s, 'what was my last HbA1c secretword', 1));
+    expect(turn.reply.kind).toBe('answer');
+    expect(turn.reply.cards[0]).toEqual({
+      type: 'record_answer',
+      source: 'ai_generated',
+      sentences: [{ text: 'HbA1c was 6.1 %.', citations: [] }],
+    });
+    expect(turn.reply.cards[1]).toEqual({ type: 'link', target: 'records' });
+    // The record question gets the person's question; the AI step never the record.
+    expect(questions.at(-1).question).toBe('what was my last HbA1c secretword');
+    expect(JSON.stringify(calls.at(-1))).not.toContain('HbA1c was 6.1');
+    const rows = await auditFor(h.knex, { resource_id: s.id, action: 'assistant.turn' });
+    expect(JSON.stringify(rows)).not.toMatch(/secretword|HbA1c was/);
+    const stored = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+    expect(JSON.stringify(stored)).not.toMatch(/secretword|HbA1c was/);
+  });
+
+  it('points to Privacy & Access when AI reading is off, and degrades quietly on errors', async () => {
+    const patient = await createPatient(h, 'askrec-off');
+    const s = expectOk(await session(patient), 201);
+    script = ASK;
+    const before = questions.length;
+    const off = expectOk(await say(patient, s, 'what did my echo show', 1));
+    expect(off.reply.cards.map((c) => c.target)).toEqual(['privacy', 'records']);
+    expect(questions.length).toBe(before); // never reached the AI service
+
+    expectOk(
+      await api(h, patient).put(`/patients/${patient.patient.id}/ai-processing`, { enabled: true }),
+    );
+    recordAnswer = () => {
+      throw new Error('AI service down');
+    };
+    const down = expectOk(await say(patient, s, 'what did my echo show', off.session.version));
+    expect(down.reply.message).toBe('Your documents are in Health Records.');
+    expect(down.reply.cards.some((c) => c.type === 'record_answer')).toBe(false);
   });
 });

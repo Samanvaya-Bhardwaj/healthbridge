@@ -96,6 +96,7 @@ export function createAssistantService({
   availabilityService,
   appointmentService,
   prescriptionService,
+  assistService,
   logger,
   inputDigester,
   now = () => new Date(),
@@ -512,6 +513,53 @@ export function createAssistantService({
     };
   }
 
+  /**
+   * Part 4: "ask about my records" is answered from the person's own documents and verified
+   * lab values (patient-scoped RAG, with sources), when AI reading of documents is on. The
+   * question goes to the record-question workflow like the doctor's; it is not stored.
+   */
+  async function recordAnswer(principal, patientId, question, req) {
+    if (!assistService) return null;
+    try {
+      const result = await assistService.ask(principal, patientId, { question }, req);
+      if (result.status !== 'answered') {
+        return {
+          kind: 'answer',
+          message:
+            'I couldn’t find that in the documents. They’re all in Health Records; your doctor can help with anything that isn’t there.',
+          cards: [{ type: 'link', target: 'records' }],
+        };
+      }
+      return {
+        kind: 'answer',
+        message:
+          'From your documents. This is an AI summary with its sources, not medical advice: ask your doctor about anything that worries you.',
+        cards: [
+          {
+            type: 'record_answer',
+            source: 'ai_generated',
+            sentences: result.sentences.slice(0, 8),
+          },
+          { type: 'link', target: 'records' },
+        ],
+      };
+    } catch (err) {
+      if (err?.code === 'ai_processing_disabled') {
+        return {
+          kind: 'answer',
+          message:
+            'To answer questions about your documents, turn on AI reading of documents in Privacy & Access first. Your documents are in Health Records.',
+          cards: [
+            { type: 'link', target: 'privacy' },
+            { type: 'link', target: 'records' },
+          ],
+        };
+      }
+      logger?.warn({ errName: err?.name, code: err?.code }, 'assistant record answer unavailable');
+      return null;
+    }
+  }
+
   /** Cards show backend data only; anything the backend did not return is dropped. */
   async function hydrate(reply, tools, patientId, booking = null) {
     const team = reply.cards.some((c) => ['doctor', 'slot', 'booking'].includes(c.type))
@@ -733,6 +781,10 @@ export function createAssistantService({
     });
     if (!failure) {
       hydrated.cards.push(...(await recordCards(next.intent, principal, row.patient_id, req)));
+      if (next.intent === 'ask_records') {
+        const answer = await recordAnswer(principal, row.patient_id, text, req);
+        if (answer) Object.assign(hydrated, answer);
+      }
     }
 
     const saved = await withActor(knex, principal.userId, async (trx) => {

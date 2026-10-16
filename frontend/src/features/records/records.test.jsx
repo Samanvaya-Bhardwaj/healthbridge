@@ -133,6 +133,37 @@ describe('health records', () => {
     expect(calls.some((c) => c.key.includes('/complete'))).toBe(true);
   });
 
+  it('lets the patient ask about their own documents, with sources (Part 4)', async () => {
+    const calls = signedIn(['PATIENT'], {
+      [`GET /api/v1/patients/${PATIENT}/documents`]: () => json(200, { data: [doc()] }),
+      [`GET /api/v1/patients/${PATIENT}/ai-processing`]: () =>
+        json(200, { data: { enabled: true, changedAt: now } }),
+      [`GET /api/v1/patients/${PATIENT}/lab-results`]: () => json(200, { data: [] }),
+      [`POST /api/v1/patients/${PATIENT}/record-questions`]: () =>
+        json(200, {
+          data: {
+            status: 'answered',
+            answer: 'Your WBC was 11.8, slightly high.',
+            source: 'ai_generated',
+            sentences: [
+              {
+                text: 'Your WBC was 11.8, slightly high.',
+                citations: [{ label: 'S1', type: 'document', title: 'Synthetic CBC' }],
+              },
+            ],
+          },
+        }),
+    });
+    renderAt('/app/records');
+    await userEvent.type(await screen.findByLabelText(/Ask about your documents/), 'My WBC?');
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(await screen.findByText(/Your WBC was 11.8/)).toBeInTheDocument();
+    expect(screen.getByText('S1 · Synthetic CBC')).toBeInTheDocument();
+    expect(screen.getByText('AI-generated')).toBeInTheDocument();
+    const asked = calls.find((c) => c.key.endsWith('/record-questions'));
+    expect(JSON.parse(asked.init.body)).toEqual({ question: 'My WBC?' });
+  });
+
   it('rejects unsupported files before uploading', async () => {
     signedIn(['PATIENT'], {
       [`GET /api/v1/patients/${PATIENT}/documents`]: () => json(200, { data: [] }),

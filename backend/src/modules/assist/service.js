@@ -3,6 +3,7 @@ import { isUuid, newId } from '../../core/db/ids.js';
 import { withActor } from '../../core/db/actorContext.js';
 import { ConflictError, NotFoundError } from '../../core/http/errors.js';
 import { domainMetrics } from '../../core/metrics/domain.js';
+import { SELF_RELATIONSHIPS } from '../../core/authz/accessPolicy.js';
 
 export const INSUFFICIENT = 'Insufficient information. Please consult the doctor.';
 const BRIEF_CACHE_MS = 12 * 3_600_000;
@@ -22,11 +23,25 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
   if (typeof inputDigester?.digest !== 'function') {
     throw new Error('assist: an AI input digester is required');
   }
-  async function context(trx, principal, patientId, req) {
+  /**
+   * Part 4: who is asking. The patient (or a guardian) asks about their own records; a
+   * treating doctor needs `ai_assist:use` and a consent, as before.
+   */
+  async function askerSide(trx, principal, patientId) {
+    const own = await accessPolicy.evaluate({
+      principal,
+      permission: PERMISSIONS.MEDICAL_RECORDS_READ,
+      resource: { type: 'patient', id: patientId, patientId },
+      trx,
+    });
+    return own.allowed && SELF_RELATIONSHIPS.has(own.relationship) ? 'patient' : 'doctor';
+  }
+
+  async function context(trx, principal, patientId, req, side = 'doctor') {
     if (!isUuid(patientId)) throw new NotFoundError();
     const decision = await accessPolicy.enforce({
       principal,
-      permission: PERMISSIONS.AI_ASSIST_USE,
+      permission: side === 'patient' ? PERMISSIONS.MEDICAL_RECORDS_READ : PERMISSIONS.AI_ASSIST_USE,
       resource: { type: 'patient', id: patientId, patientId },
       req,
       trx,
@@ -34,11 +49,14 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
     const patient = await trx('patients').where({ id: patientId }).first('ai_document_processing');
     if (!patient?.ai_document_processing) {
       throw new ConflictError(
-        'The patient has not turned on AI reading of their documents.',
+        side === 'patient'
+          ? 'Turn on AI reading of your documents in Privacy & Access first.'
+          : 'The patient has not turned on AI reading of their documents.',
         'ai_processing_disabled',
       );
     }
-    // RLS: only AVAILABLE documents of the types this doctor's consent covers.
+    // RLS: only AVAILABLE documents: of the types a doctor's consent covers, or all of
+    // the patient's own.
     const documents = await trx('medical_documents')
       .where({ patient_id: patientId, status: 'available' })
       .orderBy('available_at', 'desc')
@@ -82,9 +100,12 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
   });
 
   async function ask(principal, patientId, { question }, req) {
-    const ctx = await withActor(knex, principal.userId, (trx) =>
-      context(trx, principal, patientId, req),
-    );
+    if (!isUuid(patientId)) throw new NotFoundError();
+    let side = 'doctor';
+    const ctx = await withActor(knex, principal.userId, async (trx) => {
+      side = await askerSide(trx, principal, patientId);
+      return context(trx, principal, patientId, req, side);
+    });
     if (!aiClient) throw new Error('AI service client not configured');
     const result = await aiClient.askRecord(
       {
@@ -112,6 +133,7 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
           citations: result.sentences.reduce((n, s) => n + s.citations.length, 0),
           documentsInScope: ctx.documentIds.length,
           consentId: ctx.decision.consentId ?? null,
+          side,
         },
       },
       { req },

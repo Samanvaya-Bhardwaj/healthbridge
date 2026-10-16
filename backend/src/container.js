@@ -344,6 +344,8 @@ export function createContainer({
     // Step 10: facts from the record, shown by the backend (never sent to the AI).
     appointmentService,
     prescriptionService,
+    // Part 4: "ask about my records" in the conversation (patient-scoped RAG).
+    assistService,
     logger,
     inputDigester,
     ...(now ? { now } : {}),

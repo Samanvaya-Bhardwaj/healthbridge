@@ -140,6 +140,15 @@ export function createAiClient({
         timeout,
         scope: { patientId: input.patientId, purpose: 'care_assistant' },
       }),
+    /** Part 4: give a patient's existing chunks vectors of the current embedding model. */
+    reembedDocuments: ({ patientId, documentIds }, { requestId } = {}) =>
+      request('/v1/documents/reembed', {
+        method: 'POST',
+        body: { patientId, documentIds },
+        requestId,
+        timeout: 120_000,
+        scope: { patientId, purpose: 'document_analysis', documentIds },
+      }),
     /** Document agent run for one authorised document (content sent, never stored here). */
     analyzeDocument: (input, { requestId } = {}) =>
       request('/v1/documents/analyze', {

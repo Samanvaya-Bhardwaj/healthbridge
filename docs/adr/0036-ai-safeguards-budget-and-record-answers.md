@@ -87,7 +87,8 @@ A review of the AI features found three gaps:
   "AI suggestion" badge.
 - There is no new tool and no write path. The five assistant tools stay as approved.
   Record *questions* (free text about documents and results) stay on the Health Records
-  page.
+  page. *Amended by ADR-0039: the assistant answers them too, through the record-question
+  workflow; the planner still never sees the record.*
 
 ## Consequences
 

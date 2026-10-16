@@ -14,6 +14,7 @@ import { AppError } from '../src/core/http/errors.js';
 import { createScriptRuntime } from './lib/runtime.js';
 import { seedDirectory } from './lib/seedDirectory.js';
 import { seedHistory } from './lib/seedHistory.js';
+import { seedRecords } from './lib/seedRecords.js';
 
 const DEMO_DOMAIN = 'demo.healthbridge.local';
 const email = (local) => `${local}@${DEMO_DOMAIN}`;
@@ -338,6 +339,17 @@ try {
     ids,
     ashaProfile,
     clinic,
+    log,
+  });
+
+  // ── Part 4: a realistic synthetic medical record (documents for RAG) ──
+  await seedRecords({
+    live: container,
+    knex,
+    principalFor,
+    ids,
+    ashaProfile,
+    vikramProfile,
     log,
   });
 

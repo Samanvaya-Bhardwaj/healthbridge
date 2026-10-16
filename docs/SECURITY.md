@@ -315,6 +315,18 @@ Each layer is tested on its own:
 - **Privacy:** question text is never stored, logged or audited; only counts and a hash
   are kept. Briefs are visible to their doctor only while consent lasts.
 - **Rate limit:** 60 AI calls per doctor per hour.
+- **The patient side (ADR-0039):** the patient, or a guardian for a dependent, may ask
+  about the patient's own records, on Health Records or in the assistant. The side is
+  decided per request from the relationship (`patient_self`, `guardian_dependent`).
+  - The patient's opt-in is required. No consent applies to their own documents.
+  - The same scope token, validation and fallback apply. The audit row says
+    `side: patient`.
+  - In the assistant, the planner never sees the record. Only the record-question
+    workflow does, after the planner step.
+- **Embedding-model switch:** vectors of the new model are added beside the append-only
+  chunks (`ai.chunk_vectors`: AI role select/insert only, patient-scoped RLS, composite
+  key to the chunk's patient, no application access). The re-embed call returns counts,
+  never text.
 
 ## Consultations and prescribing (M9, ADR-0025)
 

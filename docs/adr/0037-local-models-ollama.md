@@ -30,6 +30,8 @@ leaves the operator's infrastructure.
   - Each document chunk now records its `embedding_model`, and retrieval compares
     vectors only within the current model. Full-text ranking still covers chunks of any
     model.
+  - Existing chunks get a vector of the new model beside them (`ai.chunk_vectors`,
+    append-only), once per worker start or on demand (ADR-0039).
   - The doctor-search index re-embeds profiles whose stored model differs from the
     current one (`GET /v1/embeddings/model`) and ranks only by vectors of the query's
     model.
