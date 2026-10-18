@@ -57,7 +57,7 @@ function NextStep({ tone = 'primary', icon: Icon, title, children, action }) {
   return (
     <section
       aria-label="What happens next"
-      className={`rounded-2xl border p-5 sm:p-6 ${tones[tone]}`}
+      className={`rounded-card border p-5 sm:p-6 ${tones[tone]}`}
     >
       <div className="flex gap-4">
         <span

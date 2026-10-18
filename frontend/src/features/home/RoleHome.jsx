@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { LifeBuoy } from 'lucide-react';
+import { ArrowUpRight, LifeBuoy } from 'lucide-react';
 import { ROLE_LABELS } from '@healthbridge/shared';
 import { useAuth } from '../auth/authContext.js';
 import { navigationFor, primaryRole } from '../../app/navigation.js';
@@ -24,22 +24,26 @@ function SectionLinks({ user, exclude = [] }) {
           <li key={item.key}>
             <Link
               to={`/app/${item.path}`}
-              className="group flex h-full items-start gap-3 rounded-2xl border border-border bg-surface-raised p-4 transition-colors hover:border-primary/40 focus-visible:outline-offset-4"
+              className="group flex h-full items-start gap-3 rounded-card border border-border bg-surface-raised p-4 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-raised focus-visible:outline-offset-4"
             >
               {Icon && (
                 <span
                   aria-hidden="true"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary"
                 >
                   <Icon className="h-5 w-5" />
                 </span>
               )}
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block font-medium text-text">{item.label}</span>
                 <span className="mt-0.5 block text-sm leading-relaxed text-text-muted">
                   {item.description}
                 </span>
               </span>
+              <ArrowUpRight
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 text-text-subtle transition-colors group-hover:text-primary"
+              />
             </Link>
           </li>
         );

@@ -95,9 +95,9 @@ function GettingStarted({ hasProfile, hasDoctor, hasPendingDoctor }) {
   return (
     <section
       aria-labelledby="start-heading"
-      className="rounded-2xl border border-primary/30 bg-primary-soft p-5 sm:p-6"
+      className="rounded-card border border-accent/30 bg-hero p-5 sm:p-6"
     >
-      <h2 id="start-heading" className="text-lg font-semibold text-text">
+      <h2 id="start-heading" className="text-xl font-medium tracking-[-0.01em] text-text">
         Get ready for your first consultation
       </h2>
       <p className="mt-1 text-sm text-text-muted">Three steps. It takes about five minutes.</p>
@@ -183,16 +183,33 @@ function NextAppointment({ a, now }) {
   return (
     <section
       aria-labelledby="next-heading"
-      className="overflow-hidden rounded-2xl border border-primary/30 bg-surface-raised shadow-card"
+      className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card"
     >
-      <div className="bg-primary px-5 py-4 text-primary-contrast sm:px-6">
-        <h2 id="next-heading" className="text-sm font-medium opacity-90">
+      <div className="relative overflow-hidden bg-band px-5 py-5 text-white sm:px-6">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 120 60"
+          className="absolute -right-4 -top-2 h-28 w-56 text-white/15"
+          fill="none"
+        >
+          <path
+            d="M6 56 C 30 6, 90 6, 114 56"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeDasharray="4 5"
+            strokeLinecap="round"
+          />
+        </svg>
+        <h2
+          id="next-heading"
+          className="relative font-mono text-[0.6875rem] font-medium uppercase tracking-[0.1em] text-white/90"
+        >
           Your next appointment
         </h2>
-        <p className="mt-1 text-2xl font-semibold">
+        <p className="relative mt-2 text-[1.75rem] font-medium leading-tight tracking-[-0.02em]">
           {relativeDay(a.startsAt, now)}, {formatTime(a.startsAt)}
         </p>
-        <p className="text-sm opacity-90">{formatDay(a.startsAt)}</p>
+        <p className="relative text-sm text-white/90">{formatDay(a.startsAt)}</p>
       </div>
       <div className="space-y-4 px-5 py-5 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -223,17 +240,17 @@ function NoAppointment({ doctor, patientId }) {
   return (
     <section
       aria-labelledby="next-heading"
-      className="rounded-2xl border border-dashed border-primary/40 bg-surface-raised p-5 sm:p-6"
+      className="rounded-card border border-dashed border-primary/40 bg-surface-raised p-5 sm:p-6"
     >
       <div className="flex gap-4">
         <span
           aria-hidden="true"
-          className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary sm:flex"
+          className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary sm:flex"
         >
           <CalendarDays className="h-5 w-5" />
         </span>
         <div>
-          <h2 id="next-heading" className="text-lg font-semibold text-text">
+          <h2 id="next-heading" className="text-lg font-medium tracking-[-0.01em] text-text">
             No upcoming appointment
           </h2>
           <p className="mt-1 text-sm text-text-muted">
@@ -270,7 +287,7 @@ function ActionsNeeded({ items, loading }) {
       {loading ? (
         <LoadingState label="Checking for things to do" rows={1} />
       ) : items.length === 0 ? (
-        <p className="flex items-center gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-text-muted">
+        <p className="flex items-center gap-2 rounded-2xl border border-border bg-surface-raised px-4 py-3 text-sm text-text-muted">
           <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-success" />
           You’re all set. Nothing needs your attention right now.
         </p>
@@ -279,13 +296,13 @@ function ActionsNeeded({ items, loading }) {
           {items.map((item) => (
             <li
               key={item.key}
-              className={`flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${
-                item.urgent ? 'border-danger/50 bg-danger/10' : 'border-warning/40 bg-warning/10'
+              className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${
+                item.urgent ? 'border-danger/50 bg-danger/10' : 'border-accent/30 bg-accent-soft'
               }`}
             >
               <item.icon
                 aria-hidden="true"
-                className={`h-5 w-5 shrink-0 ${item.urgent ? 'text-danger' : 'text-warning'}`}
+                className={`h-5 w-5 shrink-0 ${item.urgent ? 'text-danger' : 'text-primary'}`}
               />
               <div className="min-w-0 flex-1 text-sm">
                 <p className="font-medium text-text">{item.title}</p>
@@ -294,7 +311,7 @@ function ActionsNeeded({ items, loading }) {
               {item.href ? (
                 <a
                   href={item.href}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-danger px-4 text-sm font-medium text-white"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-danger px-4 text-sm font-medium text-white"
                 >
                   <Phone aria-hidden="true" className="h-4 w-4" />
                   {item.label}
@@ -664,7 +681,7 @@ export function PatientHome({ firstName }) {
                   <li key={a.id}>
                     <Link
                       to={`/app/appointments/${a.id}`}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 hover:border-primary/40"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-raised"
                     >
                       <span>
                         <span className="block font-medium text-text">
@@ -697,7 +714,7 @@ export function PatientHome({ firstName }) {
         </>
       )}
 
-      <p className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+      <p className="flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
         <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
         <span>
           <span className="font-medium">In a medical emergency</span>, call 112 or 108, or go to the

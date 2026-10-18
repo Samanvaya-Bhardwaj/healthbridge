@@ -26,7 +26,7 @@ export function NotificationBell() {
   return (
     <Link
       to="/app/notifications"
-      className="relative inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
+      className="relative inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
     >
       <Bell aria-hidden="true" className="h-5 w-5" />
       <span className="sr-only lg:not-sr-only">Notifications</span>{' '}

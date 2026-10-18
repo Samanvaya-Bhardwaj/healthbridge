@@ -147,7 +147,7 @@ export function ClinicOverview({ clinicId, firstName }) {
               </EmptyState>
             )}
             {all.length > 0 && (
-              <ul className="divide-y divide-border rounded-2xl border border-border bg-surface-raised">
+              <ul className="divide-y divide-border rounded-card border border-border bg-surface-raised">
                 {all.map((a) => (
                   <ClinicVisitRow key={a.id} a={a} now={now} />
                 ))}

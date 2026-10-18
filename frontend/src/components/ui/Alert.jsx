@@ -27,7 +27,7 @@ export function Alert({ tone = 'info', title, children, action, className = '' }
   return (
     <div
       role={tone === 'error' || tone === 'danger' ? 'alert' : 'status'}
-      className={`flex gap-3 rounded-xl border px-4 py-3 text-sm text-text ${t.box} ${className}`}
+      className={`flex gap-3 rounded-2xl border px-4 py-3 text-sm text-text ${t.box} ${className}`}
     >
       <Icon aria-hidden="true" className={`mt-0.5 h-4 w-4 shrink-0 ${t.iconClass}`} />
       <div className="min-w-0 flex-1">

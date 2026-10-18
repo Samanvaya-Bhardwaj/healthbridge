@@ -47,6 +47,7 @@ test.describe('accessibility (WCAG 2.1 AA, automated)', () => {
 
   test('public pages @mobile', async ({ page }) => {
     await scanAll(page, [
+      ['landing', '/'],
       ['sign in', '/login'],
       ['register', '/register'],
       ['forgot password', '/forgot-password'],

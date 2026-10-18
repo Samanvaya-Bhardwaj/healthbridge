@@ -12,10 +12,10 @@ import { Logo } from '../../components/ui/Logo.jsx';
 import { useRouteFocus } from '../useRouteFocus.js';
 
 const linkClass = ({ isActive }) =>
-  `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${
+  `group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${
     isActive
-      ? 'bg-surface-raised font-semibold text-primary shadow-card ring-1 ring-border'
-      : 'font-medium text-text-muted hover:bg-surface-raised/70 hover:text-text'
+      ? 'bg-primary-soft font-semibold text-primary'
+      : 'font-medium text-text-muted hover:bg-surface-raised hover:text-text'
   }`;
 
 /** Navigation grouped under the role's plain-language headings. */
@@ -36,7 +36,7 @@ function NavList({ items, onNavigate, idPrefix }) {
             {group.name && (
               <p
                 id={headingId}
-                className="px-3 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-text-subtle"
+                className="px-3 pb-1.5 font-mono text-[0.6875rem] font-medium uppercase tracking-[0.1em] text-text-subtle"
               >
                 {group.name}
               </p>
@@ -98,14 +98,18 @@ function MobileMenu({ open, onClose, items, user, role, onSignOut, signingOut })
   };
   return createPortal(
     <div className="fixed inset-0 z-50 md:hidden">
-      <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-[rgb(15_34_54/0.45)] backdrop-blur-[2px]"
+        aria-hidden="true"
+        onClick={onClose}
+      />
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label="Menu"
         onKeyDown={onKeyDown}
-        className="absolute inset-y-0 left-0 flex w-80 max-w-[85vw] flex-col overflow-y-auto bg-surface-raised px-4 py-4 shadow-overlay"
+        className="absolute inset-y-0 left-0 flex w-80 max-w-[85vw] flex-col overflow-y-auto rounded-r-3xl bg-surface-raised px-4 py-4 shadow-overlay"
       >
         <div className="mb-4 flex items-center justify-between">
           <span className="flex items-center gap-3">
@@ -118,7 +122,7 @@ function MobileMenu({ open, onClose, items, user, role, onSignOut, signingOut })
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-muted hover:bg-surface-muted"
             aria-label="Close menu"
           >
             <X aria-hidden="true" className="h-5 w-5" />
@@ -131,7 +135,7 @@ function MobileMenu({ open, onClose, items, user, role, onSignOut, signingOut })
           type="button"
           onClick={onSignOut}
           disabled={signingOut}
-          className="mt-6 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
+          className="mt-6 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text"
         >
           <LogOut aria-hidden="true" className="h-5 w-5" />
           {signingOut ? 'Signing out…' : 'Sign out'}
@@ -172,13 +176,13 @@ export function AppLayout() {
         Skip to content
       </a>
       <DemoBanner />
-      <header className="border-b border-border bg-surface-raised">
+      <header className="sticky top-0 z-40 border-b border-border bg-surface-raised/85 backdrop-blur-md supports-[not(backdrop-filter:blur(0))]:bg-surface-raised">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted md:hidden"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-muted hover:bg-surface-muted md:hidden"
               aria-label="Open menu"
               aria-expanded={menuOpen}
             >
@@ -190,18 +194,18 @@ export function AppLayout() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <NotificationBell />
-            <div className="hidden items-center gap-3 sm:flex">
+            <div className="hidden items-center gap-2.5 rounded-full border border-border bg-surface-raised py-1 pl-1 pr-4 sm:flex">
               <Avatar name={user.fullName} size="sm" />
-              <div className="text-right">
-                <p className="text-sm font-medium text-text">{user.fullName}</p>
-                <p className="text-xs text-text-subtle">{ROLE_LABELS[role]}</p>
+              <div>
+                <p className="text-sm font-medium leading-tight text-text">{user.fullName}</p>
+                <p className="text-xs leading-tight text-text-subtle">{ROLE_LABELS[role]}</p>
               </div>
             </div>
             <button
               type="button"
               onClick={handleSignOut}
               disabled={signingOut}
-              className="hidden min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-muted hover:bg-surface-muted hover:text-text md:inline-flex"
+              className="hidden min-h-11 items-center gap-2 rounded-full border border-border-strong px-4 text-sm font-medium text-text-muted transition-colors hover:border-primary/50 hover:bg-primary-soft/60 hover:text-text md:inline-flex"
             >
               <LogOut aria-hidden="true" className="h-4 w-4" />
               {signingOut ? 'Signing out…' : 'Sign out'}
@@ -221,7 +225,10 @@ export function AppLayout() {
       />
 
       <div className="mx-auto flex w-full max-w-7xl flex-1">
-        <nav aria-label="Main" className="hidden w-64 shrink-0 px-3 py-8 md:block">
+        <nav
+          aria-label="Main"
+          className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-64 shrink-0 self-start overflow-y-auto px-3 py-8 md:block"
+        >
           <NavList items={items} idPrefix="nav" />
         </nav>
         <main

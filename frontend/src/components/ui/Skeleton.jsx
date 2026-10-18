@@ -3,7 +3,7 @@ export function Skeleton({ className = '' }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-block animate-pulse rounded-md bg-surface-muted ${className}`}
+      className={`inline-block animate-pulse rounded-lg bg-surface-muted ${className}`}
     />
   );
 }

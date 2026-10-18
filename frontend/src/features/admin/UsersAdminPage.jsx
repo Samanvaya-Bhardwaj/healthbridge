@@ -379,7 +379,7 @@ export function UsersAdminPage() {
           role="region"
           aria-label="Users table"
           tabIndex={0}
-          className="relative overflow-x-auto rounded-2xl border border-border bg-surface-raised"
+          className="relative overflow-x-auto rounded-card border border-border bg-surface-raised"
         >
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Users</caption>

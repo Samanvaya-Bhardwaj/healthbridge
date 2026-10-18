@@ -7,24 +7,36 @@
  *   HelperText     secondary explanation under a control or block.
  *   ErrorText      inline error, announced to assistive technology.
  *
- * Sizes: page title 1.5rem semibold, section 1rem semibold, body 1rem, secondary 0.875rem.
+ * Sizes: page title 2rem medium (tight), section 1.125rem medium, body 1rem, secondary
+ * 0.875rem. Eyebrows and labels use the mono voice: small, uppercase, spaced.
  */
+
+/** A small mono label, with the sky dot of "where you are". */
+export function Eyebrow({ icon: Icon, children, className = '' }) {
+  return (
+    <p
+      className={`flex items-center gap-2 font-mono text-[0.6875rem] font-medium uppercase tracking-[0.1em] text-primary ${className}`}
+    >
+      {Icon ? (
+        <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+      ) : (
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
+      )}
+      {children}
+    </p>
+  );
+}
 
 export function PageHeader({ icon: Icon, eyebrow, title, description, actions, children }) {
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-primary">
-            {Icon && <Icon aria-hidden="true" className="h-3.5 w-3.5" />}
-            {eyebrow}
-          </p>
-        )}
-        <h1 className="mt-1.5 text-[1.75rem] font-semibold leading-tight tracking-tight text-text">
+        {eyebrow && <Eyebrow icon={Icon}>{eyebrow}</Eyebrow>}
+        <h1 className="mt-2 text-[1.875rem] font-medium leading-[1.15] tracking-[-0.02em] text-text sm:text-[2.125rem]">
           {title}
         </h1>
         {description && (
-          <p className="mt-2 max-w-2xl leading-relaxed text-text-muted">{description}</p>
+          <p className="mt-2.5 max-w-2xl leading-relaxed text-text-muted">{description}</p>
         )}
         {children}
       </div>
@@ -47,9 +59,16 @@ export function SectionHeader({
       <div className="min-w-0">
         <Heading
           id={id}
-          className="flex items-center gap-2 text-[1.0625rem] font-semibold text-text"
+          className="flex items-center gap-2.5 text-[1.125rem] font-medium tracking-[-0.01em] text-text"
         >
-          {Icon && <Icon aria-hidden="true" className="h-4 w-4 text-primary" />}
+          {Icon && (
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+          )}
           {title}
         </Heading>
         {description && <p className="mt-1 text-sm text-text-muted">{description}</p>}

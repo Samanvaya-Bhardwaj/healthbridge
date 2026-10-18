@@ -22,7 +22,7 @@ function Work({ icon: Icon, label, value, to, tone = 'primary', hint }) {
   return (
     <Link
       to={to}
-      className="flex items-start gap-3 rounded-2xl border border-border bg-surface-raised p-4 hover:border-primary/40"
+      className="flex items-start gap-3 rounded-card border border-border bg-surface-raised p-4 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-raised"
     >
       <span
         aria-hidden="true"
@@ -37,7 +37,9 @@ function Work({ icon: Icon, label, value, to, tone = 'primary', hint }) {
         <Icon className="h-5 w-5" />
       </span>
       <span className="min-w-0">
-        <span className="block text-2xl font-semibold tabular-nums text-text">{value}</span>
+        <span className="block text-[1.75rem] font-medium leading-tight tracking-[-0.02em] tabular-nums text-text">
+          {value}
+        </span>
         <span className="block text-sm text-text">{label}</span>
         {hint && <span className="mt-0.5 block text-xs text-text-muted">{hint}</span>}
       </span>
@@ -50,7 +52,7 @@ function Shortcut({ icon: Icon, to, title, text }) {
   return (
     <Link
       to={to}
-      className="flex items-start gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 hover:border-primary/40"
+      className="flex items-start gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-raised"
     >
       <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
       <span>

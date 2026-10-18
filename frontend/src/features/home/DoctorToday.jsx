@@ -305,11 +305,11 @@ export function DoctorToday({ firstName }) {
           {next && (
             <section
               aria-labelledby="next-heading"
-              className="rounded-2xl border-2 border-primary/40 bg-surface-raised p-5"
+              className="rounded-card border border-accent/30 bg-hero p-5 shadow-card"
             >
               <h2
                 id="next-heading"
-                className="mb-3 text-xs font-semibold uppercase tracking-wide text-primary"
+                className="mb-3 flex items-center gap-2 font-mono text-[0.6875rem] font-medium uppercase tracking-[0.1em] text-primary"
               >
                 {next.status === 'in_consultation' ? 'In progress' : 'Next up'}
               </h2>
@@ -321,7 +321,7 @@ export function DoctorToday({ firstName }) {
           {rest.length > 0 && (
             <section aria-labelledby="day-heading" className="space-y-3">
               <SectionHeader id="day-heading" icon={CalendarDays} title="Today’s consultations" />
-              <ul className="divide-y divide-border rounded-2xl border border-border bg-surface-raised">
+              <ul className="divide-y divide-border rounded-card border border-border bg-surface-raised">
                 {rest.map((a) => (
                   <Visit key={a.id} a={a} consent={shared.byPatient.get(a.patientId)} now={now} />
                 ))}

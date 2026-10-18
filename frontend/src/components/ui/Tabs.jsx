@@ -24,7 +24,7 @@ export function Tabs({ tabs, value, onChange, label }) {
     <div
       role="tablist"
       aria-label={label}
-      className="relative flex gap-1 overflow-x-auto border-b border-border"
+      className="relative inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-surface-muted p-1"
     >
       {tabs.map(([key, text, Icon], index) => {
         const selected = value === key;
@@ -40,10 +40,10 @@ export function Tabs({ tabs, value, onChange, label }) {
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(key)}
             onKeyDown={(e) => onKeyDown(e, index)}
-            className={`-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors ${
+            className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition-[background-color,color,box-shadow] ${
               selected
-                ? 'border-primary text-primary'
-                : 'border-transparent text-text-muted hover:text-text'
+                ? 'bg-surface-raised text-primary shadow-card ring-1 ring-border'
+                : 'text-text-muted hover:bg-surface-raised/60 hover:text-text'
             }`}
           >
             {Icon && <Icon aria-hidden="true" className="h-4 w-4" />}

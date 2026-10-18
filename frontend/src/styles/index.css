@@ -1,68 +1,88 @@
 @import 'tailwindcss';
 
 /*
- * HealthBridge visual identity.
+ * HealthBridge visual identity: sky and white (docs/VISUAL_IDENTITY.md).
  *
- * Calm, trustworthy, clinical but human. Warm "paper" surfaces instead of cold slate,
- * a deep sea-glass teal for care and action, a clay accent reserved for things that
- * need attention, and a separate muted indigo used only for AI assistance, so AI reads
- * as an assistant layer rather than the product. Borders do the structuring; shadows
- * are almost absent. Every text pairing meets WCAG AA in both themes.
+ * Clear, calm and clinical but human. White cards on a cool white page, a deep sky blue
+ * for care and action, bright sky only as an accent (soft areas, gradients, the mark),
+ * navy ink for text, and a separate quiet indigo used only for AI assistance, so AI reads
+ * as an assistant layer rather than the product. Soft rounded shapes and light shadows;
+ * borders still do most of the structuring. Every text pairing meets WCAG AA in both
+ * themes (each state colour also on its own tint).
  */
 
 :root {
-  /* Surfaces: warm paper page, white cards. */
-  --hb-surface: #f8f6f1;
-  --hb-surface-muted: #f1eee6;
+  /* Surfaces: a cool white page, white cards, a quiet sky-grey for areas inside them. */
+  --hb-surface: #f5f9fd;
+  --hb-surface-muted: #edf3f9;
   --hb-surface-raised: #ffffff;
-  --hb-border: #e4dfd3;
-  /* Ink: deep green-black text with warm greys. */
-  --hb-text: #15302b;
-  --hb-text-muted: #4a5d57;
-  --hb-text-subtle: #5f706a;
-  /* Care: the HealthBridge teal. */
-  --hb-primary: #146c63;
-  --hb-primary-hover: #0e554e;
-  --hb-primary-soft: #e6f2ee;
+  --hb-border: #dce6f0;
+  --hb-border-strong: #c3d3e3;
+  /* Ink: navy text with cool greys. */
+  --hb-text: #0f2236;
+  --hb-text-muted: #43566b;
+  --hb-text-subtle: #566a7e;
+  /* Care and action: deep sky (white text on it is 5.9:1). */
+  --hb-primary: #0369a1;
+  --hb-primary-hover: #075985;
+  --hb-primary-soft: #e3f2fd;
   --hb-primary-contrast: #ffffff;
-  --hb-focus: #1b8a7e;
+  --hb-primary-ring: rgb(14 165 233 / 0.22);
+  --hb-focus: #0284c7;
+  /* Bright sky: accents only (soft fills, gradients, the mark), never text. */
+  --hb-accent: #0ea5e9;
+  --hb-accent-soft: #e0f2fe;
   /* Semantic states. */
-  --hb-success: #236841;
-  --hb-warning: #82520a;
-  --hb-attention: #974522;
-  --hb-danger: #a63229;
-  --hb-info: #2e6491;
+  --hb-success: #18663a;
+  --hb-warning: #7a4900;
+  --hb-attention: #923b16;
+  --hb-danger: #a31f15;
+  --hb-info: #375783;
   /* AI assistance: deliberately not the brand colour. */
-  --hb-ai: #5a55a6;
-  --hb-ai-soft: #efeefa;
-  --hb-shadow-card: 0 1px 0 rgb(21 48 43 / 0.03);
-  --hb-shadow-overlay: 0 16px 40px rgb(21 48 43 / 0.18);
+  --hb-ai: #5a4fb5;
+  --hb-ai-soft: #efedfb;
+  --hb-shadow-card: 0 1px 2px rgb(15 34 54 / 0.04), 0 6px 20px -12px rgb(15 34 54 / 0.12);
+  --hb-shadow-raised: 0 2px 4px rgb(15 34 54 / 0.04), 0 16px 32px -16px rgb(3 105 161 / 0.22);
+  --hb-shadow-overlay: 0 24px 56px -12px rgb(15 34 54 / 0.28);
+  --hb-hero:
+    radial-gradient(120% 90% at 100% 0%, #bae6fd 0%, rgb(186 230 253 / 0) 55%),
+    linear-gradient(180deg, #e0f2fe 0%, #f5f9fd 100%);
+  --hb-band: linear-gradient(135deg, #0369a1 0%, #075985 60%, #0c4a6e 100%);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --hb-surface: #0e1614;
-    --hb-surface-muted: #16211e;
-    --hb-surface-raised: #131d1a;
-    --hb-border: #2a3834;
-    --hb-text: #e6eeeb;
-    --hb-text-muted: #aebcb7;
-    --hb-text-subtle: #91a39d;
-    --hb-primary: #5cc6b4;
-    --hb-primary-hover: #84d8ca;
-    --hb-primary-soft: #16302b;
-    --hb-primary-contrast: #06231f;
-    --hb-focus: #84d8ca;
-    --hb-success: #72d29c;
-    --hb-warning: #e7b65c;
-    --hb-attention: #ef9b74;
-    --hb-danger: #f28b82;
-    --hb-info: #8ec1ea;
-    --hb-ai: #aea9f2;
-    --hb-ai-soft: #22213a;
+    --hb-surface: #0b1622;
+    --hb-surface-muted: #132536;
+    --hb-surface-raised: #0f1d2c;
+    --hb-border: #22374b;
+    --hb-border-strong: #31506b;
+    --hb-text: #e8f1f8;
+    --hb-text-muted: #aabdcf;
+    --hb-text-subtle: #8fa5b9;
+    --hb-primary: #5ec4f5;
+    --hb-primary-hover: #8dd6f8;
+    --hb-primary-soft: #0f2d45;
+    --hb-primary-contrast: #04223a;
+    --hb-primary-ring: rgb(94 196 245 / 0.25);
+    --hb-focus: #7dd3fc;
+    --hb-accent: #38bdf8;
+    --hb-accent-soft: #0f2d45;
+    --hb-success: #6fd39b;
+    --hb-warning: #e9b65c;
+    --hb-attention: #f0a07a;
+    --hb-danger: #f4908a;
+    --hb-info: #9cc3ea;
+    --hb-ai: #b3abf5;
+    --hb-ai-soft: #221f3d;
     --hb-shadow-card: 0 1px 0 rgb(0 0 0 / 0.3);
-    --hb-shadow-overlay: 0 16px 40px rgb(0 0 0 / 0.55);
+    --hb-shadow-raised: 0 16px 32px -16px rgb(0 0 0 / 0.6);
+    --hb-shadow-overlay: 0 24px 56px -12px rgb(0 0 0 / 0.65);
+    --hb-hero:
+      radial-gradient(120% 90% at 100% 0%, rgb(56 189 248 / 0.18) 0%, rgb(56 189 248 / 0) 55%),
+      linear-gradient(180deg, #0f2d45 0%, #0b1622 100%);
+    --hb-band: linear-gradient(135deg, #0c4a6e 0%, #0b3954 60%, #0b2a3f 100%);
     color-scheme: dark;
   }
 }
@@ -71,11 +91,14 @@
   --font-sans:
     'Figtree Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
+  /* Labels, eyebrows and figures: a quiet technical voice (system monospace). */
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 
   --color-surface: var(--hb-surface);
   --color-surface-muted: var(--hb-surface-muted);
   --color-surface-raised: var(--hb-surface-raised);
   --color-border: var(--hb-border);
+  --color-border-strong: var(--hb-border-strong);
   --color-text: var(--hb-text);
   --color-text-muted: var(--hb-text-muted);
   --color-text-subtle: var(--hb-text-subtle);
@@ -84,6 +107,8 @@
   --color-primary-soft: var(--hb-primary-soft);
   --color-primary-contrast: var(--hb-primary-contrast);
   --color-focus: var(--hb-focus);
+  --color-accent: var(--hb-accent);
+  --color-accent-soft: var(--hb-accent-soft);
   --color-success: var(--hb-success);
   --color-warning: var(--hb-warning);
   --color-attention: var(--hb-attention);
@@ -92,9 +117,20 @@
   --color-ai: var(--hb-ai);
   --color-ai-soft: var(--hb-ai-soft);
 
-  /* Shape: controls xl (0.75rem), cards 2xl (1rem), buttons and badges full. */
+  /* Shape: controls xl (0.75rem), cards `rounded-card` (1.25rem), panels 3xl, buttons
+     and badges full. */
+  --radius-card: 1.25rem;
   --shadow-card: var(--hb-shadow-card);
+  --shadow-raised: var(--hb-shadow-raised);
   --shadow-overlay: var(--hb-shadow-overlay);
+}
+
+@utility bg-hero {
+  background: var(--hb-hero);
+}
+
+@utility bg-band {
+  background: var(--hb-band);
 }
 
 @layer base {
@@ -119,7 +155,7 @@
     outline: none;
   }
   ::selection {
-    background: var(--hb-primary-soft);
+    background: var(--hb-accent-soft);
   }
   @media (prefers-reduced-motion: reduce) {
     *,

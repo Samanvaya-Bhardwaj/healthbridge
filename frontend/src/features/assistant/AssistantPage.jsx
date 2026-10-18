@@ -314,7 +314,7 @@ function AssistantReply({ turn, patientId, sessionId, actingFor, onChoose, onSel
     );
   }
   return (
-    <div className="rounded-2xl border border-ai/25 bg-surface-raised p-4">
+    <div className="rounded-card border border-ai/25 bg-surface-raised p-4">
       <p className="mb-2">
         {reply.kind === 'clarify' || reply.kind === 'confirm' ? (
           <Badge tone="ai" icon={HelpCircle}>

@@ -55,7 +55,7 @@ export function Dialog({ open, title, description, onClose, children, footer, to
   // Rendered outside #root (document.body) so the inert page does not include it.
   return (
     <DialogPortal>
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(15_34_54/0.45)] p-4 backdrop-blur-[2px] sm:items-center">
         <div
           ref={panel}
           role="dialog"
@@ -63,14 +63,14 @@ export function Dialog({ open, title, description, onClose, children, footer, to
           aria-labelledby={titleId}
           aria-describedby={description ? descId : undefined}
           onKeyDown={onKeyDown}
-          className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface-raised p-6 shadow-overlay"
+          className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border bg-surface-raised p-6 shadow-overlay"
         >
           <div className="flex gap-3">
             {tone === 'warning' && (
               <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
             )}
             <div className="min-w-0">
-              <h2 id={titleId} className="text-lg font-semibold text-text">
+              <h2 id={titleId} className="text-lg font-medium tracking-[-0.01em] text-text">
                 {title}
               </h2>
               {description && (
