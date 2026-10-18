@@ -140,6 +140,24 @@ export function createAiClient({
         timeout,
         scope: { patientId: input.patientId, purpose: 'care_assistant' },
       }),
+    /**
+     * ADR-0040: general information from the health library for a described concern. The
+     * summary gets a deadline that grows with the timeout scale; past it, the article's
+     * lists come back alone.
+     */
+    healthInfo: ({ patientId, message, inputDigest }, { requestId } = {}) =>
+      request('/v1/health-info/answer', {
+        method: 'POST',
+        body: {
+          patientId,
+          message,
+          inputDigest,
+          summaryTimeoutSeconds: Math.min(240, 6 * timeoutScale),
+        },
+        requestId,
+        timeout: 10_000,
+        scope: { patientId, purpose: 'care_assistant' },
+      }),
     /** Part 4: give a patient's existing chunks vectors of the current embedding model. */
     reembedDocuments: ({ patientId, documentIds }, { requestId } = {}) =>
       request('/v1/documents/reembed', {

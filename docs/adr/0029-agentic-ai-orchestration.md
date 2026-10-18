@@ -2,6 +2,7 @@
 
 - **Status:** Accepted (M13.1 implemented; M13.2–M13.7 build on it)
 - **Date:** 2026-10-09
+- **Refined by:** ADR-0040 (general health information from a reviewed library; still no diagnosis, prescribing or urgency judgement by the model)
 - **Builds on:**
   - ADR-0001: modular monolith with a private AI service;
   - ADR-0004: AI proposes, the backend validates and commits;

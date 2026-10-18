@@ -571,3 +571,9 @@ The index `audit_logs_seal_order_idx (occurred_at, id)` serves sealing and verif
 |---|---|
 | `ai.document_chunks.embedding_model` | The model that embedded the chunk (`hashing` for chunks made before ADR-0037) |
 | `ai.chunk_vectors` | A vector of another embedding model for an existing chunk: `chunk_id`, `patient_id`, `model`, `embedding` (1024), primary key `(chunk_id, model)`, foreign key `(chunk_id, patient_id)` to the chunk (`chunks_id_patient_key`). Append-only: the AI role may select and insert under patient-scope RLS; the application role has no access. |
+
+## General health information (ADR-0040)
+
+`20261023000000_health_info_digest` adds `health_info` to the free-text workflows of
+`ai_runs_free_text_digest_keyed`: its runs may keep only a keyed digest of the message.
+The health library itself is not in the database; it is versioned with the AI service.

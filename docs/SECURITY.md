@@ -328,6 +328,20 @@ Each layer is tested on its own:
   key to the chunk's patient, no application access). The re-embed call returns counts,
   never text.
 
+## General health information (ADR-0040)
+
+- **Source:** a versioned health library in the AI service, not the model's knowledge.
+  Code picks the article by the message's words; the model only summarises it.
+- **Validation:** each summary sentence must cite passages it was given and use mostly
+  their words. It may not diagnose, name a medicine or dose, judge seriousness or urgency,
+  or repeat a detail from the message that the article doesn't contain. Warning signs are
+  never given to the model; they are shown word for word.
+- **Privacy:** the message travels with the backend's keyed digest and is not stored; the
+  run keeps the digest only (`health_info` is a free-text workflow under the database
+  constraint). Logs and audit rows have counts only, not the topic.
+- **Production:** only articles marked `review: approved` with a reviewer and date are
+  served. All current articles are drafts.
+
 ## Consultations and prescribing (M9, ADR-0025)
 
 - **Who writes:**

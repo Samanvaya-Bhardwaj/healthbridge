@@ -276,6 +276,12 @@ Internal (AI service): `POST /v1/documents/analyze` (service token + `X-Patient-
 | POST | `/appointments/:id/brief` | `ai_assist:use`, own appointment | `{ refresh? }` returns `{ id, status, sections[{ heading, sentences }], message, feedback }` (12 h cache) |
 | POST | `/briefs/:id/feedback` | brief's doctor | `{ rating: helpful \| not_helpful, issue? }` |
 
+Internal (AI service): `POST /v1/health-info/answer` `{ patientId, message, inputDigest,
+summaryTimeoutSeconds? }` (purpose `care_assistant`) returns `{ matched: false }` or
+`{ matched: true, status, article: { id, title, overview, linkedWith, mayHelp, seeDoctorIf,
+urgentIf, review }, summary[{ text, citations[{ label, section }] }] }` (ADR-0040).
+The assistant shows it as a `health_info` card.
+
 Internal (AI service): `POST /v1/assist/answer` and `POST /v1/assist/brief`, each with a
 service token and `X-Patient-Scope`. `POST /v1/documents/reembed` `{ patientId,
 documentIds }` (purpose `document_analysis`) adds vectors of the current embedding model

@@ -23,6 +23,8 @@ export const AI_INPUT_DIGEST_PURPOSES = Object.freeze([
   'care_assistant_message',
   'record_question',
   'follow_up_summary',
+  // ADR-0040: a message the health library answers.
+  'health_info_message',
 ]);
 
 /** @param {{ currentKeyId: string, keys: Map<string, Buffer> }} config */

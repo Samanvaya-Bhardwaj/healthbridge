@@ -19,7 +19,8 @@ No `v*` tag exists yet: the repository has never been deployed.
 | 4 | **Where to run** | The single-host stack has been rehearsed (OPERATIONS.md §8). The AWS manifests are rendered and tested but have never been deployed. | Single host, or the AWS resources in OPERATIONS.md §3. |
 | 5 | **Mail, domain, off-site backups** | Compose requires the SMTP relay. Without an off-site remote, backups stay on the host. | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, the domain and ACME email, `BACKUP_REMOTE`, and an age key pair (private key kept offline). |
 | 6 | **Real patient data** | Everything so far is synthetic. | A penetration test and the external review named in ADR-0008 (SECURITY_REVIEW.md, residual risks). |
-| 7 | **The release itself** | Tags deploy. | The owner chooses the version and pushes the `v*` tag, or runs the CD workflow manually. |
+| 7 | **Health library review** (ADR-0040) | Production serves only clinically approved articles; all are drafts, so the assistant gives no general health information there. Nothing else depends on it. | A doctor reviews each article in `ai-service/app/health/articles`, then sets `review: approved`, `reviewed_by` and `reviewed_on`. |
+| 8 | **The release itself** | Tags deploy. | The owner chooses the version and pushes the `v*` tag, or runs the CD workflow manually. |
 
 ## 2. Before every release (operator checklist)
 
@@ -58,7 +59,7 @@ No `v*` tag exists yet: the repository has never been deployed.
 
 ## 3. Migrations in the first release
 
-All 21 migrations run in order on an empty database. The ones added since the M12
+All 25 migrations run in order on an empty database. The ones added since the M12
 deployment work:
 
 | Migration | Effect | Note |
@@ -69,6 +70,10 @@ deployment work:
 | `20261017000000_notification_preferences` | Per-category email and SMS choices | — |
 | `20261018000000_audit_seals` | Tamper-evident audit chain; index on `audit_logs (occurred_at, id)` | The index is built in the migration's transaction. That is instant on a new database; on a large existing log, run it in a quiet window. The first seals cover history in pieces. |
 | `20261019000000_ai_spend_total` | `ai.spend_since()` for the daily ceiling | — |
+| `20261020000000_chunk_embedding_model` | Each chunk records its embedding model | — |
+| `20261021000000_assistant_booking` | Doctors who accept new patients, assistant booking proposals | — |
+| `20261022000000_chunk_vectors` | Vectors of a new embedding model beside the chunks | The worker fills them at start |
+| `20261023000000_health_info_digest` | Keyed digests for health-information runs | — |
 
 Every migration has a tested `down`, but in production they are forward-only; rolling
 back the schema is a restore decision (OPERATIONS.md §2).

@@ -493,7 +493,12 @@ describe('M13.1 pre-merge hardening', () => {
       input_hash: createHash('sha256').update('free text').digest('hex'),
       ...extra,
     });
-    for (const workflow of ['care_assistant', 'record_question', 'follow_up_summary']) {
+    for (const workflow of [
+      'care_assistant',
+      'record_question',
+      'follow_up_summary',
+      'health_info',
+    ]) {
       await expect(h.ownerKnex('ai.ai_runs').insert(run(workflow))).rejects.toThrow(
         /ai_runs_free_text_digest_keyed/,
       );

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createInputDigester } from '../../src/core/crypto/inputDigest.js';
 import { auditFor, createHarness } from './harness.js';
 import {
   api,
@@ -27,6 +28,8 @@ let recordAnswer = () => {
   throw new Error('no record answer');
 };
 const questions = [];
+let healthAnswer = () => ({ matched: false });
+const healthCalls = [];
 const ai = {
   async agentStep(input) {
     calls.push(structuredClone(input));
@@ -35,6 +38,10 @@ const ai = {
   async askRecord(input) {
     questions.push(structuredClone(input));
     return recordAnswer(input);
+  },
+  async healthInfo(input) {
+    healthCalls.push(structuredClone(input));
+    return healthAnswer(input);
   },
 };
 
@@ -244,5 +251,100 @@ describe('assistant answers questions about the person’s documents (Part 4)', 
     const down = expectOk(await say(patient, s, 'what did my echo show', off.session.version));
     expect(down.reply.message).toBe('Your documents are in Health Records.');
     expect(down.reply.cards.some((c) => c.type === 'record_answer')).toBe(false);
+  });
+});
+
+describe('general health information for a described concern (ADR-0040)', () => {
+  const ARTICLE = {
+    id: 'acidity',
+    title: 'Acidity and heartburn',
+    overview: 'Acidity, or heartburn, is a burning feeling in the chest or upper stomach.',
+    linkedWith: ['Large meals, or eating late at night'],
+    mayHelp: ['Eat smaller meals more often, and don’t skip meals'],
+    seeDoctorIf: ['Remedies from a pharmacy haven’t helped'],
+    urgentIf: ['You vomit blood, or vomit that looks like coffee grounds'],
+    review: { status: 'draft', reviewedBy: null, reviewedOn: null },
+  };
+  const INFO = {
+    matched: true,
+    runId: randomUUID(),
+    status: 'answered',
+    article: ARTICLE,
+    summary: [
+      {
+        text: 'Large meals, or eating late at night.',
+        citations: [{ label: 'L2', section: 'often linked with' }],
+      },
+    ],
+  };
+  const FIND = classify('find_doctor', {
+    kind: 'answer',
+    message: 'A general physician is a good first step.',
+    cards: [],
+  });
+
+  it('shows the library article and its summary before the doctors; nothing is stored', async () => {
+    const patient = await createPatient(h, 'hinfo');
+    const s = expectOk(await session(patient), 201);
+    script = FIND;
+    healthAnswer = () => INFO;
+    const text = 'I am having acidity for past 3 days secretword';
+    const turn = expectOk(await say(patient, s, text, 1));
+    expect(turn.reply.message).toBe(
+      "Here's some general information about acidity and heartburn. A general physician is a good first step.",
+    );
+    expect(turn.reply.cards[0]).toEqual({
+      type: 'health_info',
+      source: 'health_library',
+      title: ARTICLE.title,
+      overview: ARTICLE.overview,
+      linkedWith: ARTICLE.linkedWith,
+      mayHelp: ARTICLE.mayHelp,
+      seeDoctorIf: ARTICLE.seeDoctorIf,
+      urgentIf: ARTICLE.urgentIf,
+      review: ARTICLE.review,
+      summary: INFO.summary,
+    });
+    const asked = healthCalls.at(-1);
+    expect(asked.message).toBe(text);
+    expect(asked.inputDigest).toEqual(
+      createInputDigester(h.config.aiInputDigest).digest('health_info_message', text),
+    );
+    const rows = await auditFor(h.knex, { resource_id: s.id, action: 'assistant.turn' });
+    expect(JSON.stringify(rows)).not.toMatch(/secretword|acidity|Acidity/);
+    const stored = await h.ownerKnex('agent_sessions').where({ id: s.id }).first();
+    expect(JSON.stringify(stored)).not.toMatch(/secretword|Acidity and heartburn/);
+  });
+
+  it('only on doctor searches from the person’s words; drops anything malformed', async () => {
+    const patient = await createPatient(h, 'hinfo2');
+    const s = expectOk(await session(patient), 201);
+    healthAnswer = () => INFO;
+    const before = healthCalls.length;
+    script = classify('view_medications', {
+      kind: 'not_yet',
+      message: 'Prescriptions.',
+      cards: [],
+    });
+    const other = expectOk(await say(patient, s, 'my medicines for acidity', 1));
+    expect(other.reply.cards.some((c) => c.type === 'health_info')).toBe(false);
+    expect(healthCalls.length).toBe(before);
+
+    script = FIND;
+    healthAnswer = () => ({ ...INFO, article: { ...ARTICLE, urgentIf: 'not a list' } });
+    const bad = expectOk(await say(patient, s, 'acidity again', other.session.version));
+    expect(bad.reply.cards.some((c) => c.type === 'health_info')).toBe(false);
+    expect(bad.reply.message).toBe('A general physician is a good first step.');
+
+    healthAnswer = () => {
+      throw new Error('AI service down');
+    };
+    const down = expectOk(await say(patient, s, 'acidity again', bad.session.version));
+    expect(down.degraded).toBe(false);
+    expect(down.reply.cards.some((c) => c.type === 'health_info')).toBe(false);
+
+    healthAnswer = () => ({ matched: false });
+    const none = expectOk(await say(patient, s, 'a dermatologist in Pune', down.session.version));
+    expect(none.reply.cards).toEqual([]);
   });
 });

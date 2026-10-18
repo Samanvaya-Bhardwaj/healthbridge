@@ -12,7 +12,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 
-from app.api import agent, assist, documents, embeddings, followups, health, internal
+from app.api import (
+    agent,
+    assist,
+    documents,
+    embeddings,
+    followups,
+    health,
+    health_info,
+    internal,
+)
 from app.core.config import Settings, get_settings
 from app.core.db import Database, DatabaseLike
 from app.core.errors import register_exception_handlers
@@ -24,6 +33,7 @@ from app.embeddings import (
     OllamaEmbeddingProvider,
     VoyageEmbeddingProvider,
 )
+from app.health.library import load_library
 from app.llm.base import LLMProvider
 from app.llm.budget import SpendGuard
 from app.llm.factory import build_llm_provider
@@ -78,6 +88,7 @@ def create_app(
             logger,
             logging.INFO,
             "ai service started",
+            healthArticles=len(app.state.health_library),
             appEnv=settings.app_env,
             llmProvider=llm.name,
             llmDailyBudgetUsd=settings.llm_daily_budget_usd,
@@ -99,6 +110,8 @@ def create_app(
         openapi_url="/openapi.json" if expose_docs else None,
     )
     app.state.settings = settings
+    # ADR-0040: in production, only clinically approved articles are served.
+    app.state.health_library = load_library(production=settings.is_production)
 
     @app.middleware("http")
     async def request_context(
@@ -137,5 +150,6 @@ def create_app(
     app.include_router(assist.router)
     app.include_router(followups.router)
     app.include_router(agent.router)
+    app.include_router(health_info.router)
     app.include_router(embeddings.router)
     return app

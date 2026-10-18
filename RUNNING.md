@@ -105,6 +105,8 @@ Every demo account uses the password shown by `npm start` (`DEMO_USER_PASSWORD` 
   - **Kamala** (Asha's mother: blood pressure, cholesterol, knees): cataract surgery discharge, lipids, a Deccan Heart Clinic prescription (telmisartan, atorvastatin), knee X-ray and orthopaedic letter, kidney function, ECG, echocardiogram and a home BP log. Kamala has also given Dr. Meera consent to her documents.
   - **Vikram** (asthma): asthma-attack discharge, chest X-ray, spirometry, allergy tests, a pulmonology letter, lipids and sugar, and vaccinations.
 
+**General health information** (ADR-0040): describe a problem to the **Assistant**, for example "I am having acidity for past 3 days, I took Unienzyme but nothing changes" or "mujhe 2 din se khansi hai". The reply shows what it is often linked with, what may help, when to see a doctor and warning signs, from HealthBridge's health library (18 common complaints, drafts awaiting a doctor's review), with a short AI summary, and then doctors who can help.
+
 Try **Health Records → Ask about your documents** as Asha ("How has my HbA1c changed?", "What did the eye check show?"), or ask the **Assistant** the same. Switch to Kamala in the assistant and ask "What did my echo show?". As Dr. Meera, ask about Asha's or Kamala's records on **Patient Records → Ask AI**.
 
 Try **Prescriptions**, **Timeline** and **Follow-ups** as Asha, or ask the **Assistant** "What medicines do I need to take?". As Dr. Meera, open **Patient Records** → Asha.

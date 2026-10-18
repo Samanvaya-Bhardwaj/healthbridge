@@ -91,3 +91,20 @@ test('a paid in-clinic time is booked and paid in the conversation', async ({ pa
   await expect(booked).toContainText('Booked and paid', { timeout: 30_000 });
   await cancelFromAppointment(page);
 });
+
+test('a described concern gets general information from the health library, then doctors (ADR-0040)', async ({
+  page,
+}) => {
+  await signIn(page, demoEmail('patient.vikram'));
+  await nav(page, 'Assistant').click();
+  await ask(page, 'I am having acidity for past 3 days, i took unienzyme but nothing changes');
+  const info = page.getByRole('region', { name: 'General information: Acidity and heartburn' });
+  await expect(info).toBeVisible({ timeout: 20_000 });
+  await expect(info.getByText('AI summary for your message')).toBeVisible();
+  await expect(info.getByRole('heading', { name: 'What may help' })).toBeVisible();
+  await expect(info.getByRole('note')).toContainText('call 112');
+  await expect(info.getByText(/not a doctor/)).toBeVisible();
+  await expect(info).not.toContainText(/unienzyme/i);
+  // The doctors who can help follow the information.
+  await expect(page.getByRole('button', { name: 'Book' }).first()).toBeVisible();
+});

@@ -30,6 +30,7 @@ import { usePatientChoice } from '../records/usePatientChoice.js';
 import { MODE_LABELS, formatDateTime, formatFee, formatFullDate } from '../appointments/format.js';
 import { whySuggested } from '../care/recommendationText.js';
 import { BookingCard } from './AssistantBooking.jsx';
+import { HealthInfoCard } from './HealthInfoCard.jsx';
 import { Sentences } from '../records/AiAssist.jsx';
 
 const QUICK_ACTIONS = [
@@ -285,6 +286,7 @@ function AssistantReply({ turn, patientId, sessionId, actingFor, onChoose, onSel
   const medications = reply.cards.filter((c) => c.type === 'medication');
   const bookings = reply.cards.filter((c) => c.type === 'booking');
   const answers = reply.cards.filter((c) => c.type === 'record_answer');
+  const healthInfo = reply.cards.filter((c) => c.type === 'health_info');
   const linkButtons = links.length > 0 && (
     <div className="mt-3 flex flex-wrap gap-2">
       {links.map((c) => (
@@ -342,6 +344,9 @@ function AssistantReply({ turn, patientId, sessionId, actingFor, onChoose, onSel
           ))}
         </div>
       )}
+      {healthInfo.map((c) => (
+        <HealthInfoCard key={c.title} card={c} actingFor={actingFor} />
+      ))}
       <Understood understood={understood} />
       {doctors.length > 0 && (
         <ul className="mt-3 space-y-2">

@@ -55,6 +55,48 @@ const cardSchema = z.object({
   value: z.string().max(60).optional(),
 });
 const CHOICES = new Set([...ASSISTANT_SPECIALTIES, ASSISTANT_ANY_DOCTOR_CHOICE]);
+/** ADR-0040: what the health library returns; anything else is dropped. */
+const listItems = z.array(z.string().trim().min(1).max(200)).max(12);
+const healthInfoSchema = z.object({
+  matched: z.literal(true),
+  status: z.enum(['answered', 'no_summary', 'failed', 'timeout']),
+  article: z.object({
+    id: z.string().regex(/^[a-z_]{2,40}$/),
+    title: z.string().trim().min(1).max(120),
+    overview: z.string().trim().min(1).max(1000),
+    linkedWith: listItems.min(1),
+    mayHelp: listItems.min(1),
+    seeDoctorIf: listItems.min(1),
+    urgentIf: listItems,
+    review: z.object({
+      status: z.enum(['draft', 'approved']),
+      reviewedBy: z.string().max(120).nullable(),
+      reviewedOn: z.iso.date().nullable(),
+    }),
+  }),
+  summary: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1).max(400),
+        citations: z
+          .array(
+            z.object({
+              label: z.string().regex(/^L\d{1,2}$/),
+              section: z.enum([
+                'overview',
+                'often linked with',
+                'what may help',
+                'see a doctor if',
+              ]),
+            }),
+          )
+          .min(1)
+          .max(6),
+      }),
+    )
+    .max(4),
+});
+
 const stepSchema = z.object({
   state: z.unknown(),
   action: z.discriminatedUnion('type', [
@@ -514,6 +556,52 @@ export function createAssistantService({
   }
 
   /**
+   * ADR-0040: a described concern ("acidity for 3 days") also gets general information
+   * from the health library: a short cited AI summary and the article's own lists (often
+   * linked with, what may help, when to see a doctor, warning signs), shown before the
+   * doctors. Only on doctor-search turns from the person's own words; the message is not
+   * stored. Anything unexpected from the AI service: no card, the turn goes on.
+   */
+  async function healthInfo(principal, patientId, text, req) {
+    if (!aiClient?.healthInfo) return null;
+    try {
+      const raw = await aiClient.healthInfo(
+        {
+          patientId,
+          message: text,
+          inputDigest: inputDigester.digest('health_info_message', text),
+        },
+        { requestId: req?.id },
+      );
+      if (!raw?.matched) return null;
+      const parsed = healthInfoSchema.safeParse(raw);
+      if (!parsed.success) {
+        logger?.warn({ kind: 'invalid_health_info' }, 'assistant health information dropped');
+        return null;
+      }
+      const { article, summary } = parsed.data;
+      return {
+        type: 'health_info',
+        source: 'health_library',
+        title: article.title,
+        overview: article.overview,
+        linkedWith: article.linkedWith,
+        mayHelp: article.mayHelp,
+        seeDoctorIf: article.seeDoctorIf,
+        urgentIf: article.urgentIf,
+        review: article.review,
+        summary,
+      };
+    } catch (err) {
+      logger?.warn(
+        { errName: err?.name, status: err?.status },
+        'assistant health information unavailable',
+      );
+      return null;
+    }
+  }
+
+  /**
    * Part 4: "ask about my records" is answered from the person's own documents and verified
    * lab values (patient-scoped RAG, with sources), when AI reading of documents is on. The
    * question goes to the record-question workflow like the doctor's; it is not stored.
@@ -805,6 +893,14 @@ export function createAssistantService({
       if (next.intent === 'ask_records') {
         const answer = await recordAnswer(principal, row.patient_id, text, req);
         if (answer) Object.assign(hydrated, answer);
+      }
+      if (!select && (next.intent === 'find_doctor' || next.intent === 'book_appointment')) {
+        const info = await healthInfo(principal, row.patient_id, text, req);
+        if (info) {
+          const about = info.title.charAt(0).toLowerCase() + info.title.slice(1);
+          hydrated.message = `Here's some general information about ${about}. ${hydrated.message}`;
+          hydrated.cards.unshift(info);
+        }
       }
     }
 

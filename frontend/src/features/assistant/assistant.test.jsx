@@ -430,6 +430,61 @@ describe('HealthBridge Assistant', () => {
     );
   });
 
+  it('shows general information from the health library before the doctors (ADR-0040)', async () => {
+    signedIn({
+      [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: () =>
+        json(200, {
+          data: {
+            session: sessionView(2),
+            reply: {
+              kind: 'answer',
+              message:
+                "Here's some general information about acidity and heartburn. A general physician is a good first step.",
+              cards: [
+                {
+                  type: 'health_info',
+                  source: 'health_library',
+                  title: 'Acidity and heartburn',
+                  overview: 'Acidity, or heartburn, is a burning feeling in the chest.',
+                  linkedWith: ['Large meals, or eating late at night'],
+                  mayHelp: ['Eat smaller meals more often'],
+                  seeDoctorIf: ['Remedies from a pharmacy haven’t helped'],
+                  urgentIf: ['You vomit blood'],
+                  review: { status: 'draft', reviewedBy: null, reviewedOn: null },
+                  summary: [
+                    {
+                      text: 'Acidity is often linked with large meals.',
+                      citations: [{ label: 'L2', section: 'often linked with' }],
+                    },
+                  ],
+                },
+                doctor(DOCTOR, 'Dr. Meera Iyer', 'active'),
+              ],
+            },
+            understood: { intent: 'find_doctor', criteria: {} },
+            degraded: false,
+          },
+        }),
+    });
+    open('/app/assistant');
+    const box = await screen.findByLabelText('Your message');
+    await userEvent.type(box, 'I have acidity for 3 days{Enter}');
+    const info = await screen.findByRole('region', {
+      name: 'General information: Acidity and heartburn',
+    });
+    expect(
+      within(info).getByText('General health information · not a diagnosis'),
+    ).toBeInTheDocument();
+    expect(within(info).getByText('AI summary for your message')).toBeInTheDocument();
+    expect(within(info).getByText(/often linked with large meals/)).toBeInTheDocument();
+    expect(within(info).getByText('Eat smaller meals more often')).toBeInTheDocument();
+    expect(within(info).getByRole('note')).toHaveTextContent(/call 112.*You vomit blood/);
+    expect(within(info).getByText(/I’m an AI assistant, not a doctor/)).toBeInTheDocument();
+    expect(within(info).getByText(/not yet reviewed by a clinician/)).toBeInTheDocument();
+    // The doctors follow the information.
+    expect(screen.getByText('Dr. Meera Iyer')).toBeInTheDocument();
+  });
+
   it('offers a fresh conversation when the session has ended', async () => {
     signedIn({
       [`POST /api/v1/assistant/sessions/${SESSION}/messages`]: () =>

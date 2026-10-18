@@ -177,6 +177,24 @@ In the assistant, an `ask_records` turn works like this:
 The message is not stored. The turn's audit row has the card count only, and the record
 question's audit row has counts and `side: patient`.
 
+## General health information (ADR-0040)
+
+When the person describes a problem ("I am having acidity for past 3 days"), a
+doctor-search turn also shows general information from HealthBridge's health library:
+
+1. After the planner step, the backend sends the message to `POST /v1/health-info/answer`.
+2. Code picks the article whose match words the message uses (`app/health/articles`). With
+   none, nothing else happens and no model is called.
+3. The model writes 2 to 4 sentences from the article, each citing its passages. A strict
+   validator removes anything with a diagnosis, a medicine, an urgency judgement or a
+   detail from the message that the article doesn't contain.
+4. The card shows the article's own lists (often linked with, what may help, see a doctor
+   if) and its warning signs with "call 112", word for word, and a fixed note that this is
+   general information from an AI assistant, not a diagnosis. The doctors follow.
+
+Only clinically approved articles are served in production. All articles are drafts for
+now, and the card says so.
+
 ## Failure states
 
 | Failure | What the person sees | System behaviour |
@@ -206,6 +224,7 @@ question's audit row has counts and `side: patient`.
 | Answers from the record (step 10) | `backend/tests/integration/assistantRecords.test.js` | Upcoming appointments and recent signed medicines shown for the session patient only; nothing of them sent to the AI or audited; none on a degraded turn |
 | Spend ceiling (step 10) | `ai-service/tests/test_budget.py`, `test_config.py`, `test_db_rls.py` | Refused at the ceiling without calling the model; other replicas counted after a refresh; a new UTC day starts over; required with an external provider and priced models; the total spans patients but reveals only a number |
 | Deferred analysis (step 10) | `ai-service/tests/test_documents.py` | An outage, timeout, rate limit or ceiling stores nothing and answers 503; the retry succeeds |
+| General health information (ADR-0040) | `ai-service/tests/test_health_info.py`, `backend/tests/integration/assistantRecords.test.js`, `assistant.test.jsx`, `assistant.spec.js` | Every article complete and draft (none served in production); matching by words, Hinglish and negation; summaries keep the library's words and drop medicines, personal details, reassurance and diagnoses; no article means no model call; scope; model down still shows the lists; the card before the doctors, only on doctor searches from free text; nothing stored or audited |
 
 ## Running it
 

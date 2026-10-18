@@ -81,7 +81,7 @@ def extract(request: LLMRequest) -> dict[str, Any]:
     }
 
 
-_SOURCE = re.compile(r"^\[(?P<label>[SF]\d+)\] (?P<text>.*?)(?=^\[[SF]\d+\] |\Z)", re.M | re.S)
+_SOURCE = re.compile(r"^\[(?P<label>[SFL]\d+)\] (?P<text>.*?)(?=^\[[SFL]\d+\] |\Z)", re.M | re.S)
 _QUESTION = re.compile(r"<question>\n(.*?)\n</question>", re.S)
 _STOP = {
     "what",
@@ -159,6 +159,19 @@ def follow_up_summary(request: LLMRequest) -> dict[str, Any]:
     return {"sentences": sentences[:8]}
 
 
+def health_summary(request: LLMRequest) -> dict[str, Any]:
+    """Restates the article's first cause and first two tips, each citing its passage."""
+    wanted = {"often linked with": 1, "what may help": 2}
+    sentences = []
+    for label, text in _sources(request):
+        head, _, item = text.partition(": ")
+        section = head.rsplit(", ", 1)[-1]
+        if wanted.get(section, 0) > 0:
+            wanted[section] -= 1
+            sentences.append({"text": item.strip().rstrip(".") + ".", "citations": [label]})
+    return {"sentences": sentences}
+
+
 Handler = Callable[[LLMRequest], Any]
 
 DEFAULT_HANDLERS: dict[str, Handler] = {
@@ -167,5 +180,6 @@ DEFAULT_HANDLERS: dict[str, Handler] = {
     "record_question": answer,
     "doctor_brief": brief,
     "follow_up_summary": follow_up_summary,
+    "health_info": health_summary,
     "care_assistant_intent": care_assistant_intent,
 }
