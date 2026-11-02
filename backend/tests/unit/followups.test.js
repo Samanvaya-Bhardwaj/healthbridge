@@ -30,6 +30,22 @@ describe('follow-up escalation rules (deterministic)', () => {
     });
   });
 
+  it('a warning sign written in the note is urgent, even when no box is ticked', () => {
+    expect(
+      evaluateFollowUpResponse({ overall: 'same', note: 'I had chest pain last night' }),
+    ).toEqual({ level: 'urgent', status: 'urgent', reasons: ['note_wording'] });
+    expect(
+      evaluateFollowUpResponse({
+        overall: 'worse',
+        redFlags: ['fainting'],
+        note: 'I want to die',
+      }).reasons,
+    ).toEqual(['red_flag:fainting', 'note_wording']);
+    expect(evaluateFollowUpResponse({ overall: 'better', note: 'Feeling fine now' }).level).toBe(
+      'none',
+    );
+  });
+
   it('validates the check-in answer', () => {
     expect(followUpResponseSchema.safeParse({ overall: 'better' }).success).toBe(true);
     expect(followUpResponseSchema.safeParse({ overall: 'fine' }).success).toBe(false);

@@ -45,6 +45,8 @@ export const ASSISTANT_CRITERIA = Object.freeze([
   'language',
   'consultationMode',
   'doctorName',
+  'date',
+  'timeWindow',
 ]);
 /** Preferences HealthBridge cannot search by; the assistant says so instead of pretending. */
 export const ASSISTANT_UNSUPPORTED = Object.freeze([
@@ -187,6 +189,8 @@ export const careAssistantStateSchema = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .nullable()
       .default(null),
+    // A tap on something no longer offered: said once, after a fresh look at the times.
+    staleChoice: z.boolean().default(false),
   })
   .strict();
 
@@ -199,15 +203,24 @@ export const careAssistantStateSchema = z
  * the assistant from treating a possible emergency as a booking request.
  */
 export const ASSISTANT_EMERGENCY_ALTERNATIVES = Object.freeze([
-  'chest pain|pain in (my|the) chest|',
+  'chest pain|pain in (my|the|his|her) chest|chest (tightness|pressure)|',
+  '(my|his|her|the) chest (hurts|is hurting|feels tight)|',
+  'heart attack|cardiac arrest|dil ka daura|(seene|chhati|chaati) (mein|me) dard|',
   "(can'?t|cannot|can not|unable to|difficulty|trouble|struggling to) breath(e|ing)?|",
-  'short(ness)? of breath|not breathing|',
-  'unconscious|passed out|fainted|collapsed|',
+  '(difficulty|trouble|problems?) (in|with) breathing|breathing (difficulty|problems?)|',
+  String.raw`(hard|difficult) to breathe|breathless\w*|gasping|choking|`,
+  'short(ness)? of breath|not breathing|saans (nahi|nahin|lene (mein|me))|',
+  'unconscious|unresponsive|passed out|blacked out|fainted|collapsed|behosh|',
+  "(won'?t|isn'?t|not) wak(e|ing) up|",
   'seizures?|convulsions?|having a fit|',
-  'stroke|face (is )?drooping|slurred speech|',
+  String.raw`stroke|face (is )?drooping|slurred speech|paraly[sz]\w*|`,
   "(severe|heavy|uncontrolled) bleeding|bleeding (heavily|a lot|won'?t stop)|",
-  String.raw`suicid\w*|kill myself|end my life|self[- ]harm|`,
-  'overdose|poison(ed|ing)?',
+  '(vomiting|coughing|throwing up) (up )?blood|',
+  String.raw`anaphyla\w*|severe allergic reaction|throat (is )?(closing|swelling)|`,
+  String.raw`suicid\w*|kill myself|end my life|take my (own )?life|self[- ]harm|hurt(ing)? myself|`,
+  "(want|wanna|going) to die|don'?t want to live|better off dead|",
+  String.raw`khud ?kushi|aa?tmahatya|marna chaht[aie]\w*|`,
+  'overdose|(?<!food )poison(ed|ing)?',
 ]);
 
 // The two regex engines differ, so the JavaScript pattern adapts to behave like Python's:

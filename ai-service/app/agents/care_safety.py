@@ -11,15 +11,24 @@ import unicodedata
 
 _EMERGENCY = re.compile(
     r"\b("
-    r"chest pain|pain in (my|the) chest|"
+    r"chest pain|pain in (my|the|his|her) chest|chest (tightness|pressure)|"
+    r"(my|his|her|the) chest (hurts|is hurting|feels tight)|"
+    r"heart attack|cardiac arrest|dil ka daura|(seene|chhati|chaati) (mein|me) dard|"
     r"(can'?t|cannot|can not|unable to|difficulty|trouble|struggling to) breath(e|ing)?|"
-    r"short(ness)? of breath|not breathing|"
-    r"unconscious|passed out|fainted|collapsed|"
+    r"(difficulty|trouble|problems?) (in|with) breathing|breathing (difficulty|problems?)|"
+    r"(hard|difficult) to breathe|breathless\w*|gasping|choking|"
+    r"short(ness)? of breath|not breathing|saans (nahi|nahin|lene (mein|me))|"
+    r"unconscious|unresponsive|passed out|blacked out|fainted|collapsed|behosh|"
+    r"(won'?t|isn'?t|not) wak(e|ing) up|"
     r"seizures?|convulsions?|having a fit|"
-    r"stroke|face (is )?drooping|slurred speech|"
+    r"stroke|face (is )?drooping|slurred speech|paraly[sz]\w*|"
     r"(severe|heavy|uncontrolled) bleeding|bleeding (heavily|a lot|won'?t stop)|"
-    r"suicid\w*|kill myself|end my life|self[- ]harm|"
-    r"overdose|poison(ed|ing)?"
+    r"(vomiting|coughing|throwing up) (up )?blood|"
+    r"anaphyla\w*|severe allergic reaction|throat (is )?(closing|swelling)|"
+    r"suicid\w*|kill myself|end my life|take my (own )?life|self[- ]harm|hurt(ing)? myself|"
+    r"(want|wanna|going) to die|don'?t want to live|better off dead|"
+    r"khud ?kushi|aa?tmahatya|marna chaht[aie]\w*|"
+    r"overdose|(?<!food )poison(ed|ing)?"
     r")\b",
     re.I,
 )

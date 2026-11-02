@@ -1,6 +1,7 @@
 /** M10 follow-up and in-app notification enumerations, rules and schemas (ADR-0026). */
 
 import { z } from 'zod';
+import { isPossibleAssistantEmergency } from './assistant.js';
 
 /**
  *   scheduled ──due date reached──► awaiting_response ──patient responds──► responded
@@ -50,12 +51,18 @@ export const FOLLOW_UP_MAX_REMINDERS = 2;
 export const FOLLOW_UP_NO_RESPONSE_DAYS = 7;
 
 /**
- * Escalation rules (pure and deterministic).
+ * Escalation rules (pure and deterministic). Warning signs written in the note count
+ * too, by the assistant's own wording rule: a patient may not tick the box.
  * @returns {{ level: 'none'|'attention'|'urgent', status: string, reasons: string[] }}
  */
-export function evaluateFollowUpResponse({ overall, redFlags = [] }) {
-  if (redFlags.length) {
-    return { level: 'urgent', status: 'urgent', reasons: redFlags.map((f) => `red_flag:${f}`) };
+export function evaluateFollowUpResponse({ overall, redFlags = [], note = '' }) {
+  const noteFlag = isPossibleAssistantEmergency(note);
+  if (redFlags.length || noteFlag) {
+    return {
+      level: 'urgent',
+      status: 'urgent',
+      reasons: [...redFlags.map((f) => `red_flag:${f}`), ...(noteFlag ? ['note_wording'] : [])],
+    };
   }
   if (overall === 'worse') {
     return { level: 'attention', status: 'needs_attention', reasons: ['reported_worse'] };
