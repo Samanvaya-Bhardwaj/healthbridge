@@ -234,7 +234,9 @@ try {
       clinicId: clinic.id,
     }),
   );
-  if (request) await container.careService.act(meeraPrincipal, request.id, 'accept');
+  if (request?.status === 'pending') {
+    await container.careService.act(meeraPrincipal, request.id, 'accept');
+  }
   await step('vikram → dr.meera care request (left pending)', () =>
     container.careService.request(vikram, {
       patientId: vikramProfile.id,

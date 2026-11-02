@@ -268,7 +268,7 @@ export async function seedHistory({
           doctorId: meeraDoctor.id,
           clinicId: clinic.id,
         });
-        await live.careService.act(meera, req.id, 'accept');
+        if (req.status === 'pending') await live.careService.act(meera, req.id, 'accept');
         log('kamala → dr.meera care accepted');
       }
     }

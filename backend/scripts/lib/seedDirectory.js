@@ -185,8 +185,9 @@ export async function seedDirectory({
       const doctorId = doctorIds[d.key];
       if (existing.some((r) => r.doctorId === doctorId)) continue;
       const request = await svc.careService.request(principal, { patientId: profile.id, doctorId });
-      // The third request of a large care team is left pending (shows that state).
-      if (k < 2) {
+      // The third request of a large care team is left pending (shows that state). A doctor
+      // who accepts new patients has already made it active (ADR-0038).
+      if (k < 2 && request.status === 'pending') {
         const doctorUser = await repos.doctors.findById(doctorId);
         await svc.careService.act(await principalFor(doctorUser.user_id), request.id, 'accept');
       }
