@@ -16,7 +16,7 @@ from app.core.errors import ProblemError
 from app.core.logging import log_event, request_id_ctx
 from app.core.scope import PatientScope, ScopeDep
 from app.core.security import require_service_token
-from app.rag.retrieval import Source, hybrid_search
+from app.rag.retrieval import Source, dated, hybrid_search
 from app.rag.validation import INSUFFICIENT
 from app.repositories import ai_store
 
@@ -28,9 +28,13 @@ router = APIRouter(
 Uuid = Annotated[str, Field(min_length=36, max_length=36)]
 
 
+IsoDate = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+
+
 class Fact(BaseModel):
     id: Uuid
     text: Annotated[str, Field(min_length=1, max_length=300)]
+    date: IsoDate | None = None
 
 
 class AnswerRequest(BaseModel):
@@ -39,6 +43,8 @@ class AnswerRequest(BaseModel):
     # The backend's keyed digest of the question (this service never hashes free text).
     inputDigest: InputDigest
     documentIds: Annotated[list[Uuid], Field(max_length=200)] = []
+    # The date on each document, when known (by document ID).
+    documentDates: Annotated[dict[Uuid, IsoDate], Field(max_length=200)] = {}
     facts: Annotated[list[Fact], Field(max_length=60)] = []
 
 
@@ -59,7 +65,10 @@ def _check(scope: PatientScope, purpose: str, patient_id: str, document_ids: lis
 
 
 def _facts(facts: list[Fact]) -> list[Source]:
-    return [Source(f"F{i + 1}", "lab_result", f.id, None, f.text) for i, f in enumerate(facts)]
+    return [
+        Source(f"F{i + 1}", "lab_result", f.id, None, f.text, date=f.date)
+        for i, f in enumerate(facts)
+    ]
 
 
 async def _record(
@@ -115,7 +124,7 @@ async def answer(body: AnswerRequest, scope: ScopeDep, request: Request) -> dict
     run_id, started = ai_store.new_id(), datetime.now(UTC)
     async with db.patient_scope(scope.patient_id) as conn:
         chunks = await hybrid_search(conn, embedder, body.question, body.documentIds)
-    candidates = [*chunks, *_facts(body.facts)]
+    candidates = [*dated(chunks, body.documentDates), *_facts(body.facts)]
     agent, totals = build_answer_agent(llm)
     state = await agent.ainvoke(
         {
@@ -168,7 +177,11 @@ async def answer(body: AnswerRequest, scope: ScopeDep, request: Request) -> dict
 
 
 async def _first_chunks(conn: Any, document_ids: list[str]) -> list[Source]:
-    """First chunk of the latest extraction of each authorised document."""
+    """First chunk of the latest extraction of each document, for the newest ten.
+
+    The backend lists documents newest first. IDs are time-ordered, so the query's own
+    order would keep the oldest ten of a long record.
+    """
     if not document_ids:
         return []
     cur = await conn.execute(
@@ -180,6 +193,7 @@ async def _first_chunks(conn: Any, document_ids: list[str]) -> list[Source]:
         (document_ids,),
     )
     rows = await cur.fetchall()
+    rows.sort(key=lambda r: document_ids.index(r[1]))
     return [
         Source(f"S{i + 1}", "document_chunk", r[0], r[1], r[2]) for i, r in enumerate(rows[:10])
     ]

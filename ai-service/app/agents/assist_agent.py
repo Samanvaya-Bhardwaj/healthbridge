@@ -75,7 +75,9 @@ def build_answer_agent(llm: LLMProvider):
     totals = RunTotals()
 
     async def node_rerank(state: AssistState) -> AssistState:
-        return {"sources": rerank(state["question"], state["candidates"], limit=8)}
+        # Six, not more: every source adds minutes on a small local model, and the request
+        # has to finish inside the edge timeout (ADR-0037).
+        return {"sources": rerank(state["question"], state["candidates"], limit=6)}
 
     def decide(state: AssistState) -> str:
         relevant = any(overlap(state["question"], s) > 0 for s in state["sources"])

@@ -5,8 +5,11 @@ A sentence survives only if it:
   - contains no number that is absent from every source it cites;
   - is lexically supported: most of its content words appear in the sources it cites;
   - contains no diagnostic, prescribing or treatment-changing language.
-Anything else is removed; nothing is rewritten. No surviving sentence → the fixed
-insufficient-information answer.
+Anything else is removed, as is a sentence that says what a result means. Two things are
+taken out of a sentence first: the source labels it names, and an interpretation added to
+a fact after a comma ("..., indicating ..."). A sentence that keeps its place gets its
+source's date, when it has one and lacks it. Nothing else is rewritten. No surviving
+sentence → the fixed insufficient-information answer.
 """
 
 import re
@@ -25,6 +28,54 @@ _UNSAFE = re.compile(
 )
 MAX_SENTENCE_CHARS = 400
 MIN_SUPPORT = 0.6
+# What a model adds to a fact: "HbA1c is 6.1 %, indicating prediabetes". Saying what results
+# mean is the doctor's job, so the clause goes and the fact stays.
+_INTERPRETATION = re.compile(
+    r"[,;]\s*(?:which\s+)?\b(?:indicat\w+|suggest\w+|implying|meaning|consistent with"
+    r"|pointing to)\b.*$",
+    re.I,
+)
+# As the sentence's own verb there is no fact to keep: "6.5% is consistent with diabetes".
+_MEANING = re.compile(
+    r"\b(?:indicat(?:e|es|ing)|suggest(?:s|ing|ive)?|consistent with|implies|means"
+    r"|appears? to|seems? to)\b",
+    re.I,
+)
+
+
+def without_labels(text: str, labels: list[str]) -> str:
+    """The sentence as a person reads it, without the labels it cites ("According to S3, ...").
+
+    A label's digits would also fail the number check. Only the labels this sentence cites
+    go: "L5" and "S1" can be medical words too.
+    """
+    names = "|".join(re.escape(label) for label in labels)
+    if not names:
+        return text.strip()
+    label = rf"\[?\b(?:{names})\b\]?"
+    several = rf"{label}(?:\s*(?:,|and|&)\s*{label})*"
+    lead_in = r"(?:according to|as per|as shown in|based on|per|from|in|see)"
+    kind = r"(?:the\s+)?(?:tests?|sources?|reports?|documents?)?"
+    mention = re.compile(
+        rf"\s*\(\s*{several}\s*\)|(?:\s*\b{lead_in}\s+{kind}\s*)?\s*{several}[,;]?", re.I
+    )
+    cleaned = re.sub(r"\s+([.,;])", r"\1", mention.sub(" ", text))
+    cleaned = " ".join(re.sub(r"[,;]+(?=[.!?]|\s*$)", "", cleaned).split())
+    return cleaned[:1].upper() + cleaned[1:]
+
+
+def facts_only(text: str) -> str:
+    """The sentence without an interpretation added to it. What's left is validated as usual."""
+    kept = _INTERPRETATION.sub("", text).rstrip(" ,;.")
+    return f"{kept}." if kept and kept != text.rstrip(" ,;.") else text
+
+
+def with_date(text: str, cited: list[Source]) -> str:
+    """Says when, from the source itself: three HbA1c values mean nothing without their dates."""
+    days = {s.date for s in cited if s.date}
+    if len(days) != 1 or (day := days.pop()) in text:
+        return text
+    return f"{text.rstrip(' .')} (report dated {day})."
 
 
 def support(text: str, cited: list[Source]) -> float:
@@ -43,8 +94,9 @@ def validate_sentences(
     kept: list[dict[str, Any]] = []
     removed = 0
     for sentence in sentences:
-        text = str(sentence.get("text") or "").strip()
         labels = [str(c) for c in (sentence.get("citations") or [])]
+        said = without_labels(str(sentence.get("text") or ""), labels)
+        text = facts_only(said)
         cited = [by_label[label] for label in dict.fromkeys(labels) if label in by_label]
         numbers_ok = all(
             any(n in _NUMBER.findall(s.text) for s in cited) for n in _NUMBER.findall(text)
@@ -56,11 +108,14 @@ def validate_sentences(
             and len(cited) == len(dict.fromkeys(labels))
             and numbers_ok
             and support(text, cited) >= MIN_SUPPORT
-            and not _UNSAFE.search(text)
+            # The sentence as written: a diagnosis isn't saved by trimming it.
+            and not _UNSAFE.search(said)
+            and not _MEANING.search(text)
         )
         if not valid:
             removed += 1
             continue
+        text = with_date(text, cited)
         citations = [
             {
                 "label": s.label,

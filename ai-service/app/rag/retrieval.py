@@ -7,7 +7,7 @@ patient's or an unauthorised document's text.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from app.embeddings import EmbeddingProvider, to_pgvector
@@ -20,6 +20,25 @@ that these those from by at as be been it its their there which who whom how whe
 patients report reports value values level levels result results show shows
 """
 STOPWORDS = frozenset(_STOPWORD_TEXT.split())
+# Short words that do carry meaning here.
+_SHORT_TERMS = frozenset({"bp", "hb", "t3", "t4"})
+# The everyday word and what a report calls it, so "how are my kidneys?" finds a creatinine
+# result. For finding sources only: an answer's words must still come from those sources.
+_SAME_TOPIC: dict[str, tuple[str, ...]] = {
+    "kidney": ("creatinine", "egfr", "urea", "microalbumin", "renal"),
+    "sugar": ("glucose", "hba1c", "fbs", "ppbs"),
+    "diabetes": ("glucose", "hba1c"),
+    "cholesterol": ("lipid", "ldl", "hdl", "triglycerides"),
+    "thyroid": ("tsh", "t3", "t4"),
+    "bp": ("pressure", "systolic", "diastolic"),
+    "anaemia": ("haemoglobin", "hemoglobin", "ferritin", "iron"),
+    "anaemic": ("haemoglobin", "hemoglobin", "ferritin", "iron"),
+    "anemia": ("haemoglobin", "hemoglobin", "ferritin", "iron"),
+    "anemic": ("haemoglobin", "hemoglobin", "ferritin", "iron"),
+    "heart": ("ecg", "echo", "echocardiogram", "cardiac"),
+    "liver": ("sgpt", "sgot", "alt", "ast", "bilirubin"),
+    "eye": ("retinal", "retina", "fundus", "acuity"),
+}
 
 
 @dataclass(frozen=True)
@@ -30,10 +49,33 @@ class Source:
     document_id: str | None
     text: str
     score: float = 0.0
+    date: str | None = None  # the date on the document or lab value, when known
 
 
 def terms(text: str) -> list[str]:
-    return [t for t in _WORD.findall(text.lower()) if len(t) > 2 and t not in STOPWORDS]
+    return [
+        t
+        for t in _WORD.findall(text.lower())
+        if (len(t) > 2 or t in _SHORT_TERMS) and t not in STOPWORDS
+    ]
+
+
+def _with_singulars(words: list[str]) -> set[str]:
+    return {*words, *(w[:-1] for w in words if len(w) > 3 and w.endswith("s"))}
+
+
+def search_terms(query: str) -> set[str]:
+    """What to look for: the question's words, their singulars and their report names."""
+    words = _with_singulars(terms(query))
+    return words | {same for word in words for same in _SAME_TOPIC.get(word, ())}
+
+
+def any_term_query(query: str) -> str:
+    """A text query matching any term: rank decides, so one extra word ("last") can't empty it.
+
+    Terms hold only letters, digits and dots, so quoting them is safe.
+    """
+    return " | ".join(f"'{t}'" for t in sorted(search_terms(query)))
 
 
 _LATEST = """
@@ -65,7 +107,7 @@ async def hybrid_search(
     params = {
         "docs": document_ids,
         "vec": vector,
-        "q": " ".join(terms(query)) or query,
+        "q": any_term_query(query),
         "limit": 20,
         "model": embedder.model_id,
     }
@@ -85,16 +127,18 @@ async def hybrid_search(
             params,
         )
     ).fetchall()
-    text_rows = await (
-        await conn.execute(
-            _LATEST.format(
-                join="",
-                score="ts_rank(c.tsv, plainto_tsquery('simple', %(q)s))",
-                extra="AND c.tsv @@ plainto_tsquery('simple', %(q)s)",
-            ),
-            params,
-        )
-    ).fetchall()
+    text_rows = []
+    if params["q"]:
+        text_rows = await (
+            await conn.execute(
+                _LATEST.format(
+                    join="",
+                    score="ts_rank(c.tsv, to_tsquery('simple', %(q)s))",
+                    extra="AND c.tsv @@ to_tsquery('simple', %(q)s)",
+                ),
+                params,
+            )
+        ).fetchall()
     # Reciprocal-rank fusion of the two rankings.
     fused: dict[str, dict[str, Any]] = {}
     for ranking in (vec_rows, text_rows):
@@ -108,14 +152,29 @@ async def hybrid_search(
     ]
 
 
+def dated(sources: list[Source], dates: dict[str, str]) -> list[Source]:
+    """Puts each document's date on its chunks, in the text the model and validator read.
+
+    "Latest" means nothing without it, and a sentence may then quote the date.
+    """
+    return [
+        replace(s, text=f"Document date: {day}. {s.text}", date=day)
+        if s.document_id and (day := dates.get(s.document_id))
+        else s
+        for s in sources
+    ]
+
+
 def rerank(query: str, sources: list[Source], *, limit: int = 6) -> list[Source]:
-    """Deterministic lexical rerank: query-term overlap first, fused score second."""
-    q = set(terms(query))
+    """Deterministic lexical rerank: the best by query-term overlap, then fused score, kept
+    newest first (undated last), so "latest" reads from the top."""
+    q = search_terms(query)
 
     def key(s: Source) -> tuple[int, float]:
-        return (len(q & set(terms(s.text))), s.score)
+        return (len(q & _with_singulars(terms(s.text))), s.score)
 
-    ordered = sorted(sources, key=key, reverse=True)[:limit]
+    best = sorted(sources, key=key, reverse=True)[:limit]
+    ordered = sorted(best, key=lambda s: s.date or "", reverse=True)
     # Labels keep their kind: S# for document chunks, F# for verified facts.
     counters = {"S": 0, "F": 0}
     out = []
@@ -130,10 +189,11 @@ def rerank(query: str, sources: list[Source], *, limit: int = 6) -> list[Source]
                 s.document_id,
                 s.text,
                 s.score,
+                s.date,
             )
         )
     return out
 
 
 def overlap(query: str, source: Source) -> int:
-    return len(set(terms(query)) & set(terms(source.text)))
+    return len(search_terms(query) & _with_singulars(terms(source.text)))

@@ -57,11 +57,15 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
     }
     // RLS: only AVAILABLE documents: of the types a doctor's consent covers, or all of
     // the patient's own.
-    const documents = await trx('medical_documents')
-      .where({ patient_id: patientId, status: 'available' })
-      .orderBy('available_at', 'desc')
+    // Newest first by the date on the document: an upload date says nothing about the visit.
+    const documents = await trx('medical_documents as d')
+      .leftJoin('document_metadata as m', (join) =>
+        join.on('m.document_id', 'd.id').andOnVal('m.is_current', true),
+      )
+      .where({ 'd.patient_id': patientId, 'd.status': 'available' })
+      .orderByRaw('m.document_date DESC NULLS LAST, d.available_at DESC')
       .limit(200)
-      .select('id', 'title');
+      .select('d.id', 'd.title', 'm.document_date');
     const labs = await trx('lab_results')
       .where({ patient_id: patientId })
       .orderBy([{ column: 'observed_on', order: 'desc', nulls: 'last' }])
@@ -69,6 +73,7 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
       .select('id', 'analyte', 'value_text', 'unit', 'flag', 'reference_range', 'observed_on');
     const facts = labs.map((l) => ({
       id: l.id,
+      ...(l.observed_on ? { date: l.observed_on } : {}),
       text: [
         `${l.analyte}: ${l.value_text}${l.unit ? ` ${l.unit}` : ''}`,
         l.flag ? `(${l.flag})` : '',
@@ -83,6 +88,9 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
     return {
       decision,
       documentIds: documents.map((d) => d.id),
+      documentDates: Object.fromEntries(
+        documents.filter((d) => d.document_date).map((d) => [d.id, d.document_date]),
+      ),
       titles: new Map(documents.map((d) => [d.id, d.title])),
       labels: new Map(labs.map((l) => [l.id, l.analyte])),
       facts,
@@ -114,6 +122,7 @@ export function createAssistService({ knex, aiClient, accessPolicy, audit, input
         // Kept with the AI run instead of the question: a keyed digest, never plain SHA-256.
         inputDigest: inputDigester.digest('record_question', question),
         documentIds: ctx.documentIds,
+        documentDates: ctx.documentDates,
         facts: ctx.facts,
       },
       { requestId: req?.id },
