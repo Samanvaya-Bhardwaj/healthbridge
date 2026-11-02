@@ -1,4 +1,5 @@
 import { Pill } from 'lucide-react';
+import { careImages } from '../../assets/care/index.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { LoadingState } from '../../components/ui/EmptyState.jsx';
 import { usePatientChoice } from '../records/usePatientChoice.js';
@@ -15,9 +16,10 @@ export function PrescriptionsPage() {
     <div className="space-y-6">
       <PageHeader
         icon={Pill}
+        image={careImages.medicines}
         eyebrow="My health"
         title="Prescriptions"
-        description="Prescriptions your doctors sign during consultations. Corrections appear as new versions; earlier versions stay visible."
+        description="Medicines your doctors have prescribed for you."
         actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
       />
       <PatientPrescriptions patientId={patientId} audience="patient" />

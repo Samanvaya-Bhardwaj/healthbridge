@@ -1,3 +1,4 @@
+import { careImages } from '../../assets/care/index.js';
 import { HeartPulse, ShieldCheck, Stethoscope } from 'lucide-react';
 import { LogoMark } from '../../components/ui/Logo.jsx';
 
@@ -19,8 +20,15 @@ function AuthAside() {
         <p className="mt-10 max-w-sm text-[2rem] font-medium leading-[1.1] tracking-[-0.025em] text-text">
           Care that stays connected, between every visit.
         </p>
+        <img
+          src={careImages.tablet}
+          alt=""
+          width="720"
+          height="480"
+          className="mt-8 aspect-[3/2] w-full rounded-2xl object-cover shadow-card"
+        />
       </div>
-      <ul className="mt-10 space-y-3">
+      <ul className="mt-8 space-y-3">
         {reassurances.map(([Icon, text]) => (
           <li
             key={text}

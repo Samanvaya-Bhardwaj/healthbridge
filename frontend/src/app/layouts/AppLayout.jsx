@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { LogOut, Menu, X } from 'lucide-react';
-import { ROLE_LABELS } from '@healthbridge/shared';
+import { ROLES, ROLE_LABELS } from '@healthbridge/shared';
 import { useAuth } from '../../features/auth/authContext.js';
 import { DemoBanner } from '../../features/system/DemoBanner.jsx';
 import { navigationFor, primaryRole } from '../navigation.js';
 import { NotificationBell } from '../../features/notifications/Inbox.jsx';
 import { Avatar } from '../../components/ui/Identity.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
+import { TextSizeToggle } from '../../components/ui/TextSizeToggle.jsx';
 import { useRouteFocus } from '../useRouteFocus.js';
 
 const linkClass = ({ isActive }) =>
@@ -189,10 +190,11 @@ export function AppLayout() {
               <Menu aria-hidden="true" className="h-5 w-5" />
             </button>
             <Link to="/app" aria-label="HealthBridge home">
-              <Logo />
+              <Logo compact={role === ROLES.PATIENT} />
             </Link>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {role === ROLES.PATIENT && <TextSizeToggle />}
             <NotificationBell />
             <div className="hidden items-center gap-2.5 rounded-full border border-border bg-surface-raised py-1 pl-1 pr-4 sm:flex">
               <Avatar name={user.fullName} size="sm" />

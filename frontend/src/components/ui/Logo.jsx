@@ -27,11 +27,16 @@ export function LogoMark({ className = 'h-8 w-8' }) {
   );
 }
 
-export function Logo({ className = '' }) {
+/** `compact`: the mark alone on phones, where the header has more important things in it. */
+export function Logo({ className = '', compact = false }) {
   return (
     <span className={`flex items-center gap-2.5 ${className}`}>
       <LogoMark />
-      <span className="text-[1.0625rem] font-semibold tracking-[-0.02em] text-text">
+      <span
+        className={`text-[1.0625rem] font-semibold tracking-[-0.02em] text-text ${
+          compact ? 'hidden sm:inline' : ''
+        }`}
+      >
         Health<span className="text-primary">Bridge</span>
       </span>
     </span>

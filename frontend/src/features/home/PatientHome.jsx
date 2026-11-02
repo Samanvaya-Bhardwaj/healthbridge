@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   CheckCircle2,
   Circle,
+  Compass,
   CreditCard,
   FileText,
   HeartPulse,
@@ -17,10 +18,10 @@ import {
   Phone,
   Pill,
   Stethoscope,
-  Upload,
   UserRound,
   Video,
 } from 'lucide-react';
+import { careImages } from '../../assets/care/index.js';
 import { ApiError } from '../../lib/apiClient.js';
 import {
   careApi,
@@ -34,11 +35,14 @@ import {
 } from '../../lib/domainApi.js';
 import { Card } from '../../components/ui/Card.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
-import { ButtonLink } from '../../components/ui/Button.jsx';
+import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { LoadError } from '../../components/ui/LoadError.jsx';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
+import { useAuth } from '../auth/authContext.js';
+import { PatientTour } from '../tour/PatientTour.jsx';
+import { markTourSeen, tourSeen } from '../tour/tourSeen.js';
 import {
   MODE_LABELS,
   formatDateTime,
@@ -407,93 +411,145 @@ function RecentActivity({ patientId }) {
   );
 }
 
-/** One line of "your care": what it is, where it stands, and where to go. */
-function CareRow({ icon: Icon, title, summary, to, action }) {
+/** One picture, one name, one short line: readable at a glance, and a large thing to press. */
+function CareTile({ tour, image, title, summary, to }) {
   return (
-    <li className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
-      <span
-        aria-hidden="true"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary"
+    <li data-tour={tour}>
+      <Link
+        to={to}
+        className="group flex h-full items-center overflow-hidden rounded-card border border-border bg-surface-raised shadow-card transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-raised sm:flex-col sm:items-stretch"
       >
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-text">{title}</p>
-        <p className="text-sm text-text-muted">{summary}</p>
-      </div>
-      <ButtonLink as={Link} to={to} variant="subtle" size="sm">
-        {action}
-      </ButtonLink>
+        <img
+          src={image}
+          alt=""
+          width="720"
+          height="480"
+          loading="lazy"
+          className="h-24 w-24 shrink-0 object-cover sm:aspect-[3/2] sm:h-auto sm:w-full"
+        />
+        <span className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+          <span className="text-lg font-medium leading-snug text-text group-hover:text-primary">
+            {title}
+          </span>
+          <span className="text-sm text-text-muted">{summary}</span>
+        </span>
+      </Link>
     </li>
   );
 }
 
-/** Doctors, records and prescriptions in one calm panel instead of three cards. */
-function YourCare({ team, patientId }) {
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Everything a patient comes here for, as pictures rather than lists. */
+function CareTiles({ team, patientId, appointments, followUps }) {
   const documents = useQuery({
     queryKey: ['documents', patientId],
     queryFn: () => recordsApi.list(patientId),
+    enabled: Boolean(patientId),
     retry: false,
   });
   const prescriptions = useQuery({
     queryKey: ['prescriptions', patientId],
     queryFn: () => consultationApi.forPatient(patientId),
+    enabled: Boolean(patientId),
     retry: false,
   });
   const doctors = team.filter((r) => r.status === 'active');
-  const pending = team.filter((r) => r.status === 'pending').length;
-  const available = (documents.data ?? []).filter((d) => d.status === 'available').length;
-  const checking = (documents.data ?? []).filter((d) =>
-    ['quarantined', 'scanning'].includes(d.status),
-  ).length;
+  const reports = (documents.data ?? []).filter((d) => d.status === 'available').length;
   const latest = (prescriptions.data ?? []).find((rx) => rx.status === 'signed');
+  const asked = followUps.filter((f) => f.status === 'awaiting_response').length;
   return (
-    <Card as="section" aria-labelledby="care-heading">
-      <SectionHeader id="care-heading" icon={Stethoscope} title="Your care" className="mb-4" />
-      <ul className="divide-y divide-border">
-        <CareRow
-          icon={Stethoscope}
+    <section aria-labelledby="tiles-heading" className="space-y-3">
+      <SectionHeader id="tiles-heading" title="What would you like to do?" />
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+        <CareTile
+          tour="doctors"
+          image={careImages.doctors}
           title="My doctors"
           summary={
             doctors.length
-              ? `${doctors.map((r) => r.doctor.professionalName).join(', ')}${pending ? ` · ${pending} request pending` : ''}`
-              : pending
-                ? 'Waiting for your doctor to accept'
-                : 'Add your family doctor to book with them'
+              ? doctors.map((r) => r.doctor.professionalName).join(', ')
+              : 'Find your doctor'
           }
           to="/app/doctors"
-          action={doctors.length ? 'Manage' : 'Find'}
         />
-        <CareRow
-          icon={FileText}
-          title="Health records"
-          summary={
-            documents.isPending
-              ? 'Loading…'
-              : documents.isError
-                ? 'Couldn’t load just now. Open to see your records.'
-                : `${available ? `${available} document${available === 1 ? '' : 's'}` : 'No documents yet'}${checking ? ` · ${checking} being checked` : ''}`
-          }
+        <CareTile
+          tour="assistant"
+          image={careImages.assistant}
+          title="Ask for help"
+          summary="Say what you need in your own words"
+          to="/app/assistant"
+        />
+        <CareTile
+          tour="appointments"
+          image={careImages.online}
+          title="My appointments"
+          summary={appointments.length ? `${appointments.length} coming up` : 'See and book visits'}
+          to="/app/appointments"
+        />
+        <CareTile
+          tour="reports"
+          image={careImages.reports}
+          title="My reports"
+          summary={reports ? plural(reports, 'report') : 'Add a report'}
           to="/app/records"
-          action={available ? 'Open' : 'Upload'}
         />
-        <CareRow
-          icon={Pill}
-          title="Prescriptions"
+        <CareTile
+          tour="medicines"
+          image={careImages.medicines}
+          title="My medicines"
           summary={
-            prescriptions.isPending
-              ? 'Loading…'
-              : prescriptions.isError
-                ? 'Couldn’t load just now. Open to see your prescriptions.'
-                : latest
-                  ? `Latest from ${latest.doctorName ?? 'your doctor'}, ${formatDateTime(latest.signedAt)}`
-                  : 'Signed prescriptions appear here'
+            latest
+              ? `Latest from ${latest.doctorName ?? 'your doctor'}`
+              : 'Prescriptions from your doctors'
           }
           to="/app/prescriptions"
-          action="View"
+        />
+        <CareTile
+          tour="checkin"
+          image={careImages.checkin}
+          title="How are you feeling?"
+          summary={
+            asked
+              ? plural(asked, 'question') + ' from your doctor'
+              : 'Tell your doctor after a visit'
+          }
+          to="/app/follow-ups"
         />
       </ul>
-    </Card>
+    </section>
+  );
+}
+
+/** Offered, never forced: it doesn't cover the page, and "Not now" puts it away. */
+function TourInvite({ onStart, onDismiss }) {
+  return (
+    <section
+      aria-labelledby="tour-heading"
+      className="flex flex-col overflow-hidden rounded-card border border-accent/30 bg-hero sm:flex-row sm:items-center"
+    >
+      <img
+        src={careImages.welcome}
+        alt=""
+        width="1200"
+        height="800"
+        className="h-40 w-full object-cover sm:h-auto sm:w-56 sm:self-stretch"
+      />
+      <div className="p-5 sm:p-6">
+        <h2 id="tour-heading" className="text-xl font-medium tracking-[-0.01em] text-text">
+          New here? Let us show you around
+        </h2>
+        <p className="mt-1 text-text-muted">A one-minute tour of where everything is.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button arrow icon={Compass} onClick={onStart}>
+            Show me around
+          </Button>
+          <Button variant="ghost" onClick={onDismiss}>
+            Not now
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -543,10 +599,21 @@ function DoctorApplication() {
 
 /**
  * Patient home, ordered by what matters now: the next appointment, things that need the
- * patient, recent activity, then their doctors, records and prescriptions.
+ * patient, then everything else as pictures, with recent activity below.
  */
 export function PatientHome({ firstName }) {
+  const { user } = useAuth();
   const [now] = useState(() => Date.now());
+  const [touring, setTouring] = useState(false);
+  const [seen, setSeen] = useState(() => tourSeen(user.id));
+  const showAround = useRef(null);
+  const putTourAway = () => {
+    markTourSeen(user.id);
+    setSeen(true);
+    setTouring(false);
+    // The invitation that started it has gone: focus goes to the button that replaces it.
+    requestAnimationFrame(() => showAround.current?.focus());
+  };
   const profile = useQuery({ queryKey: ['patients', 'me'], queryFn: patientsApi.me, retry: false });
   const patientId = profile.data?.id;
   const missing = profile.error instanceof ApiError && profile.error.status === 404;
@@ -630,11 +697,24 @@ export function PatientHome({ firstName }) {
         eyebrow={greeting(now)}
         title={`Welcome, ${firstName}`}
         description={
-          next
-            ? 'Here’s what’s next for your care.'
-            : 'Stay in touch with the doctors you trust. Consult online first; visit only when your doctor says you need to.'
+          next ? 'Here’s what’s next for your care.' : 'Your doctors and your health, in one place.'
+        }
+        actions={
+          seen && (
+            <Button
+              ref={showAround}
+              variant="secondary"
+              icon={Compass}
+              onClick={() => setTouring(true)}
+            >
+              Show me around
+            </Button>
+          )
         }
       />
+
+      {!seen && <TourInvite onStart={() => setTouring(true)} onDismiss={putTourAway} />}
+      {touring && <PatientTour onClose={putTourAway} />}
 
       <DoctorApplication />
 
@@ -642,26 +722,37 @@ export function PatientHome({ firstName }) {
         <LoadingState label="Loading your home page" rows={3} />
       ) : (
         <>
-          {failed ? (
-            <LoadError
-              queries={[missing ? null : profile, care, upcoming]}
-              what="your appointments and doctors"
-            />
-          ) : firstRun && !next ? (
-            <GettingStarted
-              hasProfile={Boolean(patientId)}
-              hasDoctor={Boolean(activeDoctor)}
-              hasPendingDoctor={hasPendingDoctor}
-            />
-          ) : next ? (
-            <NextAppointment a={next} now={now} />
-          ) : (
-            <NoAppointment doctor={activeDoctor} patientId={patientId} />
-          )}
+          <div data-tour="next">
+            {failed ? (
+              <LoadError
+                queries={[missing ? null : profile, care, upcoming]}
+                what="your appointments and doctors"
+              />
+            ) : firstRun && !next ? (
+              <GettingStarted
+                hasProfile={Boolean(patientId)}
+                hasDoctor={Boolean(activeDoctor)}
+                hasPendingDoctor={hasPendingDoctor}
+              />
+            ) : next ? (
+              <NextAppointment a={next} now={now} />
+            ) : (
+              <NoAppointment doctor={activeDoctor} patientId={patientId} />
+            )}
+          </div>
 
           <LoadError queries={[followUps]} what="your follow-up check-ins" />
           {patientId && !failed && (!firstRun || actions.length > 0) && (
             <ActionsNeeded items={actions} loading={followUps.isPending} />
+          )}
+
+          {!failed && (
+            <CareTiles
+              team={team}
+              patientId={patientId}
+              appointments={appointments}
+              followUps={followUps.data ?? []}
+            />
           )}
 
           {patientId && appointments.length > 1 && (
@@ -699,12 +790,7 @@ export function PatientHome({ firstName }) {
             </section>
           )}
 
-          {patientId && !firstRun && (
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <RecentActivity patientId={patientId} />
-              <YourCare team={team} patientId={patientId} />
-            </div>
-          )}
+          {patientId && !firstRun && <RecentActivity patientId={patientId} />}
           {missing && (
             <EmptyState compact icon={UserRound} title="Your records will appear here">
               Once you create your health profile, your appointments, documents and prescriptions
@@ -714,7 +800,10 @@ export function PatientHome({ firstName }) {
         </>
       )}
 
-      <p className="flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+      <p
+        data-tour="emergency"
+        className="flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text"
+      >
         <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
         <span>
           <span className="font-medium">In a medical emergency</span>, call 112 or 108, or go to the

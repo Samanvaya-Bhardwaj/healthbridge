@@ -138,6 +138,14 @@
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
   }
+  /* The "Larger text" switch: everything is sized in rem, so it all grows together. */
+  html[data-text-size='large'] {
+    font-size: 118.75%;
+  }
+  /* What the tour lights up stops below the sticky header. */
+  [data-tour] {
+    scroll-margin-top: 6rem;
+  }
   body {
     @apply bg-surface text-text font-sans antialiased;
   }

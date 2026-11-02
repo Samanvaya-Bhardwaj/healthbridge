@@ -14,6 +14,7 @@ import { MissingProfileNotice } from '../patients/MissingProfileNotice.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { CalendarDays, ChevronDown, HelpCircle, Search, Stethoscope, UserPlus } from 'lucide-react';
+import { careImages } from '../../assets/care/index.js';
 import { PageHeader, SectionHeader } from '../../components/ui/Typography.jsx';
 import { Recommendations } from './Recommendations.jsx';
 import { AvailabilitySummary, DoctorCredentials } from './DoctorInfo.jsx';
@@ -385,6 +386,7 @@ export function MyDoctorsPage() {
     <div className="space-y-6">
       <PageHeader
         icon={Stethoscope}
+        image={careImages.doctors}
         eyebrow="My care"
         title={
           dependentId

@@ -9,8 +9,21 @@ const FOCUSABLE =
  * Modal dialog: role="dialog" + aria-modal, labelled by its title, focus moved inside on
  * open and trapped there (Tab / Shift+Tab), Escape closes, and focus returns to the
  * element that opened it. The page behind is marked inert while open.
+ *
+ * `guide`: a step of a guided tour. It has a larger title and no backdrop of its own, because
+ * the tour dims the page around what it lights up; `placement` keeps the card off that.
  */
-export function Dialog({ open, title, description, onClose, children, footer, tone }) {
+export function Dialog({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  footer,
+  tone,
+  guide = false,
+  placement,
+}) {
   const titleId = useId();
   const descId = useId();
   const panel = useRef(null);
@@ -55,7 +68,17 @@ export function Dialog({ open, title, description, onClose, children, footer, to
   // Rendered outside #root (document.body) so the inert page does not include it.
   return (
     <DialogPortal>
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(15_34_54/0.45)] p-4 backdrop-blur-[2px] sm:items-center">
+      <div
+        className={`fixed inset-0 z-50 flex justify-center p-4 ${
+          guide ? '' : 'bg-[rgb(15_34_54/0.45)] backdrop-blur-[2px]'
+        } ${
+          placement === 'top'
+            ? 'items-start'
+            : placement === 'bottom'
+              ? 'items-end'
+              : 'items-end sm:items-center'
+        }`}
+      >
         <div
           ref={panel}
           role="dialog"
@@ -70,7 +93,10 @@ export function Dialog({ open, title, description, onClose, children, footer, to
               <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
             )}
             <div className="min-w-0">
-              <h2 id={titleId} className="text-lg font-medium tracking-[-0.01em] text-text">
+              <h2
+                id={titleId}
+                className={`font-medium tracking-[-0.01em] text-text ${guide ? 'text-2xl' : 'text-lg'}`}
+              >
                 {title}
               </h2>
               {description && (

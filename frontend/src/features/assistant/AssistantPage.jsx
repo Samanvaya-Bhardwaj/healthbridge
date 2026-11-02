@@ -24,6 +24,7 @@ import { Card } from '../../components/ui/Card.jsx';
 import { TextAreaField } from '../../components/ui/Fields.jsx';
 import { PersonIdentity } from '../../components/ui/Identity.jsx';
 import { LoadingState } from '../../components/ui/EmptyState.jsx';
+import { careImages } from '../../assets/care/index.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { PatientSelect } from '../records/PatientSelect.jsx';
 import { usePatientChoice } from '../records/usePatientChoice.js';
@@ -491,9 +492,10 @@ export function AssistantPage() {
     <div className="space-y-6">
       <PageHeader
         icon={Sparkles}
+        image={careImages.assistant}
         eyebrow="AI assistance"
         title="HealthBridge Assistant"
-        description="Tell me what you need help with, in your own words. I can find a doctor and free times. I don’t diagnose or give medical advice: your doctor decides about your care."
+        description="Tell me what you need in your own words. I can find a doctor and free times. I don’t give medical advice: your doctor decides about your care."
         actions={
           turns.length > 0 && (
             <Button variant="ghost" size="sm" icon={RotateCcw} onClick={startFresh}>

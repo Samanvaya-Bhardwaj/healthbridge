@@ -15,6 +15,7 @@ import { EmptyState, LoadingState } from '../../components/ui/EmptyState.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { careImages } from '../../assets/care/index.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import {
   AlertTriangle,
@@ -260,9 +261,10 @@ function PatientFollowUps() {
     <div className="space-y-6">
       <PageHeader
         icon={HeartPulse}
+        image={careImages.checkin}
         eyebrow="My care"
         title="Follow-ups"
-        description="After a consultation, your doctor may ask how you are. Answer a few quick questions; your doctor reads them. If you feel very unwell, don’t wait: call 112 or 108."
+        description="Your doctor may ask how you are after a visit. If you feel very unwell, don’t wait: call 112 or 108."
         actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
       />
       {guidance && <EmergencyGuidance guidance={guidance} />}

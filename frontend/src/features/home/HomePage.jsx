@@ -1,17 +1,14 @@
 import { Link } from 'react-router';
 import {
   BadgeCheck,
-  CalendarCheck,
   CalendarClock,
   FileSignature,
-  FlaskConical,
   HeartPulse,
   Plus,
   ShieldCheck,
   Stethoscope,
-  UserRound,
-  Video,
 } from 'lucide-react';
+import { careImages } from '../../assets/care/index.js';
 import { ButtonLink } from '../../components/ui/Button.jsx';
 import { Eyebrow } from '../../components/ui/Typography.jsx';
 
@@ -44,13 +41,23 @@ const steps = [
   [
     'Create your health profile',
     'Your name, date of birth and contact details. It takes a few minutes.',
+    careImages.tablet,
   ],
-  ['Add your doctor', 'Find your family doctor among verified doctors and send a request.'],
+  [
+    'Add your doctor',
+    'Find your family doctor among verified doctors and send a request.',
+    careImages.doctors,
+  ],
   [
     'Consult online',
     'Book a time, pay if the visit has a fee, and join the video call from the app.',
+    careImages.online,
   ],
-  ['Stay on track', 'Prescriptions, reports and follow-up check-ins stay in one place.'],
+  [
+    'Stay on track',
+    'Prescriptions, reports and follow-up check-ins stay in one place.',
+    careImages.medicines,
+  ],
 ];
 
 const faqs = [
@@ -75,81 +82,6 @@ const faqs = [
     'No. The assistant helps you find a doctor, book a time and find your way around. It never diagnoses or prescribes, and it tells you when to see a doctor.',
   ],
 ];
-
-const journey = [
-  [Video, 'Online consultation', 'With your own doctor'],
-  [FileSignature, 'Prescription signed', 'Ready to download'],
-  [FlaskConical, 'Lab report verified', 'Checked by your doctor'],
-  [CalendarCheck, 'Follow-up check-in', 'How are you feeling?'],
-];
-
-/** The idea of HealthBridge in one picture: you and your doctor, joined by your record. */
-function ContinuityIllustration() {
-  return (
-    <div
-      aria-hidden="true"
-      className="relative min-w-0 rounded-[1.75rem] border border-border bg-surface-raised p-5 shadow-raised sm:p-7"
-    >
-      <div className="flex items-center justify-between gap-2 sm:gap-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted text-text-muted">
-            <UserRound className="h-5 w-5" />
-          </span>
-          <span className="text-sm font-medium text-text">You</span>
-        </div>
-        <svg
-          viewBox="0 0 120 40"
-          className="h-10 min-w-0 flex-1 text-accent"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M4 34 C 34 2, 86 2, 116 34"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray="4 5"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-        <div className="flex items-center gap-3">
-          <span className="text-right text-sm font-medium text-text">
-            Your doctor
-            <span className="flex items-center justify-end gap-1 text-xs font-normal text-primary">
-              <BadgeCheck className="h-3.5 w-3.5" />
-              Verified
-            </span>
-          </span>
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-soft text-primary">
-            <Stethoscope className="h-5 w-5" />
-          </span>
-        </div>
-      </div>
-      <ol className="relative mt-7 space-y-4 pl-9">
-        <span className="absolute bottom-3 left-3 top-3 w-px bg-border" />
-        {journey.map(([Icon, title, detail]) => (
-          <li key={title} className="relative">
-            <span className="absolute -left-9 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary-soft text-primary ring-4 ring-surface-raised">
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            <span className="block text-sm font-medium text-text">{title}</span>
-            <span className="block text-sm text-text-muted">{detail}</span>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1 text-xs font-medium text-primary">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Shared only with your consent
-        </span>
-        <span className="flex items-center gap-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-text-subtle">
-          <span className="h-1.5 w-1.5 rounded-full bg-success" />
-          Your record
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /** A numbered section opening: a hairline, the mono label and its number, then the title. */
 function SectionIntro({ index, label, title, id, children }) {
@@ -203,7 +135,13 @@ export function HomePage() {
                 </ButtonLink>
               </div>
             </div>
-            <ContinuityIllustration />
+            <img
+              src={careImages.welcome}
+              alt="A doctor listening to an older patient across a desk"
+              width="1200"
+              height="800"
+              className="aspect-[3/2] w-full min-w-0 rounded-[1.75rem] object-cover shadow-raised"
+            />
           </div>
         </section>
       </div>
@@ -239,17 +177,27 @@ export function HomePage() {
             Four steps, one clear action at a time. You can stop and come back whenever you like.
           </SectionIntro>
           <ol className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {steps.map(([title, body], i) => (
+            {steps.map(([title, body, image], i) => (
               <li
                 key={title}
-                className="rounded-card border border-border bg-surface-raised p-5 shadow-card"
+                className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card"
               >
-                <span className="flex items-center gap-2 font-mono text-sm text-primary">
-                  <span aria-hidden="true" className="h-2 w-2 rounded-sm bg-accent" />
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <h3 className="mt-6 text-lg font-medium tracking-[-0.01em] text-text">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-text-muted">{body}</p>
+                <img
+                  src={image}
+                  alt=""
+                  width="720"
+                  height="480"
+                  loading="lazy"
+                  className="aspect-[3/2] w-full object-cover"
+                />
+                <div className="p-5">
+                  <span className="flex items-center gap-2 font-mono text-sm text-primary">
+                    <span aria-hidden="true" className="h-2 w-2 rounded-sm bg-accent" />
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <h3 className="mt-3 text-lg font-medium tracking-[-0.01em] text-text">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-text-muted">{body}</p>
+                </div>
               </li>
             ))}
           </ol>

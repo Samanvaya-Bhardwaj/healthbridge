@@ -3,6 +3,8 @@
  *
  *   PageHeader     where am I (eyebrow + title), what is this page for (description),
  *                  and the page's main actions. One per page; renders the only <h1>.
+ *                  `image`: a photo for the patient side, so a page is recognised at a
+ *                  glance. Decorative: the title says what the page is.
  *   SectionHeader  a titled group inside a page (h2 by default).
  *   HelperText     secondary explanation under a control or block.
  *   ErrorText      inline error, announced to assistive technology.
@@ -27,10 +29,19 @@ export function Eyebrow({ icon: Icon, children, className = '' }) {
   );
 }
 
-export function PageHeader({ icon: Icon, eyebrow, title, description, actions, children }) {
+export function PageHeader({ icon: Icon, eyebrow, title, description, actions, children, image }) {
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
+      {image && (
+        <img
+          src={image}
+          alt=""
+          width="720"
+          height="480"
+          className="h-32 w-full rounded-2xl object-cover sm:order-last sm:h-28 sm:w-44 sm:shrink-0"
+        />
+      )}
+      <div className="min-w-0 sm:flex-1">
         {eyebrow && <Eyebrow icon={Icon}>{eyebrow}</Eyebrow>}
         <h1 className="mt-2 text-[1.875rem] font-medium leading-[1.15] tracking-[-0.02em] text-text sm:text-[2.125rem]">
           {title}

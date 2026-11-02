@@ -25,6 +25,7 @@ import {
   postToStorage,
   sha256Hex,
 } from './upload.js';
+import { careImages } from '../../assets/care/index.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { CheckboxField, FileField } from '../../components/ui/Fields.jsx';
 import { SectionHeader } from '../../components/ui/Typography.jsx';
@@ -234,9 +235,10 @@ export function RecordsPage() {
     <div className="space-y-6">
       <PageHeader
         icon={FileText}
+        image={careImages.reports}
         eyebrow="My health"
         title="Health Records"
-        description="Upload reports and documents so your doctors can see your history. Files stay private: every upload is checked for safety, and doctors see it only when you give them access in Privacy & Access."
+        description="Keep your reports here. Doctors see them only if you allow it."
         actions={<PatientSelect choices={choices} value={patientId} onChange={setPatientId} />}
       />
       <UploadForm patientId={patientId} onUploaded={refresh} />

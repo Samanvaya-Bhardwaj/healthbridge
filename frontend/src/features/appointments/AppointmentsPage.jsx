@@ -10,6 +10,7 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button, ButtonLink } from '../../components/ui/Button.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { EmptyState, LoadingState, PermissionNotice } from '../../components/ui/EmptyState.jsx';
+import { careImages } from '../../assets/care/index.js';
 import { PageHeader } from '../../components/ui/Typography.jsx';
 import { Tabs } from '../../components/ui/Tabs.jsx';
 import { useConfirm } from '../../components/ui/useConfirm.jsx';
@@ -120,9 +121,10 @@ function PatientAppointments() {
       {dialog}
       <PageHeader
         icon={CalendarDays}
+        image={careImages.visit}
         eyebrow="My care"
         title="Appointments"
-        description="Your online and in-clinic consultations. You can book with any doctor in your care team."
+        description="Your online and clinic visits. You can book with any of your doctors."
         actions={
           <ButtonLink as={Link} to="/app/doctors" icon={Stethoscope}>
             Book with my doctors

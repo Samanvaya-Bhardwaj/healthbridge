@@ -10,7 +10,16 @@ The current look (October 2026) is **sky and white**. It fuses patterns from the
 | Energy site (`1`) | The mono label voice (`01 / WHO WE ARE`); a facts row with thin dividers; a white data card floating over a coloured panel; numbered steps; one strong colour band for the closing call to action |
 | Home-robot site (`2`) | Segmented pill controls (used for tabs); round icon tiles in buttons; the floating pill header |
 
-What was left out: photography (HealthBridge stores no photos of people), marketing statistics (only true product facts are shown), decorative motion and heavy uppercase display type.
+What was left out: marketing statistics (only true product facts are shown), decorative motion and heavy uppercase display type.
+
+## Photography
+
+Older patients find their way by picture more easily than by reading, so the patient side uses photos ([ADR-0042](adr/0042-patient-home-in-pictures-and-a-tour.md)). Staff pages stay without them: they are dense on purpose.
+
+- **Calm and human:** people at ease, doctors talking with patients, ordinary things like a tablet or a pill organiser. No distress, no hospital beds, no needles.
+- **Beside the words, never under them:** text doesn't sit on a photo, so contrast stays predictable. The words say what the photo means, so most photos use `alt=""`.
+- **One shape:** 3:2, rounded like the card around it. Hosted in the app and about 20 KB each.
+- **Models, not our people:** a photo never appears beside a doctor's name. Stored records hold no photos of people, and sources and licences are in [IMAGE_CREDITS.md](IMAGE_CREDITS.md).
 
 ## The mark
 
