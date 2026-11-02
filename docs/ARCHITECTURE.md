@@ -31,7 +31,7 @@ flowchart LR
   API -->|service JWT| AI
   Workers --> PG & Redis & S3 & AI
   AI -->|ai schema only| PG
-  AI -->|LLMProvider| LLM[Claude / future providers]
+  AI -->|LLMProvider| LLM[Claude · self-hosted Ollama]
 ```
 
 | Component | Responsibility |
@@ -314,7 +314,101 @@ routes → controllers → application services → domain (pure rules) → repo
 - **State:** structured `CareAssistantState` in `agent_sessions` (RLS: the owner, for a patient on their side; 24 h). Never message text.
 - **Safety:** deterministic emergency wording gets fixed guidance.
 - **Failures** degrade to a My Doctors fallback.
-- **Next:** semantic doctor search (M13.2), recommendations (M13.3) and approved booking (M13.4) build on this ([ADR-0029](adr/0029-agentic-ai-orchestration.md), [AGENTIC_AI.md](AGENTIC_AI.md)).
+- **Later:** search, recommendations, clarification and booking build on this loop (below) ([ADR-0029](adr/0029-agentic-ai-orchestration.md), [AGENTIC_AI.md](AGENTIC_AI.md)).
+
+- **The form is checked:** every field the model fills, except the kind of doctor, must be
+  supported by the person's own words; anything else is dropped. Only search intents change
+  the search under way ([ADR-0041](adr/0041-the-form-is-checked-against-the-words.md)).
+
+### Doctor search and one eligibility rule (M13.2)
+
+- **Eligibility:** one definition in PostgreSQL (`authz.doctor_is_bookable`,
+  `authz.practice_site_open`), used by the directory, slots and booking.
+  - A BEFORE INSERT trigger re-checks it at booking time and reads the rows it depends on
+    `FOR SHARE`, so a concurrent clinic closure or doctor departure cannot slip through.
+  - Future bookings that stop being eligible are withdrawn by the system, with a full
+    refund ([ADR-0030](adr/0030-one-eligibility-rule.md)).
+- **Search:** one SQL query over public profile data.
+  - Hard filters: eligibility, specialty, city and language (under any of their names:
+    Bangalore is Bengaluru), consultation mode, and name (trigram matching for typos).
+  - Ranking: listed areas of practice, full-text relevance, the patient's care team, then
+    experience. Each result says which criteria it meets
+    ([ADR-0031](adr/0031-doctor-search.md)).
+- **Vector ranking:** public profile text is embedded into `doctor_profile_embeddings`
+  (pgvector) and re-embedded when the text or the embedding model changes. Similarity is
+  one more ranking term; it never decides who is listed.
+- **Evaluation:** 120 held-out queries on an unseen synthetic directory
+  ([evaluations/DOCTOR_SEARCH.md](evaluations/DOCTOR_SEARCH.md)).
+
+### Recommendations and clarification (M13.3)
+
+- **Recommendations:** at most 5 doctors, from the search order plus continuity (care team,
+  past visits), the patient's own preferences and the soonest free time. Doctors the patient
+  knows and doctors near them are added before scoring, so a long directory can't hide them.
+  - Explanations are facts with a code and a value, never statements about health
+    ([ADR-0032](adr/0032-recommendations.md)).
+- **Clarification:** the model reports a fixed form; code reconciles it with the
+  structured state (removals, corrections, "show others", unsupported preferences).
+  - At most two clarifying questions in a row, with tappable choices
+    ([ADR-0033](adr/0033-conversational-clarification.md),
+    [evaluations/CLARIFICATION.md](evaluations/CLARIFICATION.md)).
+
+### Booking in the conversation (M13.4)
+
+- **Selection:** taps and words pick a doctor or a time. Code accepts only doctors and
+  times the assistant showed.
+- **Proposal:** a picked time becomes an `assistant_actions` row built by the backend after
+  re-checking the slot. It belongs to the user (RLS), is audited and expires in 15 minutes.
+- **Confirm:** only the person's Confirm books, through `appointmentService.book`
+  (eligibility guard, overlap constraint, payment hold, outbox), with an idempotency key
+  from the proposal. The five assistant tools stay read-only.
+- **Pay and calendar:** payment uses the same checkout as the payment page. Confirmation
+  emails carry a calendar invite, and the chat offers Google Calendar, Outlook and `.ics`
+  links ([ADR-0038](adr/0038-booking-in-the-conversation.md)).
+
+### Audit integrity and AI safeguards (steps 9 and 10)
+
+- **Audit seals:** a worker seals consecutive ranges of the audit log with SHA-256 and a
+  keyed HMAC chain. Verification reports changed rows and altered or missing seals.
+  - The integration suite fails if a state-changing request leaves no audit row
+    ([ADR-0035](adr/0035-tamper-evident-audit-and-coverage.md)).
+- **Spend ceiling:** `LLM_DAILY_BUDGET_USD` caps estimated model spend per UTC day across
+  replicas. At the ceiling, calls are refused before the model is called and each workflow
+  shows its fallback.
+- **Deferred analysis:** passing model failures in document analysis are retried with
+  backoff, not stored as results
+  ([ADR-0036](adr/0036-ai-safeguards-budget-and-record-answers.md)).
+
+### Local models (Ollama)
+
+- `LLM_PROVIDER=ollama` and `EMBEDDING_PROVIDER=ollama` run chat (for example Llama 3.2)
+  and embeddings (`nomic-embed-text`) on infrastructure the operator controls. Structured
+  output uses the same JSON schemas and validation.
+- **One embedding space per comparison:** each vector records its model. Retrieval compares
+  only vectors of the current model, and a switch adds new vectors beside existing chunks
+  (`ai.chunk_vectors`, append-only).
+- **Small models:** code corrects the explicit words they misread (weekdays, today and
+  tomorrow, mode, time of day) ([ADR-0037](adr/0037-local-models-ollama.md)).
+
+### Patients ask about their own records
+
+- Patients and guardians can ask about their own documents, in Health Records or the
+  assistant, with the doctor brief's validation (citations, numbers from the sources, no
+  diagnosis) and its exact fallback.
+- Sources reach the model newest first, each with the date on its document.
+- The question is never stored, logged or audited, and the assistant's planner never sees
+  the record ([ADR-0039](adr/0039-patients-ask-about-their-own-records.md)).
+
+### General health information
+
+- **A library, not the model's knowledge:** versioned articles on common complaints. Code
+  picks the article from the person's words; a message the library doesn't cover gets no
+  model call.
+- **The model only summarises:** 2 to 4 sentences citing the article, each validated (cited,
+  numbers from the source, no diagnosis, medicine or urgency). Warning signs and the
+  disclaimer are fixed text.
+- **Review:** production serves only clinician-approved articles
+  ([ADR-0040](adr/0040-general-health-information.md)).
 
 ## 6. Observability baseline
 
@@ -354,5 +448,8 @@ routes → controllers → application services → domain (pure rules) → repo
 ## 7. Roadmap
 
 Milestones M0–M12 are listed in the [proposal §16](ARCHITECTURE_PROPOSAL.md#16-implementation-order).
-Current status: **M12 complete: all Phase 1 milestones delivered.** Deployment and operations: [OPERATIONS.md](OPERATIONS.md).
+Current status: **M0–M13.4 and the hardening steps complete; local models, record questions
+and health information added since.** Not hosted yet: production waits on the owner
+decisions in [DEPLOYMENT_READINESS.md](DEPLOYMENT_READINESS.md). Deployment and operations:
+[OPERATIONS.md](OPERATIONS.md).
 See [SECURITY.md](SECURITY.md), [API.md](API.md) and [DATABASE.md](DATABASE.md).

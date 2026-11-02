@@ -1,7 +1,7 @@
 # Validation report (step 11)
 
-- **Date:** 2026-10-15
-- **Commit:** the step 11 merge on `main` (see `git log`)
+- **Date:** 2026-10-15; gates and §6 updated 2026-11-02 after the functionality audit
+- **Commit:** the audit branch `fix/functionality-audit` (see `git log`)
 - **Environment:** one development machine (Docker Desktop on Windows), with the full
   Compose stack and synthetic data only. Nothing here was measured on AWS or with real
   providers.
@@ -18,13 +18,13 @@ push, plus gitleaks over the full history.
 | Gate | Result | Size |
 |---|---|---|
 | Lint (ESLint), formatting (Prettier) | PASS | whole repository |
-| Backend unit tests | PASS | 22 files, 261 tests |
-| Frontend tests (Vitest, Testing Library) | PASS | 23 files, 97 tests |
+| Backend unit tests | PASS | 26 files, 319 tests |
+| Frontend tests (Vitest, Testing Library) | PASS | 25 files, 115 tests |
 | Frontend production build | PASS | |
 | Dependency audit (production) | PASS | 0 high or critical |
-| Backend integration tests (PostgreSQL, Redis, MinIO) | PASS | 29 files, 277 tests |
-| AI service lint and tests (with the database) | PASS | 202 tests |
-| Browser end-to-end journeys (Playwright) | PASS | 8 specs: 16 passed, 1 skipped (live video needs `--video`) |
+| Backend integration tests (PostgreSQL, Redis, MinIO) | PASS | 31 files, 293 tests |
+| AI service lint and tests (with the database) | PASS | 357 tests |
+| Browser end-to-end journeys (Playwright) | PASS | 9 specs: 19 passed, 1 skipped (live video needs `--video`) |
 | Backup image; backup and restore drill (throw-away key, scratch database) | PASS | manifest identical |
 | Secret scan (gitleaks) on every merged range | no leaks | |
 
@@ -84,8 +84,8 @@ about 24 s. A second run changes nothing.
 
 ## 5. Accessibility
 
-- **Automated:** axe-core (WCAG 2.0 and 2.1, A and AA) runs on 26 pages in the browser
-  suite (`e2e/tests/accessibility.spec.js`), with the demo data loaded:
+- **Automated:** axe-core (WCAG 2.0 and 2.1, A and AA) runs on 26 pages, and on an open
+  step of the patient tour, in the browser suite (`e2e/tests/accessibility.spec.js`), with the demo data loaded:
   - public: sign in, register, password reset;
   - patient: home, My Doctors, appointments, booking, records, prescriptions, timeline,
     follow-ups, privacy, assistant, notifications, account settings;
@@ -116,6 +116,35 @@ about 24 s. A second run changes nothing.
 These measure the logic around the model on synthetic data. They do not measure a real
 model's language understanding; that needs its own held-out human wording before external
 processing is enabled.
+
+### Run by hand against a real model
+
+A functionality audit (2026-11-02) ran the assistant with `llama3.2` and `nomic-embed-text` on
+one laptop CPU, over the live API and the demo data. It was a set of about 30 messages
+written by hand: evidence of behaviour, not a measurement of accuracy. The fake model could
+not have found these, because it only returns what its rules recognise
+([ADR-0041](adr/0041-the-form-is-checked-against-the-words.md)).
+
+| Message | Before | After |
+|---|---|---|
+| "I think I am having a heart attack" | Offered to book a cardiologist | Fixed 112/108 guidance, no AI call |
+| "i want to die", "vomiting blood", "difficulty in breathing" | Doctor search or a clarifying question | Fixed guidance |
+| "food poisoning since yesterday" | Fixed guidance, no way forward | General physicians |
+| "I have acidity for 3 days" | "I can help you find a doctor" | Health information and gastroenterologists |
+| "a dermatologist in Bangalore who speaks Hindi, online" | Searched for a doctor named "a dermatologist"; city lost | City, language and mode understood |
+| "Book Dr. Meera", then "at 11:00" | Five unrelated doctors | Her free times, then which day |
+| "online please" with a doctor chosen | Doctor dropped, search restarted | Doctor kept, online times checked |
+| "What was my last HbA1c?" | 6.1% from June | 6.4% from October first, with dates (it also lists July's) |
+| "How has my HbA1c changed?" | Two of three values, no order | 6.1%, 7.1%, 6.4%, in order, with dates |
+| "What was my haemoglobin in the annual health check?" | "I couldn't find that" | 11.9 g/dL, with its report date |
+| "How are my kidneys?" | Sent to neurologists | eGFR and creatinine from the reports |
+
+A full booking also ran through the assistant with the fake payment provider: propose,
+Confirm (twice, one booking), pay, calendar file, cancel, and a full refund processed.
+
+On this CPU a record question takes about 2 to 4 minutes, close to the edge's 300-second
+limit; each source adds time, so six are sent. Answers are short and mostly copy report
+lines. A hand-run set is no substitute for a held-out evaluation of the model.
 
 ## 7. Monitoring
 

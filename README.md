@@ -29,13 +29,21 @@ consultation preparation. **Clinical decisions always stay with qualified profes
 | **M10** | Follow-ups and notifications: check-ins, reminders, rule-based escalation, AI summary for doctors, in-app inbox | ✅ Complete |
 | **M11** | Admin UI (users, audit log, operations), Bull Board, metrics and dashboards, password reset and email verification, Playwright e2e, OWASP review | ✅ Complete |
 | **M12** | Deployment: production Compose + ECS manifests, TLS, encrypted backups with restore drill and DR rehearsal, staging rehearsal, CD pipeline | ✅ Complete |
-| **M13.1** | Agentic care assistant foundation: backend-owned turn loop over a bounded LangGraph planner, read-only tools, structured 24 h state, Assistant page (M13.2–M13.4 next) | ✅ Complete |
+| **M13.1** | Agentic care assistant foundation: backend-owned turn loop over a bounded LangGraph planner, read-only tools, structured 24 h state, Assistant page | ✅ Complete |
+| **M13.2** | Doctor search: one eligibility rule for search, slots and booking, shared specialty and area vocabulary, pgvector ranking over public profiles, held-out evaluation | ✅ Complete |
+| **M13.3** | Recommendations with factual explanations; conversational clarification, corrections and refinements | ✅ Complete |
+| **M13.4** | Booking in the conversation: recommend, pick a time, explicit Confirm, pay, calendar invite and notifications. The model has no write tool | ✅ Complete |
+| **Hardening** | Tamper-evident audit chain, daily AI spend ceiling, validation report (gates, concurrency, accessibility, evaluations), deployment preflight | ✅ Complete |
+| **Local AI** | Self-hosted models through Ollama (Llama 3.2, `nomic-embed-text`); patients ask about their own records (cited RAG); general health information from a reviewed library | ✅ Complete |
+
+**Not hosted yet.** Everything runs locally with `npm start`. Production waits on the owner
+decisions in [DEPLOYMENT_READINESS.md](docs/DEPLOYMENT_READINESS.md).
 
 ## Architecture at a glance
 
 - **frontend/**: React + Vite + Tailwind CSS SPA, served by unprivileged Nginx
 - **backend/**: Node.js/Express modular monolith (REST `/api/v1`), Knex migrations, BullMQ workers
-- **ai-service/**: Python/FastAPI, internal only. Provider-neutral `LLMProvider` (Claude first; offline fake by default), bounded LangGraph agents (documents, brief/RAG, follow-ups)
+- **ai-service/**: Python/FastAPI, internal only. Provider-neutral `LLMProvider` (Claude, self-hosted Ollama, or an offline fake by default) and embeddings (offline hashing, Ollama, Voyage); bounded LangGraph agents (care assistant, documents, brief/RAG, follow-ups, health information)
 - **shared/**: constants and schemas shared by the frontend and backend
 - **infra/**: Nginx (plain/TLS), PostgreSQL bootstrap, observability (Prometheus, Grafana), deployment (production Compose, ECS, backups)
 - **e2e/**: Playwright browser journeys
@@ -47,6 +55,54 @@ outbox · immutable signed clinical records · source-grounded AI with citations
 
 See [ARCHITECTURE](docs/ARCHITECTURE.md), [SECURITY](docs/SECURITY.md), [API](docs/API.md),
 [DATABASE](docs/DATABASE.md) and [DECISIONS](docs/DECISIONS.md).
+
+## Designed for older patients
+
+The patient side works by picture, not by reading
+([ADR-0042](docs/adr/0042-patient-home-in-pictures-and-a-tour.md)):
+
+- **Six picture tiles** on the home page, and a photo with one plain sentence on each page.
+- **A "Larger text" switch** in the header.
+- **A guided tour** that lights up each part of the page in large type, offered and never
+  forced.
+
+Photos are hosted in the app; sources and licences are in
+[IMAGE_CREDITS.md](docs/IMAGE_CREDITS.md).
+
+## How the AI works
+
+The model understands and summarises. Code decides, and the backend commits.
+
+- **Care assistant** ([ADR-0029](docs/adr/0029-agentic-ai-orchestration.md),
+  [ADR-0038](docs/adr/0038-booking-in-the-conversation.md)): a LangGraph graph (safety →
+  understand → validate → route) in `ai-service/app/agents/care_assistant.py`.
+  - The model fills one fixed JSON form (intent and preferences). Code checks every field
+    against the person's own words ([ADR-0041](docs/adr/0041-the-form-is-checked-against-the-words.md)),
+    picks one of five read-only tools and writes the tool arguments.
+  - It recommends doctors, offers free times and proposes a booking. Only the person's
+    **Confirm** books, through the app's own booking path; payment, a calendar invite and
+    notifications follow in the chat.
+- **Retrieval over records** ([ADR-0024](docs/adr/0024-doctor-brief-patient-scoped-rag.md),
+  [ADR-0039](docs/adr/0039-patients-ask-about-their-own-records.md)):
+  - PDF text or Tesseract OCR, then chunks and embeddings in pgvector, ranked together with
+    full-text search under row-level security, within one patient's documents that the
+    asker may see.
+  - Sources reach the model newest first, by the date on the document, so "latest" means
+    latest.
+  - Answers keep only sentences that cite their sources and match their numbers; otherwise
+    the exact "insufficient information" reply.
+  - Every vector records its model. A model switch adds new vectors beside the old ones
+    (append-only), and retrieval compares only vectors of one model.
+- **Safeguards** ([ADR-0036](docs/adr/0036-ai-safeguards-budget-and-record-answers.md)):
+  a deterministic emergency screen runs before any model call; a daily spend ceiling holds
+  across replicas; every run records model, tokens and estimated cost, never the patient's
+  text.
+- **Health information** ([ADR-0040](docs/adr/0040-general-health-information.md)): code
+  picks an article from a versioned library, and the model only writes a cited summary,
+  validated sentence by sentence. Production serves only clinician-approved articles.
+- **Evaluations** ([VALIDATION.md §6](docs/VALIDATION.md)): held-out doctor-search queries
+  and hand-labelled assistant conversations. They test the logic around the model on
+  synthetic data, not a model's language understanding.
 
 ## Quick start
 
