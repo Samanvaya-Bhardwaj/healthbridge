@@ -8,64 +8,13 @@ the phrasing used by the synthetic demo and tests.
 import re
 from typing import Any
 
+from app.agents.care_words import AREA_WORDS, NAMED_SPECIALTIES, REMOVE_WORDS, SHOW_OTHERS
 from app.llm.base import LLMRequest
 
 _MESSAGE = re.compile(r"<message>\n?(.*?)\n?</message>", re.S)
 _ALLOWED = re.compile(r"^Allowed specialties: (.*)$", re.M)
 _ALLOWED_AREAS = re.compile(r"^Allowed areas of practice: (.*)$", re.M)
 
-# M13.2: wording that fits an area of practice (the validator keeps only areas that fit
-# the specialty, so a few candidates per message is fine).
-_AREAS = [
-    (r"pimple|acne|breakout", "acne"),
-    (r"eczema|dermatitis", "eczema"),
-    (r"psoriasis", "psoriasis"),
-    (r"hair ?(fall|loss)|losing (my )?hair|bald", "hair_loss"),
-    (r"rash|hives|itch|skin allerg", "skin_allergies"),
-    (r"pigment|dark spots", "pigmentation"),
-    (r"diabet|blood sugar|sugar level", "diabetes"),
-    (r"blood pressure|\bbp\b|hypertension", "blood_pressure"),
-    (r"thyroid", "thyroid"),
-    (r"asthma|wheez", "asthma"),
-    (r"(long|persistent|lasting) cough|cough for (weeks|a month)", "long_cough"),
-    (r"headache|migraine", "headache_migraine"),
-    (r"anxiety|anxious|panic", "anxiety"),
-    (r"depress|low mood", "depression"),
-    (r"can'?t sleep|insomnia|sleep problem", "sleep"),
-    (r"joint|knee", "joint_pain"),
-    (r"back pain|neck pain", "back_neck_pain"),
-    (r"sprain|sports injur", "sports_injuries"),
-    (r"pregnan|expecting a baby", "pregnancy_care"),
-    (r"\bperiods?\b|menstrua", "menstrual_health"),
-    (r"pcos|pcod", "pcos"),
-    (r"growth|development|milestone", "child_growth"),
-    (r"vaccin|immuni[sz]", "vaccinations"),
-    (r"acidity|heartburn|reflux", "acidity_reflux"),
-    (r"stomach (pain|ache)|abdominal pain", "stomach_pain"),
-    (r"glasses|blurry|vision", "vision"),
-    (r"hearing|ear ?ache|ear pain", "ear_hearing"),
-    (r"sinus", "sinus"),
-    (r"cholesterol", "cholesterol"),
-    (r"fever|infection", "fever_infections"),
-    (r"fever|infection", "childhood_infections"),
-]
-
-_NAMED = [
-    (r"dermatolog", "Dermatology"),
-    (r"p(a)?ediatric", "Paediatrics"),
-    (r"gyn(a)?ecolog", "Gynaecology"),
-    (r"cardiolog", "Cardiology"),
-    (r"orthop(a)?edic", "Orthopaedics"),
-    (r"\bent\b|ear,? nose", "ENT"),
-    (r"ophthalmolog|eye doctor", "Ophthalmology"),
-    (r"psychiatr", "Psychiatry"),
-    (r"neurolog", "Neurology"),
-    (r"gastroenterolog", "Gastroenterology"),
-    (r"endocrinolog", "Endocrinology"),
-    (r"pulmonolog", "Pulmonology"),
-    (r"general physician|general medicine|\bgp\b", "General Medicine"),
-    (r"family doctor|family medicine", "Family Medicine"),
-]
 _CONCERN = [
     (r"skin|rash|itch|acne|eczema|irritation", "Dermatology"),
     (r"\b(child|son|daughter|baby|kid)s?\b", "Paediatrics"),
@@ -88,43 +37,6 @@ _AMBIGUOUS = [
     (r"back pain|neck pain", ["Orthopaedics", "Neurology"]),
     (r"can'?t sleep|insomnia|sleep problem|trouble sleeping", ["Psychiatry", "Neurology"]),
 ]
-# Step 6: "I don't mind ..." wording, per criterion.
-_REMOVE = [
-    (
-        "|".join(
-            [
-                r"any (kind of |type of )?doctor",
-                r"any (kind of )?speciali?t(y|ies)",
-                r"no preference (for|on) (the )?speciali",
-                r"(doesn'?t|does not) matter which (kind of )?doctor",
-            ]
-        ),
-        ["specialty", "areas"],
-    ),
-    (r"anywhere(?! in)|any city|any location|(city|location) (doesn'?t|does not) matter", ["city"]),
-    (r"any language|languages? (doesn'?t|does not) matter", ["language"]),
-    (
-        "|".join(
-            [
-                r"(online or in[- ]?person|in[- ]?person or online|online or (at )?(the )?clinic),?"
-                r" (is |are )?(both |either )?(fine|okay|ok)",
-                r"(don'?t|do not) mind online or",
-                r"either way is fine",
-            ]
-        ),
-        ["consultationMode"],
-    ),
-    (r"any (doctor'?s )?name|(doesn'?t|does not) have to be (dr|doctor)", ["doctorName"]),
-]
-_SHOW_OTHERS = "|".join(
-    [
-        r"other (doctors|options)",
-        r"someone else",
-        r"not (this|that) doctor",
-        r"show me (more|others)",
-        r"different doctor",
-    ]
-)
 _UNSUPPORTED = [
     (r"\b(female|woman|lady|male|man)\b (doctor|dr|gp|physician|specialist)", "gender"),
     (r"\b(cheap|cheaper|cheapest|affordable|low[- ]cost|fees?|price)\b", "fees"),
@@ -187,11 +99,11 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
         if areas_line
         else set()
     )
-    areas = [code for pattern, code in _AREAS if re.search(pattern, low) and code in allowed_areas]
+    areas = [code for pattern, code in AREA_WORDS if pattern.search(low) and code in allowed_areas]
 
     specialty, from_concern = None, False
-    for pattern, name in _NAMED:
-        if re.search(pattern, low) and name in allowed:
+    for pattern, name in NAMED_SPECIALTIES:
+        if pattern.search(low) and name in allowed:
             specialty = name
             break
     options: list[str] = []
@@ -207,7 +119,7 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
                 specialty, from_concern = name, True
                 break
     remove = list(
-        dict.fromkeys(c for pattern, cs in _REMOVE if re.search(pattern, low) for c in cs)
+        dict.fromkeys(c for pattern, cs in REMOVE_WORDS if pattern.search(low) for c in cs)
     )
     unsupported = [code for pattern, code in _UNSUPPORTED if re.search(pattern, low)]
 
@@ -271,7 +183,7 @@ def care_assistant_intent(request: LLMRequest) -> dict[str, Any]:
         "areas": list(dict.fromkeys(areas))[:3],
         "specialtyOptions": options,
         "remove": remove,
-        "showOthers": bool(re.search(_SHOW_OTHERS, low)),
+        "showOthers": bool(SHOW_OTHERS.search(low)),
         "pickDoctor": pick,
         "time": time,
         "unsupported": list(dict.fromkeys(unsupported)),

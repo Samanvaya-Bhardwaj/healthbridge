@@ -84,6 +84,8 @@ def context(acting_for: str = "self") -> dict:
         "specialties": SPECIALTIES,
         "areas": AREAS,
         "actingFor": acting_for,
+        "cities": ["Pune", "Bengaluru", "Bangalore"],
+        "languages": ["English", "Hindi", "Marathi"],
     }
 
 
@@ -629,7 +631,7 @@ def test_unknown_areas_from_the_model_are_dropped():
         }
     )
     with TestClient(app) as client:
-        body, _ = run_turn(client, "skin", TOOLS)
+        body, _ = run_turn(client, "acne on my skin", TOOLS)
     # bogus is not an area; heart_rhythm does not fit Dermatology.
     assert body["state"]["criteria"]["areas"] == ["acne"]
 
@@ -682,7 +684,7 @@ def test_explicit_words_correct_a_small_models_form() -> None:
     app, _, _ = app_with({"care_assistant_intent": {**misread, "consultationMode": "online"}})
     with TestClient(app) as client:
         body, _ = run_turn(client, "a skin doctor, online or in person is fine", TOOLS)
-    assert body["state"]["criteria"]["consultationMode"] == "online"  # the model's own answer
+    assert body["state"]["criteria"]["consultationMode"] is None  # whatever the model says
     app, _, _ = app_with({"care_assistant_intent": misread})
     with TestClient(app) as client:
         body, _ = run_turn(client, "a skin doctor, not online please", TOOLS)

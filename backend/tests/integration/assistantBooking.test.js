@@ -31,17 +31,40 @@ afterAll(async () => {
   await h.close();
 });
 
-/** A planner that proposes one time with a doctor (as the graph does after a tap). */
-const proposing = (doctorId, startsAt) => (input) => ({
-  state: { ...input.state, intent: 'book_appointment', bookingDoctorId: doctorId },
-  action: { type: 'respond' },
-  reply: {
-    kind: 'confirm',
-    message: "Here's the booking. Check the details, then tap Confirm booking.",
-    cards: [{ type: 'booking', doctorId, startsAt }],
-  },
-  run: { runId: randomUUID() },
-});
+const dayInIndia = (startsAt) =>
+  new Date(startsAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+/**
+ * A planner that looks up the doctor's times, then proposes one, as the graph does: the
+ * backend builds a card only for a doctor and time in the state it has checked.
+ */
+const proposing = (doctorId, startsAt) => (input) =>
+  input.toolResult
+    ? {
+        state: {
+          ...input.state,
+          selectedDoctorId: doctorId,
+          slotStarts: [startsAt],
+          chosenStart: startsAt,
+        },
+        action: { type: 'respond' },
+        reply: {
+          kind: 'confirm',
+          message: "Here's the booking. Check the details, then tap Confirm booking.",
+          cards: [{ type: 'booking', doctorId, startsAt }],
+        },
+        run: { runId: randomUUID() },
+      }
+    : {
+        state: { ...input.state, intent: 'book_appointment', bookingDoctorId: doctorId },
+        action: {
+          type: 'tool',
+          tool: 'findAvailableSlots',
+          args: { doctorId, date: dayInIndia(startsAt) },
+        },
+        reply: null,
+        run: { runId: randomUUID() },
+      };
 
 async function doctorWithWeek(label, { feePaise = 0, acceptsNewPatients = false } = {}) {
   const doctor = await createVerifiedDoctor(h, admin, label);

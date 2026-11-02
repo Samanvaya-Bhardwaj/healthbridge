@@ -40,6 +40,14 @@ from app.agents.care_prompts import (
     message_block,
 )
 from app.agents.care_safety import EMERGENCY_MESSAGE, is_possible_emergency
+from app.agents.care_words import (
+    AREA_WORDS,
+    INDIFFERENT,
+    NAMED_SPECIALTIES,
+    OTHERS_WORDS,
+    REMOVE_WORDS,
+    SHOW_OTHERS,
+)
 from app.llm.base import LLMError, LLMMessage, LLMProvider, LLMRequest, ModelTier, StopReason
 from app.repositories.ai_store import RunTotals
 
@@ -139,7 +147,9 @@ class CareState(BaseModel):
     excludedDoctorIds: list[Uuid] = Field(default_factory=list, max_length=20)
     pendingChoice: PendingChoice | None = None
     clarifyTurns: int = Field(default=0, ge=0, le=MAX_CLARIFY_TURNS)
-    removed: list[Literal[*CRITERIA]] = Field(default_factory=list, max_length=6)  # type: ignore[valid-type]
+    removed: list[Literal[*CRITERIA]] = Field(  # type: ignore[valid-type]
+        default_factory=list, max_length=len(CRITERIA)
+    )
     notices: list[Literal[*UNSUPPORTED]] = Field(default_factory=list, max_length=6)  # type: ignore[valid-type]
     # Booking in the conversation (ADR-0038): the doctor the person chose, the time they
     # picked from those offered, and a clock time they asked for in words. A picked time
@@ -147,6 +157,8 @@ class CareState(BaseModel):
     bookingDoctorId: Uuid | None = None
     chosenStart: str | None = None
     requestedTime: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    # A tap on something no longer offered: said once, after a fresh look at the times.
+    staleChoice: bool = False
 
 
 class Selection(BaseModel):
@@ -180,6 +192,9 @@ class StepContext(BaseModel):
     actingFor: Literal["self", "dependent"] = "self"
     # The person's offset from UTC now (their own time zone), for "at 10:30".
     utcOffsetMinutes: int = Field(default=0, ge=-720, le=840)
+    # Names the validator looks for in the message (ADR-0041).
+    cities: list[str] = Field(default_factory=list, max_length=120)
+    languages: list[str] = Field(default_factory=list, max_length=40)
 
 
 class ToolResult(BaseModel):
@@ -213,7 +228,6 @@ class GraphState(TypedDict, total=False):
     message: str | None
     tool_result: ToolResult | None
     selection: Selection | None
-    stale_selection: bool
     tools_this_turn: list[str]
     raw: Any
     tool_failed: bool
@@ -258,11 +272,21 @@ def _resolve_day(raw: dict[str, Any], ctx: StepContext) -> str | None:
 # they are unambiguous, so code corrects the form for them (the model keeps the rest).
 _WEEKDAY_WORD = re.compile(r"\b(" + "|".join(WEEKDAYS) + r")\b", re.I)
 _NEGATED = re.compile(r"\b(not|no|don'?t|without)\s+(an?\s+)?$", re.I)
+_DAY_AFTER = re.compile(r"\bday after tomorrow\b", re.I)
+_TOMORROW = re.compile(r"\btomorrow\b", re.I)
+_TODAY = re.compile(r"\b(today|tonight)\b", re.I)
+_DIGIT = re.compile(r"\d")
+# Words about when a problem happens are not a time for the visit: "since morning", "cough
+# at night", "morning sickness".
+_NOT_A_TIME = (
+    r"(?<!since )(?<!since this )(?<!every )(?<!each )(?<!good )"
+    r"\b{word}\b(?! (sickness|stiffness|sweats?|cramps?))"
+)
 _CUES: list[tuple[str, str, re.Pattern[str]]] = [
     (
         "consultationMode",
         "online",
-        re.compile(r"\b(online|video( call| consult\w*)?|tele\w*)\b", re.I),
+        re.compile(r"\b(online|video( call| consult\w*)?|teleconsult\w*|from home)\b", re.I),
     ),
     (
         "consultationMode",
@@ -271,9 +295,9 @@ _CUES: list[tuple[str, str, re.Pattern[str]]] = [
             r"\b(in[- ]clinic|in[- ]person|at the clinic|visit the clinic|clinic visit)\b", re.I
         ),
     ),
-    ("timeWindow", "morning", re.compile(r"\bmorning\b", re.I)),
-    ("timeWindow", "afternoon", re.compile(r"\bafternoon\b", re.I)),
-    ("timeWindow", "evening", re.compile(r"\b(evening|night)\b", re.I)),
+    ("timeWindow", "morning", re.compile(_NOT_A_TIME.format(word="morning"), re.I)),
+    ("timeWindow", "afternoon", re.compile(_NOT_A_TIME.format(word="afternoon"), re.I)),
+    ("timeWindow", "evening", re.compile(_NOT_A_TIME.format(word="(evening|tonight)"), re.I)),
 ]
 
 
@@ -295,13 +319,13 @@ _UNSUPPORTED_CUES = {
 _RECORD_WORDS = re.compile(
     r"\b(reports?|results?|records?|documents?|labs?|tests?|scans?|x-?rays?|ecg|ekg|echo\w*"
     r"|mri|ultrasound|hba1c|a1c|cholesterol|lipids?|thyroid|tsh|vitamin|ha?emoglobin|sugar"
-    r"|glucose|creatinine|kidney|egfr|spirometry|discharge|eye check|retina\w*|allerg\w*"
-    r"|vaccin\w*|blood pressure)\b",
+    r"|glucose|creatinine|kidneys?|liver|egfr|spirometry|discharge|eye check|retina\w*"
+    r"|allerg\w*|vaccin\w*|blood pressure|bp|ana?emi[ac]\w*)\b",
     re.I,
 )
-_OWN = re.compile(r"\b(my|our|her|his|their|last|latest|recent|previous)\b", re.I)
+_OWN = re.compile(r"\b(my|our|her|his|their|last|latest|recent|previous|am i)\b", re.I)
 _QUESTION = re.compile(
-    r"^\s*(what|how|when|which|did|was|were|is|are|does|do|show|tell|summari[sz]e|explain)\b"
+    r"^\s*(what|how|when|which|did|was|were|is|are|am|does|do|show|tell|summari[sz]e|explain)\b"
     r"|\?\s*$",
     re.I,
 )
@@ -314,38 +338,180 @@ _BOOKING_WORDS = re.compile(
 )
 
 
+_GREETING = re.compile(
+    r"^\W*(hi|hello|hey|namaste|namaskar|good (morning|afternoon|evening))\W*$", re.I
+)
+_MEDICINE_WORDS = re.compile(r"\b(medicines?|medications?|tablets?|pills?|prescriptions?)\b", re.I)
+_OWN_MEDICINES = re.compile(r"\b(my|our|her|his|their|am i|do i)\b", re.I)
+
+
 def _not_negated(text: str, match: re.Match[str]) -> bool:
     return not _NEGATED.search(text[max(0, match.start() - 16) : match.start()])
 
 
-def _explicit_cues(message: str, raw: dict[str, Any]) -> dict[str, Any]:
-    """The form, corrected for unambiguous words: weekday, today/tomorrow, mode, window.
+def _stated(pattern: re.Pattern[str], text: str) -> re.Match[str] | None:
+    """The first match that isn't negated: "not Monday, Tuesday" means Tuesday."""
+    return next((m for m in pattern.finditer(text) if _not_negated(text, m)), None)
 
-    Also drops preferences the message never mentioned, and reads a question about one's
-    own documents as a records question.
+
+def _word_in(value: str, text: str) -> re.Match[str] | None:
+    return _stated(re.compile(rf"\b{re.escape(value)}\b", re.I), text)
+
+
+def _named_value(text: str, known: list[str], model_value: Any) -> str | None:
+    """A city or language the message names: a known one, or the model's if it is there."""
+    for name in sorted(known, key=len, reverse=True):
+        if _word_in(name, text):
+            return name
+    value = " ".join(model_value.split()) if isinstance(model_value, str) else ""
+    return value if value and _word_in(value, text) else None
+
+
+# "Dr" takes the next word whatever its case; "doctor" only a capitalised one, because
+# "doctor who speaks Hindi" is no name.
+_NAMED_DOCTOR = re.compile(
+    r"\b[Dd][Rr]\.?\s+([A-Za-z][a-z'-]+(?:\s+[A-Z][a-z'-]+)?)"
+    r"|\b[Dd]octor\s+([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+)?)"
+)
+_NOT_A_NAME = {
+    "for", "in", "who", "near", "at", "on", "with", "and", "or", "is", "are", "please", "online",
+    "today", "tomorrow", *WEEKDAYS,
+}  # fmt: skip
+_DOCTOR_WORD = re.compile(
+    r"\b(doctors?|physicians?|specialists?|surgeons?|consultants?|gp|\w+(ologist|iatrician"
+    r"|iatrist|paedic|pedic)s?)\b",
+    re.I,
+)
+_ARTICLE = re.compile(r"^(an?|the|my|our|some)\s+", re.I)
+
+
+def _doctor_name(text: str, model_value: Any) -> str | None:
+    """A doctor's name from the message; the model's only if it is one, and is there."""
+    m = _NAMED_DOCTOR.search(text)
+    name = (m.group(1) or m.group(2)) if m else None
+    if name and name.split()[0].lower() not in _NOT_A_NAME:
+        return name
+    value = _ARTICLE.sub("", _TITLE.sub("", str(model_value or "").strip()))
+    words = value.split()
+    if not words or _DOCTOR_WORD.search(value) or _NOT_A_NAME & {w.lower() for w in words}:
+        return None
+    return value if all(_word_in(word, text) for word in words) else None
+
+
+_CLOCK_MERIDIEM = re.compile(r"\b(1[0-2]|0?[1-9])(?:[:.]([0-5]\d))?\s*([ap])\.?m\b\.?", re.I)
+_CLOCK_24 = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
+_CLOCK_AT = re.compile(r"\bat\s+(\d{1,2})\b(?!\s*(?:days?|weeks?|months?|years?|%))", re.I)
+_NOON = re.compile(r"\bnoon\b", re.I)
+_TIME_WORDS = re.compile(r"\d|half past|quarter (past|to)|o'?clock", re.I)
+
+
+def _clock_in(text: str) -> str | None:
+    """A clock time stated in words, as HH:MM. "at 4" means the afternoon: clinics are open."""
+    if m := _CLOCK_MERIDIEM.search(text):
+        hour = int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0)
+        return f"{hour:02d}:{m.group(2) or '00'}"
+    if m := _CLOCK_24.search(text):
+        return f"{int(m.group(1)):02d}:{m.group(2)}"
+    if m := _CLOCK_AT.search(text):
+        hour = int(m.group(1))
+        if hour <= 23:
+            return f"{hour + 12 if 1 <= hour <= 7 else hour:02d}:00"
+    return "12:00" if _NOON.search(text) else None
+
+
+_ORDINALS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+    "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5,
+}  # fmt: skip
+_ORDINAL_WORDS = "|".join(_ORDINALS)
+_PICK = re.compile(
+    rf"^\s*(?:(?:book|choose|pick|take|select|go with|i'?ll take)\s+)?(?:the\s+)?"
+    rf"({_ORDINAL_WORDS})(?:\s+(?:one|doctor|dr|option|time|slot))?(?:\s+please)?\W*$",
+    re.I,
+)
+_YES = re.compile(r"^\s*(yes|yeah|yep|ok|okay|sure|confirm|go ahead|that'?s fine)\b\W*$", re.I)
+# Words that only steer a booking under way. A message of nothing else names no concern, so
+# a kind of doctor the model infers from it is a guess.
+_STEERING = set(
+    """
+    a about after am an and any around at available back be before book but by can clinic day
+    do earliest evening fine first for go have i in is it later like me morning my need next
+    no not of ok okay on one online or other person please pls pm same second slot slots
+    so soonest sure that the then third time times tonight to today tomorrow try video visit
+    want we what when which will with would yes you afternoon another city language doctor
+    doctors others show different change make instead actually prefer
+    """.split()  # noqa: SIM905
+) | set(WEEKDAYS)
+_WORD = re.compile(r"[a-z]+")
+
+
+def _only_steering(text: str) -> bool:
+    return set(_WORD.findall(text.lower())) <= _STEERING
+
+
+def _explicit_cues(message: str, raw: dict[str, Any], ctx: "StepContext") -> dict[str, Any]:
+    """The form, checked against the person's own words (ADR-0041).
+
+    Small models over-fill it, so what the message states explicitly is read here and a
+    value the message doesn't support is dropped: day, mode, time window, clock time, city,
+    language, doctor's name, areas of practice, position in a list, what the person no
+    longer minds. Only the kind of doctor may be inferred, from a described concern. Also
+    drops preferences the message never mentioned, and reads a question about one's own
+    documents as a records question.
     """
     fixed = dict(raw)
     text = message or ""
-    if (m := _WEEKDAY_WORD.search(text)) and _not_negated(text, m):
+    if _DAY_AFTER.search(text):
+        after = (ctx.tomorrow + timedelta(days=1)).isoformat()
+        fixed.update(dayKind="date", weekday=None, date=after)
+    elif m := _stated(_WEEKDAY_WORD, text):
         fixed.update(dayKind="weekday", weekday=m.group(1).lower(), date=None)
-    elif re.search(r"\btomorrow\b", text, re.I):
+    elif _stated(_TOMORROW, text):
         fixed.update(dayKind="tomorrow", weekday=None, date=None)
-    elif re.search(r"\btoday\b", text, re.I):
+    elif _stated(_TODAY, text):
         fixed.update(dayKind="today", weekday=None, date=None)
-    found: dict[str, list[str]] = {}
+    elif not (fixed.get("dayKind") == "date" and _DIGIT.search(text)):
+        fixed.update(dayKind="none", weekday=None, date=None)
+    found: dict[str, list[str]] = {"consultationMode": [], "timeWindow": []}
     for field, value, pattern in _CUES:
-        m = pattern.search(text)
-        if m and _not_negated(text, m):
-            found.setdefault(field, []).append(value)
-    for field, values in found.items():
-        if len(set(values)) == 1:  # "online or in person" is not a preference
-            fixed[field] = values[0]
+        if _stated(pattern, text):
+            found[field].append(value)
+    for field, values in found.items():  # "online or in person" is not a preference
+        fixed[field] = values[0] if len(set(values)) == 1 else None
+    fixed["city"] = _named_value(text, ctx.cities, raw.get("city"))
+    fixed["language"] = _named_value(text, ctx.languages, raw.get("language"))
+    fixed["doctorName"] = _doctor_name(text, raw.get("doctorName"))
+    fixed["time"] = _clock_in(text) or (raw.get("time") if _TIME_WORDS.search(text) else None)
+    fixed["areas"] = [code for pattern, code in AREA_WORDS if _stated(pattern, text)]
+    ordinal = _PICK.match(text)
+    fixed["pickDoctor"] = _ORDINALS[ordinal.group(1).lower()] if ordinal else None
+    named = next(
+        (name for p, name in NAMED_SPECIALTIES if p.search(text) and name in ctx.specialties),
+        None,
+    )
+    if named:
+        fixed.update(specialty=named, specialtyFromConcern=False, specialtyOptions=[])
+    elif _only_steering(text):
+        fixed.update(specialty=None, specialtyFromConcern=False, specialtyOptions=[])
+    elif fixed.get("specialty"):
+        fixed["specialtyFromConcern"] = True
+    guessed = raw.get("remove") if isinstance(raw.get("remove"), list) else []
+    fixed["remove"] = [
+        *(guessed if INDIFFERENT.search(text) else []),
+        *(criterion for p, cs in REMOVE_WORDS if p.search(text) for criterion in cs),
+    ]
+    fixed["showOthers"] = bool(SHOW_OTHERS.search(text)) or (
+        raw.get("showOthers") is True and bool(OTHERS_WORDS.search(text))
+    )
     if isinstance(fixed.get("unsupported"), list):
         fixed["unsupported"] = [
             u
             for u in fixed["unsupported"]
-            if (u in _UNSUPPORTED_CUES and _UNSUPPORTED_CUES[u].search(text))
-            or (u == "other" and fixed.get("intent") == "unsupported")
+            if isinstance(u, str)
+            and (
+                (u in _UNSUPPORTED_CUES and _UNSUPPORTED_CUES[u].search(text))
+                or (u == "other" and fixed.get("intent") == "unsupported")
+            )
         ]
     if (
         fixed.get("intent") in (None, "find_doctor", "book_appointment", "unsupported", "greeting")
@@ -355,6 +521,14 @@ def _explicit_cues(message: str, raw: dict[str, Any]) -> dict[str, Any]:
         and not _BOOKING_WORDS.search(text)
     ):
         fixed["intent"] = "ask_records"
+    if (
+        _MEDICINE_WORDS.search(text)
+        and _OWN_MEDICINES.search(text)
+        and not _BOOKING_WORDS.search(text)
+    ):
+        fixed["intent"] = "view_medications"
+    if _GREETING.match(text):
+        fixed["intent"] = "greeting"
     return fixed
 
 
@@ -482,10 +656,11 @@ def build_care_assistant(llm: LLMProvider):
                     }
                 )
             }
-        # Not one of the options offered (or no longer): say so and offer the current ones.
+        # Not one of the options offered (or no longer): say so and look at the times again.
         return {
-            "stale_selection": True,
-            "state": current.model_copy(update={**cleared, "chosenStart": None}),
+            "state": current.model_copy(
+                update={**cleared, "chosenStart": None, "slotStarts": [], "staleChoice": True}
+            ),
         }
 
     async def node_safety(state: GraphState) -> GraphState:
@@ -548,7 +723,7 @@ def build_care_assistant(llm: LLMProvider):
                     cards=[Card(type="link", target="my_doctors")],
                 ),
             }
-        raw = _explicit_cues(state.get("message") or "", raw)
+        raw = _explicit_cues(state.get("message") or "", raw, ctx)
         allowed = {s.lower(): s for s in ctx.specialties}
         specialty = allowed.get(str(raw.get("specialty") or "").lower())
         mode = raw.get("consultationMode") if raw.get("consultationMode") in MODES else None
@@ -567,7 +742,7 @@ def build_care_assistant(llm: LLMProvider):
         )
         # Step 6: what the person no longer minds goes first ("any city").
         raw_remove = raw.get("remove") if isinstance(raw.get("remove"), list) else []
-        removing = [c for c in dict.fromkeys(raw_remove) if c in CRITERIA]
+        removing = [c for c in dict.fromkeys(map(str, raw_remove)) if c in CRITERIA]
         defaults = Criteria()
         base = current.criteria.model_copy(update={c: getattr(defaults, c) for c in removing})
         # A different kind of search starts afresh: a named doctor replaces the kind of
@@ -628,39 +803,52 @@ def build_care_assistant(llm: LLMProvider):
         raw_unsupported = raw.get("unsupported") if isinstance(raw.get("unsupported"), list) else []
         notices = [u for u in dict.fromkeys(raw_unsupported) if u in UNSUPPORTED]
 
+        # With a doctor chosen, online or in clinic changes which times, not who.
+        mode_changed = merged.consultationMode != current.criteria.consultationMode
+        chosen = current.bookingDoctorId is not None
         search_changed = (
             any(
                 getattr(merged, k) != getattr(current.criteria, k)
-                for k in (
-                    "specialty",
-                    "areas",
-                    "doctorName",
-                    "language",
-                    "city",
-                    "consultationMode",
-                )
+                for k in ("specialty", "areas", "doctorName", "language", "city")
             )
             or show_others
+            or (mode_changed and not chosen)
         )
-        day_changed = any(
+        day_changed = (mode_changed and chosen) or any(
             getattr(merged, k) != getattr(current.criteria, k) for k in ("date", "timeWindow")
         )
         intent = raw["intent"]
-        # ADR-0038: "the second one" picks a doctor already shown; "at 10:30" a time.
+        # ADR-0038: "the second one" picks a time on offer, else a doctor already shown;
+        # "at 10:30" a time.
         pick = raw.get("pickDoctor")
+        on_offer = current.slotStarts if chosen else []
+        picked_start = (
+            on_offer[pick - 1] if isinstance(pick, int) and 1 <= pick <= len(on_offer) else None
+        )
         picked_doctor = (
             current.candidateDoctorIds[pick - 1]
-            if isinstance(pick, int) and 1 <= pick <= len(current.candidateDoctorIds)
+            if isinstance(pick, int) and not chosen and 1 <= pick <= len(current.candidateDoctorIds)
             else None
         )
         requested_time = _clock(raw.get("time"))
         refinement = bool(stated or removing or show_others or options or notices)
-        if intent in ("unsupported", "greeting") and refinement and current.intent in SEARCHING:
-            # "tomorrow evening" or "any city" on its own refines the search under way.
+        agreed = chosen and _YES.match(state.get("message") or "")
+        if (
+            intent in ("unsupported", "greeting")
+            and current.intent in SEARCHING
+            and (refinement or agreed)
+        ):
+            # "tomorrow evening" or "any city" on its own refines the search under way;
+            # a plain "yes" stands by the booking under way.
             intent = current.intent
-        if intent in ("unsupported", "greeting") and (options or notices):
+        if intent in ("unsupported", "greeting") and (
+            options or notices or specialty or picked or found.doctorName
+        ):
             # A described concern (or a preference) is a request for a doctor.
             intent = "find_doctor"
+        if intent not in SEARCHING:
+            # "What did my eye check show?" names no search: the one under way stands.
+            merged, pending, search_changed, day_changed = current.criteria, None, False, False
         update: dict[str, Any] = {
             "intent": intent,
             "criteria": merged,
@@ -670,7 +858,7 @@ def build_care_assistant(llm: LLMProvider):
             "excludedDoctorIds": excluded,
             "notices": notices,
         }
-        if specialty is not None:
+        if specialty is not None and intent in SEARCHING:
             update["specialtyFromConcern"] = bool(raw.get("specialtyFromConcern"))
         elif "specialty" in removing:
             update["specialtyFromConcern"] = False
@@ -678,18 +866,25 @@ def build_care_assistant(llm: LLMProvider):
         if picked_doctor:
             booking_doctor = picked_doctor
             update["intent"] = "book_appointment"
-        if requested_time and (booking_doctor or current.slotStarts):
+        if requested_time and not booking_doctor and current.slotStarts:
+            # "at 10:30" answers the times shown with the first doctor.
+            booking_doctor = current.selectedDoctorId
+        if requested_time and booking_doctor:
+            update["intent"] = "book_appointment"
+        if picked_start:
             update["intent"] = "book_appointment"
         if search_changed and not picked_doctor:
             update.update(candidateDoctorIds=[], selectedDoctorId=None, slotStarts=[])
             booking_doctor = None
+            picked_start = None
         elif day_changed:
             update.update(slotStarts=[])
+            picked_start = None
         # A picked time survives a plain "yes"; anything new means choosing again.
         keep_choice = not (search_changed or day_changed or requested_time or picked_doctor)
         update.update(
             bookingDoctorId=booking_doctor,
-            chosenStart=current.chosenStart if keep_choice else None,
+            chosenStart=picked_start or (current.chosenStart if keep_choice else None),
             requestedTime=requested_time,
         )
         if booking_doctor is None:
@@ -746,7 +941,11 @@ def build_care_assistant(llm: LLMProvider):
         theirs = "their" if ctx.actingFor == "dependent" else "your"
 
         def tool(name: str, args: dict[str, Any]) -> GraphState:
-            return {"action": {"type": "tool", "tool": name, "args": args}, "reply": None}
+            return {
+                "action": {"type": "tool", "tool": name, "args": args},
+                "reply": None,
+                "state": current,
+            }
 
         def respond(
             kind: str,
@@ -759,7 +958,9 @@ def build_care_assistant(llm: LLMProvider):
             return {
                 "action": {"type": "respond"},
                 "reply": Reply(kind=kind, message=f"{honest} {message}".strip(), cards=cards or []),
-                "state": current.model_copy(update={"lastTools": used[-6:], **(update or {})}),
+                "state": current.model_copy(
+                    update={"lastTools": used[-6:], "staleChoice": False, **(update or {})}
+                ),
             }
 
         def propose(start: str) -> GraphState:
@@ -772,29 +973,27 @@ def build_care_assistant(llm: LLMProvider):
                 {"chosenStart": start, "requestedTime": None},
             )
 
+        def slot_args(doctor: str, *, day: bool = True) -> dict[str, Any]:
+            # A clock time says more than a window, so it replaces it.
+            args: dict[str, Any] = {"doctorId": doctor}
+            if day and crit.date:
+                args["date"] = crit.date
+            if day and crit.timeWindow and not current.requestedTime:
+                args["timeWindow"] = crit.timeWindow
+            if crit.consultationMode:
+                args["mode"] = crit.consultationMode
+            if current.requestedTime:
+                args["time"] = current.requestedTime
+            return args
+
         def booking_route() -> GraphState:
             """ADR-0038: with a chosen doctor, find times, take the person's pick, propose."""
             doctor = current.bookingDoctorId
             rounds = used.count("findAvailableSlots")
-            if current.chosenStart and not state.get("stale_selection"):
+            if current.chosenStart and not current.staleChoice:
                 return propose(current.chosenStart)
-            offered = current.slotStarts if current.selectedDoctorId == doctor else []
-            if state.get("stale_selection") and offered and not used:
-                # Not one of the times offered: offer those again (no new lookup needed).
-                return respond(
-                    "clarify",
-                    "That time isn't available any more. Please pick one of these.",
-                    [Card(type="slot", doctorId=doctor, startsAt=s) for s in offered],
-                )
             if rounds == 0 and len(used) < MAX_TOOL_ROUNDS and not state.get("tool_failed"):
-                args: dict[str, Any] = {"doctorId": doctor}
-                if crit.date:
-                    args["date"] = crit.date
-                if crit.timeWindow:
-                    args["timeWindow"] = crit.timeWindow
-                if crit.consultationMode:
-                    args["mode"] = crit.consultationMode
-                return tool("findAvailableSlots", args)
+                return tool("findAvailableSlots", slot_args(doctor))
             if state.get("tool_failed"):
                 return respond(
                     "fallback",
@@ -805,6 +1004,15 @@ def build_care_assistant(llm: LLMProvider):
                 matching = [s for s in starts if _local_hhmm(s, ctx) == current.requestedTime]
                 if len(matching) == 1:
                     return propose(matching[0])
+                if matching:
+                    # Free at that time on several days: which one?
+                    return respond(
+                        "clarify",
+                        f"{current.requestedTime} is free on these days. Which suits "
+                        f"{'them' if ctx.actingFor == 'dependent' else 'you'}?",
+                        [Card(type="slot", doctorId=doctor, startsAt=s) for s in matching],
+                        {"requestedTime": None},
+                    )
             if (
                 not starts
                 and (crit.date or crit.timeWindow)
@@ -812,11 +1020,8 @@ def build_care_assistant(llm: LLMProvider):
                 and len(used) < MAX_TOOL_ROUNDS
             ):
                 # Nothing then: look at the coming days instead.
-                args = {"doctorId": doctor}
-                if crit.consultationMode:
-                    args["mode"] = crit.consultationMode
-                return tool("findAvailableSlots", args)
-            stale = "That time isn't available any more. " if state.get("stale_selection") else ""
+                return tool("findAvailableSlots", slot_args(doctor, day=False))
+            stale = "That time isn't available any more. " if current.staleChoice else ""
             when = " ".join(
                 filter(
                     None,
@@ -844,10 +1049,13 @@ def build_care_assistant(llm: LLMProvider):
                     [Card(type="slot", doctorId=doctor, startsAt=s) for s in starts],
                     {"requestedTime": None},
                 )
+            kind_of_time = {"online": "online ", "in_clinic": "clinic "}.get(
+                crit.consultationMode or "", "free "
+            )
             return respond(
                 "answer",
-                f"{stale}This doctor has no free times in the coming week. You could choose "
-                "another doctor, or ask for another kind of doctor.",
+                f"{stale}This doctor has no {kind_of_time}times in the coming week. You could "
+                "choose another doctor, or ask for another kind of doctor.",
                 [Card(type="link", target="my_doctors")],
                 {"bookingDoctorId": None, "requestedTime": None},
             )
@@ -891,23 +1099,29 @@ def build_care_assistant(llm: LLMProvider):
                             "mode": crit.consultationMode,
                             "name": crit.doctorName,
                             "excludeDoctorIds": list(current.excludedDoctorIds),
+                            # Doctors free then come first, so the first one has times.
+                            "date": crit.date,
+                            "timeWindow": crit.timeWindow,
                         }.items()
                         if v
                     }
                     return tool("searchDoctors", args)
                 if (
+                    intent == "book_appointment"
+                    and len(current.candidateDoctorIds) == 1
+                    and crit.doctorName
+                ):
+                    # "Book Dr. Meera": the one named doctor is the choice; go on to times.
+                    current = current.model_copy(
+                        update={"bookingDoctorId": current.candidateDoctorIds[0]}
+                    )
+                    return booking_route()
+                if (
                     current.candidateDoctorIds
-                    and (crit.date or crit.timeWindow)
+                    and (crit.date or crit.timeWindow or current.requestedTime)
                     and "findAvailableSlots" not in used
                 ):
-                    args = {"doctorId": current.candidateDoctorIds[0]}
-                    if crit.date:
-                        args["date"] = crit.date
-                    if crit.timeWindow:
-                        args["timeWindow"] = crit.timeWindow
-                    if crit.consultationMode:
-                        args["mode"] = crit.consultationMode
-                    return tool("findAvailableSlots", args)
+                    return tool("findAvailableSlots", slot_args(current.candidateDoctorIds[0]))
             if state.get("tool_failed") and state.get("tool_error") == "search_unavailable":
                 # Search itself failed: not the same as nobody matching.
                 return respond(
@@ -933,15 +1147,6 @@ def build_care_assistant(llm: LLMProvider):
                 found_text = f"I couldn't find {other}verified doctor {summary}".rstrip() + "."
                 parts.append(f"{found_text} {_relax_hint(crit)}")
                 return respond("answer", " ".join(parts), [Card(type="link", target="my_doctors")])
-            if (
-                intent == "book_appointment"
-                and len(candidates) == 1
-                and crit.doctorName
-                and len(used) < MAX_TOOL_ROUNDS
-            ):
-                # "Book Dr. Meera": the one named doctor is the choice; go on to times.
-                current = current.model_copy(update={"bookingDoctorId": candidates[0]})
-                return booking_route()
             one = len(candidates) == 1
             parts.append(
                 f"Here {'is' if one else 'are'} "
@@ -966,7 +1171,7 @@ def build_care_assistant(llm: LLMProvider):
                     )
                 )
                 if current.slotStarts:
-                    parts.append(f"Free times with the first doctor {when}:".replace("  ", " "))
+                    parts.append(f"The cards below show free times with the first doctor {when}.")
                     cards += [
                         Card(type="slot", doctorId=current.selectedDoctorId, startsAt=s)
                         for s in current.slotStarts

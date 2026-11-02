@@ -30,7 +30,11 @@ const TOOL_ARGS = {
   getPatientCareTeam: z.object({}).strict(),
   // M13.2: the shared, structured search criteria (no free text); none means "any doctor".
   // Step 6: excludeDoctorIds ("show me others") hides doctors already shown.
-  searchDoctors: doctorSearchCriteriaSchema.omit({ limit: true }),
+  // The day and window asked for only lift the doctors free then; they filter nobody.
+  searchDoctors: doctorSearchCriteriaSchema.omit({ limit: true }).extend({
+    date: z.iso.date().optional(),
+    timeWindow: z.enum(ASSISTANT_TIME_WINDOWS).optional(),
+  }),
   getDoctorProfile: z.object({ doctorId: uuid }).strict(),
   findAvailableSlots: z
     .object({
@@ -38,6 +42,11 @@ const TOOL_ARGS = {
       date: z.iso.date().optional(),
       timeWindow: z.enum(ASSISTANT_TIME_WINDOWS).optional(),
       mode: z.enum(['online', 'in_clinic']).optional(),
+      // A clock time asked for ("at 4 pm"), HH:MM in the person's own time zone.
+      time: z
+        .string()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+        .optional(),
     })
     .strict(),
 };
@@ -67,6 +76,22 @@ function spreadAcrossDays(timeZone) {
     perDay.set(day, n + 1);
     return n < PER_DAY_WITHOUT_DATE;
   };
+}
+
+/**
+ * The slots closest to a clock time, in time order: that time on every day it is free,
+ * then the nearest ones. Otherwise "at 4 pm" would look only at the morning's first slots.
+ */
+function closestTo(time, slots, timeZone) {
+  const [hour, minute] = time.split(':').map(Number);
+  const gap = (slot) => {
+    const local = DateTime.fromISO(slot.startsAt, { zone: safeZone(timeZone) });
+    return Math.abs(local.hour * 60 + local.minute - (hour * 60 + minute));
+  };
+  return [...slots]
+    .sort((a, b) => gap(a) - gap(b) || a.startsAt.localeCompare(b.startsAt))
+    .slice(0, MAX_SLOTS)
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
 /** Recommendations in the search result's shape, explanations and next step included. */
@@ -146,7 +171,7 @@ export function createToolContext(
           .map(([doctorId, status]) => ({ doctorId, status })),
       };
     },
-    async searchDoctors(criteria) {
+    async searchDoctors({ date, timeWindow, ...criteria }) {
       const team = await careTeam();
       const active = [...team.entries()].filter(([, s]) => s === 'active').map(([id]) => id);
       let found;
@@ -157,7 +182,15 @@ export function createToolContext(
           ? toFound(
               await recommendationService.recommend(
                 principal,
-                { patientId, criteria, limit: MAX_RECOMMENDED, timeZone },
+                {
+                  patientId,
+                  criteria,
+                  limit: MAX_RECOMMENDED,
+                  timeZone,
+                  ...(date || timeWindow
+                    ? { wanted: slotQuery({ date, timeWindow }, timeZone) }
+                    : {}),
+                },
                 req,
               ),
             )
@@ -192,19 +225,21 @@ export function createToolContext(
       evidence.doctors.set(d.id, doctorFacts(d));
       return { doctorId: d.id, specialty: d.primarySpecialization, languages: d.languages ?? [] };
     },
-    async findAvailableSlots({ doctorId, date, timeWindow, mode }) {
+    async findAvailableSlots({ doctorId, date, timeWindow, mode, time }) {
       const query = slotQuery({ date, timeWindow }, timeZone);
-      const slots = (
+      const open = (
         await availabilityService.slots(principal, doctorId, {
           from: query.from,
           to: query.to,
           ...(mode ? { mode } : {}),
         })
-      )
-        .filter(query.keep)
-        // Without a day, the coming days (at most two times a day), so there is a choice.
-        .filter(date ? () => true : spreadAcrossDays(timeZone))
-        .slice(0, MAX_SLOTS);
+      ).filter(query.keep);
+      const slots = time
+        ? closestTo(time, open, timeZone)
+        : open
+            // Without a day, the coming days (at most two times a day), so there is a choice.
+            .filter(date ? () => true : spreadAcrossDays(timeZone))
+            .slice(0, MAX_SLOTS);
       if (!evidence.doctors.has(doctorId)) {
         const d = await doctorService.publicProfile(doctorId);
         evidence.doctors.set(d.id, doctorFacts(d));

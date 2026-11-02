@@ -4,6 +4,8 @@ import {
   ASSISTANT_ANY_DOCTOR_CHOICE,
   ASSISTANT_EMERGENCY_MESSAGE,
   ASSISTANT_SPECIALTIES,
+  KNOWN_CITIES,
+  KNOWN_LANGUAGES,
   PRACTICE_AREAS,
   PERMISSIONS,
   careAssistantStateSchema,
@@ -39,6 +41,7 @@ const EMERGENCY_REPLY = Object.freeze({
 // The AI step's answer is checked like any untrusted input before it is used.
 /** Step 10: intents answered with facts from the person's own record. */
 const APPOINTMENT_INTENTS = new Set(['view_appointments', 'reschedule', 'cancel']);
+const HEALTH_INFO_INTENTS = new Set(['find_doctor', 'book_appointment', 'unsupported']);
 const MAX_RECORD_CARDS = 3;
 const MAX_PRESCRIPTION_CARDS = 2;
 /** ADR-0038: a proposed booking waits this long for the person's Confirm. */
@@ -289,6 +292,17 @@ export function createAssistantService({
     const p = action.payload;
     const team = await careService.listForPatient(principal, action.patient_id, req);
     let care = team.find((r) => r.doctorId === p.doctorId && r.status !== 'ended') ?? null;
+    if (care?.status === 'paused') {
+      // Only the patient side resumes; waiting for the doctor would wait for ever.
+      throw new ConflictError(
+        'You paused care with this doctor. Resume it in My Doctors, then confirm again.',
+        'care_relationship_paused',
+      );
+    }
+    if (care?.status === 'invited') {
+      // The doctor invited this patient: Confirm is the answer they were waiting for.
+      care = await careService.act(principal, care.id, 'accept', req);
+    }
     if (!care) {
       care = await careService.request(
         principal,
@@ -679,14 +693,22 @@ export function createAssistantService({
           patientId,
           bookable: team.get(doctor.id) === 'active',
         });
-      } else if (card.type === 'booking' && booking && card.doctorId && card.startsAt) {
-        const proposal = await proposeBooking({
-          ...booking,
-          doctorId: card.doctorId,
-          startsAt: card.startsAt,
-          tools,
-          team,
-        });
+      } else if (card.type === 'booking' && booking) {
+        // Only the doctor and time in the checked state: the backend offered both.
+        const offered =
+          card.doctorId &&
+          card.startsAt &&
+          card.doctorId === booking.state.bookingDoctorId &&
+          card.startsAt === booking.state.chosenStart;
+        const proposal = offered
+          ? await proposeBooking({
+              ...booking,
+              doctorId: card.doctorId,
+              startsAt: card.startsAt,
+              tools,
+              team,
+            })
+          : null;
         if (!proposal) {
           // The time went in the meantime: say so instead of a card that cannot book.
           return {
@@ -694,6 +716,7 @@ export function createAssistantService({
             message: 'That time isn’t free any more. Ask me for other times with this doctor.',
             cards: [],
             source: 'ai_assistant',
+            timeGone: true,
           };
         }
         cards.push(proposal);
@@ -809,6 +832,9 @@ export function createAssistantService({
         specialties: a.specialties,
       })),
       actingFor,
+      // ADR-0041: names the validator looks for in the person's own words.
+      cities: [...KNOWN_CITIES],
+      languages: [...KNOWN_LANGUAGES],
     };
     const tools = createToolContext(
       {
@@ -887,14 +913,21 @@ export function createAssistantService({
       principal,
       row,
       req,
+      state: next,
     });
+    if (hydrated.timeGone) {
+      // Otherwise the next turn would offer the same time, and fail the same way.
+      delete hydrated.timeGone;
+      next = { ...next, chosenStart: null, requestedTime: null, slotStarts: [] };
+    }
     if (!failure) {
       hydrated.cards.push(...(await recordCards(next.intent, principal, row.patient_id, req)));
       if (next.intent === 'ask_records') {
         const answer = await recordAnswer(principal, row.patient_id, text, req);
         if (answer) Object.assign(hydrated, answer);
       }
-      if (!select && (next.intent === 'find_doctor' || next.intent === 'book_appointment')) {
+      // A concern a small model didn't recognise as a request still gets its information.
+      if (!select && HEALTH_INFO_INTENTS.has(next.intent)) {
         const info = await healthInfo(principal, row.patient_id, text, req);
         if (info) {
           const about = info.title.charAt(0).toLowerCase() + info.title.slice(1);

@@ -160,6 +160,42 @@ describe('assistant tool registry', () => {
     });
   });
 
+  it('looks at the times closest to a clock time, not the first of the day', async () => {
+    // Every 30 minutes from 09:00 to 18:00 India time on one day.
+    const day = Array.from({ length: 19 }, (_, i) => {
+      const startsAt = new Date(Date.UTC(2099, 0, 5, 3, 30 + 30 * i)).toISOString();
+      return { startsAt: startsAt.replace('.000Z', 'Z'), mode: 'online' };
+    });
+    const d = deps({ availabilityService: { slots: vi.fn(async () => day) } });
+    const res = await ctx(d).execute('findAvailableSlots', {
+      doctorId: DOCTOR,
+      date: '2099-01-05',
+      time: '16:00',
+    });
+    const starts = res.data.slots.map((s) => s.startsAt);
+    expect(starts).toContain('2099-01-05T10:30:00Z'); // 16:00 India time
+    expect(starts).toHaveLength(6);
+    expect(starts).toEqual([...starts].sort());
+    expect(starts).not.toContain('2099-01-05T03:30:00Z'); // the morning's first
+    const bad = await ctx(d).execute('findAvailableSlots', { doctorId: DOCTOR, time: '4 pm' });
+    expect(bad.errorCode).toBe('tool_invalid_arguments');
+  });
+
+  it('asks for doctors free at the time wanted, without filtering by it', async () => {
+    const recommend = vi.fn(async () => ({ status: 'no_match', recommendations: [] }));
+    const d = deps({ recommendationService: { recommend } });
+    await ctx(d).execute('searchDoctors', {
+      specialty: 'Dermatology',
+      date: '2099-01-05',
+      timeWindow: 'evening',
+    });
+    const [, input] = recommend.mock.calls[0];
+    expect(input.criteria).toEqual({ specialty: 'Dermatology' });
+    expect(input.wanted.from).toBe('2099-01-04');
+    expect(input.wanted.keep({ startsAt: '2099-01-05T13:30:00Z' })).toBe(true); // 19:00
+    expect(input.wanted.keep({ startsAt: '2099-01-05T04:30:00Z' })).toBe(false); // 10:00
+  });
+
   it('refuses unknown tools, bad arguments, missing permission and maps domain errors', async () => {
     const denied = ctx(deps({ accessPolicy: { evaluate: async () => ({ allowed: false }) } }));
     expect((await denied.execute('searchDoctors', { specialty: 'Dermatology' })).errorCode).toBe(

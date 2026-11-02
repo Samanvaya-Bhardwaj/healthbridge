@@ -7,7 +7,7 @@ text that reaches the person, never chooses tools and never sees patient records
 
 import re
 
-CARE_PROMPT_VERSION = "care-assistant/2026-10-16"
+CARE_PROMPT_VERSION = "care-assistant/2026-10-31"
 
 INTENTS = [
     "find_doctor",
@@ -25,7 +25,16 @@ WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", 
 TIME_WINDOWS = ["morning", "afternoon", "evening"]
 MODES = ["online", "in_clinic"]
 # Step 6: criteria a person can remove, and preferences HealthBridge cannot search by.
-CRITERIA = ["specialty", "areas", "city", "language", "consultationMode", "doctorName"]
+CRITERIA = [
+    "specialty",
+    "areas",
+    "city",
+    "language",
+    "consultationMode",
+    "doctorName",
+    "date",
+    "timeWindow",
+]
 UNSUPPORTED = ["gender", "age", "fees", "ratings", "insurance", "other"]
 
 INTENT_SYSTEM = (
@@ -49,7 +58,7 @@ INTENT_SYSTEM = (
     "then leave specialty null. Otherwise an empty list.\n"
     "8. remove: criteria the person says they no longer mind (for example 'any kind of "
     "doctor is fine' -> specialty, 'any city' -> city, 'online or in person, either' -> "
-    "consultationMode). Otherwise an empty list.\n"
+    "consultationMode, 'any day' -> date). Otherwise an empty list.\n"
     "9. showOthers: true when the person asks for other doctors than those shown.\n"
     "10. unsupported: preferences HealthBridge cannot search by that the person states "
     "(gender, age, fees, ratings, insurance, other). Otherwise an empty list.\n"
@@ -90,7 +99,7 @@ def intent_schema(specialties: list[str], areas: list[str] | None = None) -> dic
             "remove": {
                 "type": "array",
                 "items": {"type": "string", "enum": CRITERIA},
-                "maxItems": 6,
+                "maxItems": 8,
             },
             "showOthers": {"type": "boolean"},
             "pickDoctor": {"type": ["integer", "null"], "minimum": 1, "maximum": 5},

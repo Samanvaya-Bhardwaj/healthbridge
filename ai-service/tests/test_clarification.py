@@ -229,7 +229,7 @@ def test_malformed_clarification_fields_are_dropped():
     )
     tools, searches = recording_tools()
     with TestClient(app) as client:
-        (body,), _ = converse(client, ["a woman doctor please"], tools)
+        (body,), _ = converse(client, ["a woman doctor please, any city"], tools)
     state = body["state"]
     assert state["pendingChoice"] is None  # one valid option is not a choice
     assert state["removed"] == ["city"]
