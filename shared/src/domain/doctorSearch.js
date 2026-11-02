@@ -169,6 +169,76 @@ export function canonicalSpecialties(...texts) {
   );
 }
 
+/**
+ * Names one place or language goes by. People write either, and a clinic or profile may
+ * hold either, so a search matches all of them. An unlisted value stands for itself.
+ */
+const SAME_CITY = [
+  ['Bengaluru', 'Bangalore', 'Banglore'],
+  ['Mumbai', 'Bombay'],
+  ['Delhi', 'New Delhi'],
+  ['Kolkata', 'Calcutta'],
+  ['Chennai', 'Madras'],
+  ['Kochi', 'Cochin', 'Ernakulam'],
+  ['Pune', 'Poona'],
+  ['Hyderabad', 'Secunderabad'],
+  ['Ahmedabad', 'Amdavad'],
+  ['Gurugram', 'Gurgaon'],
+  ['Thiruvananthapuram', 'Trivandrum'],
+  ['Kozhikode', 'Calicut'],
+  ['Vadodara', 'Baroda'],
+  ['Varanasi', 'Banaras', 'Benares'],
+  ['Mysuru', 'Mysore'],
+  ['Mangaluru', 'Mangalore'],
+  ['Visakhapatnam', 'Vizag'],
+  ['Puducherry', 'Pondicherry'],
+];
+const SAME_LANGUAGE = [
+  ['Bengali', 'Bangla'],
+  ['Odia', 'Oriya'],
+  ['Punjabi', 'Panjabi'],
+  ['Gujarati', 'Gujrati'],
+];
+/** Other cities people name, without a second name to match. */
+const OTHER_CITIES = [
+  'Jaipur',
+  'Lucknow',
+  'Chandigarh',
+  'Indore',
+  'Bhopal',
+  'Nagpur',
+  'Nashik',
+  'Surat',
+  'Patna',
+  'Noida',
+  'Thane',
+  'Coimbatore',
+  'Madurai',
+  'Kanpur',
+  'Bhubaneswar',
+  'Guwahati',
+  'Ranchi',
+  'Dehradun',
+  'Amritsar',
+  'Ludhiana',
+  'Agra',
+  'Vijayawada',
+  'Raipur',
+];
+/** City names the assistant looks for in a message (ADR-0041). */
+export const KNOWN_CITIES = Object.freeze([...SAME_CITY.flat(), ...OTHER_CITIES]);
+const namesIn = (groups, value) => {
+  const low = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  const group = groups.find((names) => names.some((n) => n.toLowerCase() === low));
+  return group ? group.map((n) => n.toLowerCase()) : [low];
+};
+/** Every lower-case name of a city ("Bangalore" → bengaluru, bangalore, banglore). */
+export const cityNames = (city) => namesIn(SAME_CITY, city);
+/** Every lower-case name of a language ("Bangla" → bengali, bangla). */
+export const languageNames = (language) => namesIn(SAME_LANGUAGE, language);
+
 /** Language names a profile preference may use, by ISO 639-1 code. */
 const LOCALE_LANGUAGES = Object.freeze({
   en: 'English',
@@ -186,6 +256,11 @@ const LOCALE_LANGUAGES = Object.freeze({
   as: 'Assamese',
 });
 
+/** Language names the assistant looks for in a message (ADR-0041). */
+export const KNOWN_LANGUAGES = Object.freeze([
+  ...new Set([...Object.values(LOCALE_LANGUAGES), ...SAME_LANGUAGE.flat()]),
+]);
+
 /**
  * A patient's free-text language preference ("hi-IN", "Marathi", "en") as a language
  * name doctors list, or null when it is not recognisable. Never guesses.
@@ -195,8 +270,8 @@ export function languageForPreference(preference) {
   if (!value) return null;
   const code = value.toLowerCase().match(/^([a-z]{2})(?:[-_][a-z]{2})?$/)?.[1];
   if (code) return LOCALE_LANGUAGES[code] ?? null;
-  const name = Object.values(LOCALE_LANGUAGES).find((l) => l.toLowerCase() === value.toLowerCase());
-  return name ?? null;
+  const names = languageNames(value);
+  return Object.values(LOCALE_LANGUAGES).find((l) => names.includes(l.toLowerCase())) ?? null;
 }
 
 export const CONSULTATION_MODES = Object.freeze(['online', 'in_clinic']);

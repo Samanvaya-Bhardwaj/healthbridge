@@ -66,11 +66,11 @@ export function createDoctorSearchIndex({ knex, aiClient, logger }) {
         model: row.model,
       }))
       .map((r) => ({ ...r, hash: sha256(r.text) }))
-      .filter((r) => r.hash !== r.stored || (current && r.model !== current))
-      .slice(0, limit);
+      .filter((r) => r.hash !== r.stored || (current && r.model !== current));
+    const now = stale.slice(0, limit);
     let embedded = 0;
-    for (let i = 0; i < stale.length; i += BATCH) {
-      const batch = stale.slice(i, i + BATCH);
+    for (let i = 0; i < now.length; i += BATCH) {
+      const batch = now.slice(i, i + BATCH);
       const { model, vectors } = await aiClient.embedPublic({
         purpose: 'doctor_profile',
         kind: 'document',

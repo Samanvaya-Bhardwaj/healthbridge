@@ -182,6 +182,21 @@ describe('GET /doctors/search', () => {
     expect(ids(byName)).toEqual([gp.doctor.id]);
   });
 
+  it('finds a city by any of its names, and a name with or without the title', async () => {
+    const res = await search({ city: 'Poona', language: lang });
+    expect(ids(res)).toEqual([derm.doctor.id]);
+    expect(res[0].reasons).toContainEqual({ code: 'city', value: 'Pune' });
+    expect(ids(await search({ mode: 'in_clinic', city: 'Poona', language: lang }))).toEqual([
+      derm.doctor.id,
+    ]);
+    const name = `search-gp-${lang}`.slice(0, 18);
+    for (const asked of [`Dr ${name}`, `Dr. ${name}`, `Doctor ${name}`]) {
+      const found = await search({ name: asked, language: lang });
+      expect(ids(found)).toEqual([gp.doctor.id]);
+      expect(found[0].reasons.find((r) => r.code === 'name').approximate).toBeUndefined();
+    }
+  });
+
   it('falls back to close name matches only when none contain the text, and says so', async () => {
     const tongue = letters();
     const kavya = await doctorWith('search-kavya', {

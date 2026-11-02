@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { languageForPreference } from '@healthbridge/shared';
+import { cityNames, languageForPreference } from '@healthbridge/shared';
 import { ForbiddenError } from '../../core/http/errors.js';
 import { SELF_RELATIONSHIPS } from '../../core/authz/accessPolicy.js';
 
@@ -33,9 +33,15 @@ export function createRecommendationService({
 }) {
   /**
    * @param {object} principal
-   * @param {{ patientId: string, criteria?: object, limit?: number, timeZone?: string }} input
+   * @param {{ patientId: string, criteria?: object, limit?: number, timeZone?: string,
+   *   wanted?: { from: string, to: string, keep: (slot: object) => boolean } }} input
+   *   `wanted`: when the person asked for: doctors free then come first.
    */
-  async function recommend(principal, { patientId, criteria = {}, limit = 3, timeZone }, req) {
+  async function recommend(
+    principal,
+    { patientId, criteria = {}, limit = 3, timeZone, wanted },
+    req,
+  ) {
     // Patient side only (self, or a guardian): a consented doctor may read the profile,
     // but recommendations are for the patient's own choices.
     const profile = await patientService.getProfile(principal, patientId, req);
@@ -56,18 +62,41 @@ export function createRecommendationService({
       if (!seen || a.startsAt > seen) lastVisit.set(a.doctorId, a.startsAt);
     }
 
-    const found = await doctorSearchService.search(
-      { ...criteria, limit: CANDIDATES },
-      { careTeamDoctorIds: active },
-    );
     const city = criteria.city ? null : profile.city?.trim() || null;
     const language = criteria.language ? null : languageForPreference(profile.preferredLanguage);
+    const nearby = city ? cityNames(city) : [];
 
-    const scored = found.doctors.map((d, index) => {
+    // The search returns its own top few. Doctors this patient already knows, and doctors
+    // near them, must reach the scoring below however many others match.
+    const known = [...new Set([...active, ...lastVisit.keys()])];
+    const search = (extra, context) =>
+      doctorSearchService.search(
+        { ...criteria, ...extra, limit: CANDIDATES },
+        { careTeamDoctorIds: active, ...context },
+      );
+    const [found, familiar, local] = await Promise.all([
+      search(),
+      known.length ? search({}, { pool: known }) : { doctors: [] },
+      city ? search({ city }) : { doctors: [] },
+    ]);
+    const candidates = new Map();
+    const rank = new Map(); // a doctor's best place in any list, so joining late costs nothing
+    for (const list of [found.doctors, familiar.doctors, local.doctors]) {
+      list.forEach((d, place) => {
+        rank.set(d.id, Math.min(place, rank.get(d.id) ?? place));
+        if (candidates.has(d.id)) return;
+        // The person did not ask for this city: it is a lift ("near you"), not a match.
+        const lifted = list === local.doctors;
+        const reasons = lifted ? d.reasons.filter((r) => r.code !== 'city') : d.reasons;
+        candidates.set(d.id, { ...d, reasons });
+      });
+    }
+
+    const scored = [...candidates.values()].map((d) => {
       const explanations = d.reasons
         .filter((r) => r.code !== 'care_team')
         .map((r) => ({ code: `matches_${r.code}`, value: r.value }));
-      let score = (CANDIDATES - index) / CANDIDATES; // the search's own order first
+      let score = (CANDIDATES - rank.get(d.id)) / CANDIDATES; // the search's own order first
       if (careStatus.get(d.id) === 'active') {
         score += 1;
         explanations.unshift({ code: 'care_team', value: null });
@@ -76,10 +105,10 @@ export function createRecommendationService({
         score += 1.5;
         explanations.unshift({ code: 'seen_before', value: lastVisit.get(d.id) });
       }
-      const local = city && d.clinics.find((c) => c.city?.toLowerCase() === city.toLowerCase());
-      if (local) {
+      const site = d.clinics.find((c) => nearby.includes(c.city?.toLowerCase()));
+      if (site) {
         score += 0.75;
-        explanations.push({ code: 'near_you', value: local.city });
+        explanations.push({ code: 'near_you', value: site.city });
       }
       const spoken =
         language && d.languages.find((l) => l.toLowerCase() === language.toLowerCase());
@@ -105,12 +134,33 @@ export function createRecommendationService({
       const slots = await availabilityService
         .slots(principal, entry.doctor.id, window)
         .catch(() => []);
-      const first = slots[0];
+      // With a city in the request, an in-clinic time elsewhere is not the soonest for them.
+      const asked = criteria.city ? cityNames(criteria.city) : null;
+      const sites = asked
+        ? entry.doctor.clinics.filter((c) => asked.includes(c.city?.toLowerCase())).map((c) => c.id)
+        : null;
+      const first = slots.find(
+        (s) => !sites || s.mode !== 'in_clinic' || sites.includes(s.clinicId),
+      );
       if (first) {
         const days = (new Date(first.startsAt) - now()) / 86_400_000;
         entry.score += 0.5 * Math.max(0, 1 - days / AVAILABILITY_DAYS);
         entry.explanations.push({ code: 'earliest', value: first.startsAt, mode: first.mode });
         entry.earliest = { startsAt: first.startsAt, mode: first.mode };
+      }
+      if (wanted) {
+        const then = await availabilityService
+          .slots(principal, entry.doctor.id, {
+            from: wanted.from,
+            to: wanted.to,
+            ...(criteria.mode ? { mode: criteria.mode } : {}),
+          })
+          .catch(() => []);
+        const fit = then.find(wanted.keep);
+        if (fit) {
+          entry.score += 2;
+          entry.explanations.push({ code: 'free_then', value: fit.startsAt, mode: fit.mode });
+        }
       }
     }
     scored.sort(

@@ -14,6 +14,7 @@ const TEXT = {
   name: (e) => (e.approximate ? 'Closest name match' : null),
   seen_before: (e) => `You saw them on ${formatDateOnly(e.value)}`,
   near_you: (e) => `Near you in ${e.value}`,
+  free_then: () => 'Free at the time you asked for',
   speaks_your_language: (e) => `Speaks ${e.value}`,
   earliest: (e) => `Next free: ${formatDateTime(e.value)} (${MODE_LABELS[e.mode] ?? e.mode})`,
 };

@@ -1,6 +1,8 @@
 import {
   PRACTICE_AREAS,
+  cityNames,
   doctorSearchCriteriaSchema,
+  languageNames,
   practiceAreaLabel,
 } from '@healthbridge/shared';
 
@@ -8,15 +10,22 @@ const AREA_SPECIALTIES = new Map(PRACTICE_AREAS.map((a) => [a.code, a.specialtie
 // A close (not exact) name match must be this similar; below it, "Divya Reddy" would
 // find "Kavya Reddy" — a different doctor.
 const NAME_SIMILARITY = 0.7;
+// "Dr" belongs to how people ask, not to the name they are looking for.
+const nameWithoutTitle = (name) =>
+  name
+    ?.replace(/^(dr\.?|doctor)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 /**
  * Doctor search (M13.2): structured criteria over public doctor profiles, with a
  * transparent, deterministic ranking.
  *
  * - **Hard filters:** the one eligibility rule (ADR-0030: bookable doctor), specialty
- *   (canonical), city (an open practice site there), language, consultation mode (an
- *   active rule of that mode at an open site — in that city when one is given) and name.
- *   With areas but no specialty, the kinds of doctor that cover those areas.
+ *   (canonical), city (an open practice site there, under any of its names: Bangalore is
+ *   Bengaluru), language, consultation mode (an active rule of that mode at an open site —
+ *   in that city when one is given) and name. With areas but no specialty, the kinds of
+ *   doctor that cover those areas.
  * - **Names:** names containing the text first; only when there are none, close matches
  *   (trigram word similarity), marked approximate so the caller can say so.
  * - **Ranking:** listed areas of practice that match, full-text relevance of the profile
@@ -62,17 +71,21 @@ export function createDoctorSearchService({ knex, index = null }) {
     }
     if (c.language) {
       where.push(
-        `EXISTS (SELECT 1 FROM unnest(d.languages) l WHERE lower(l) = lower(${p(c.language)}))`,
+        `EXISTS (SELECT 1 FROM unnest(d.languages) l
+                   WHERE lower(l) = ANY (${p(languageNames(c.language))}::text[]))`,
       );
     }
     if (c.city) {
       where.push(`EXISTS (SELECT 1 FROM open_sites s
-                           WHERE s.doctor_id = d.id AND lower(s.city) = lower(${p(c.city)}))`);
+                           WHERE s.doctor_id = d.id
+                             AND lower(s.city) = ANY (${p(cityNames(c.city))}::text[]))`);
     }
     if (c.mode) {
       const mode = p(c.mode);
       const inCity =
-        c.mode === 'in_clinic' && c.city ? `AND lower(oc.city) = lower(${p(c.city)})` : '';
+        c.mode === 'in_clinic' && c.city
+          ? `AND lower(oc.city) = ANY (${p(cityNames(c.city))}::text[])`
+          : '';
       where.push(`EXISTS (SELECT 1 FROM offered o LEFT JOIN clinics oc ON oc.id = o.clinic_id
                            WHERE o.doctor_id = d.id AND o.mode = ${mode} ${inCity})`);
     }
@@ -143,7 +156,8 @@ export function createDoctorSearchService({ knex, index = null }) {
    *   internal callers only (evaluation, care-team search); never from request input.
    */
   async function search(input, { careTeamDoctorIds = [], pool = null } = {}) {
-    const c = doctorSearchCriteriaSchema.parse(input);
+    const parsed = doctorSearchCriteriaSchema.parse(input);
+    const c = { ...parsed, name: nameWithoutTitle(parsed.name) };
     const areas = c.areas ?? [];
     // The query text is controlled vocabulary only (specialty and area names).
     const queryText = [c.specialty, ...areas.map(practiceAreaLabel)].filter(Boolean).join(', ');
@@ -174,11 +188,13 @@ function toResult(row, c, areas, approximateName) {
   if (c.specialty) reasons.push({ code: 'specialty', value: c.specialty });
   for (const a of matchedAreas) reasons.push({ code: 'area', value: practiceAreaLabel(a) });
   if (c.city) {
-    const site = clinics.find((s) => s.city?.toLowerCase() === c.city.toLowerCase());
+    const names = cityNames(c.city);
+    const site = clinics.find((s) => names.includes(s.city?.toLowerCase()));
     reasons.push({ code: 'city', value: site?.city ?? c.city });
   }
   if (c.language) {
-    const spoken = (row.languages ?? []).find((l) => l.toLowerCase() === c.language.toLowerCase());
+    const names = languageNames(c.language);
+    const spoken = (row.languages ?? []).find((l) => names.includes(l.toLowerCase()));
     reasons.push({ code: 'language', value: spoken ?? c.language });
   }
   if (c.mode) reasons.push({ code: 'mode', value: c.mode });
